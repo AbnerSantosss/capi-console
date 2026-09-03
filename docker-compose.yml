@@ -1,0 +1,46 @@
+services:
+  capi-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-portainer}
+    image: capi-console:latest
+    container_name: capi-console
+    restart: unless-stopped
+    ports:
+      # 3333 do host ja e do guia-turistico; o container continua em 3333.
+      - "3334:3333"
+    environment:
+      NODE_ENV: production
+      PORT: "3333"
+      HOSTNAME: "0.0.0.0"
+      TZ: ${TZ:-America/Sao_Paulo}
+      PIXEL_ID: ${PIXEL_ID}
+      ACCESS_TOKEN: ${ACCESS_TOKEN}
+      API_VERSION: ${API_VERSION:-v26.0}
+      AD_ACCOUNT_ID: ${AD_ACCOUNT_ID:-}
+      TEST_EVENT_CODE: ${TEST_EVENT_CODE:-}
+      BRAND_NAME: ${BRAND_NAME:-Código Vencedor}
+      CONSOLE_USER: ${CONSOLE_USER:-admin}
+      CONSOLE_PASSWORD: ${CONSOLE_PASSWORD}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://capi.proxserverabner.site}
+      APP_VERSION: ${APP_VERSION:-portainer}
+    volumes:
+      # Sem volume, o segredo de entrada muda a cada redeploy (e o xWinner para
+      # de entregar) e o historico de compradores some.
+      - capi_config:/app/config
+      - capi_logs:/app/logs
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3333/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  capi_config:
+  capi_logs:

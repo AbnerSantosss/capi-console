@@ -1,0 +1,336 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+   TOKENS — Meta CAPI Console v2
+   Todos os contrastes foram calculados (WCAG 2.2). Não altere um valor sem
+   rodar `node scripts/contrast-check.mjs`.
+   ========================================================================= */
+
+:root {
+  /* --- Densidade --------------------------------------------------------
+     Toda a escala tipográfica e o espaçamento do Tailwind são em rem, então
+     um único multiplicador na raiz reescala a interface inteira de forma
+     proporcional. Existe porque a escala do sistema operacional varia muito
+     entre máquinas (Windows costuma vir em 125–150%), e o que é confortável
+     num monitor fica enorme no outro. O controle está em Preferências.       */
+  --ui-scale: 0.875;
+
+  /* --- Superfícies (elevação vem da BORDA, não do fill) ------------------ */
+  --surface-0: #0a0e14; /* fundo do app                                    */
+  --surface-1: #11161f; /* painel / card                                   */
+  --surface-2: #171e29; /* input, cabeçalho de accordion, elemento elevado */
+  --surface-3: #1f2836; /* popover / dialog / tooltip                      */
+
+  /* --- Bordas ----------------------------------------------------------- */
+  --border-subtle: #232c3b; /* divisórias internas            1.29 s/ s1   */
+  --border-default: #3a4859; /* contorno de painel             1.94 s/ s1   */
+  --border-control: #5c6d85; /* input/select/botão outline  3.44 ✅ WCAG   */
+  --border-focus: #4da6ff; /* anel de foco                   7.09          */
+
+  /* --- Texto ------------------------------------------------------------ */
+  --fg-strong: #f4f7fb; /* títulos, valores           16.87 s/ s1         */
+  --fg-body: #c9d4e3; /* corpo, rótulos             12.09 s/ s1         */
+  --fg-muted: #93a1b5; /* helper, legendas            6.91 s/ s1         */
+  --fg-disabled: #6b7a90; /* SÓ desabilitado/ornamento   4.15 — não use
+                              para conteúdo                                */
+
+  /* --- Acento (azul oficial da Meta) ------------------------------------ */
+  --accent-fill: #0064e0; /* fundo do botão primário — branco = 5.39 ✅   */
+  --accent-fill-hover: #0b6fe8;
+  --accent-fill-active: #0057c4;
+  --accent-text: #4da6ff; /* link, aba ativa, ícone ativo    7.09 ✅      */
+
+  /* --- Status (sempre acompanhados de ícone + texto) -------------------- */
+  --success: #34d399; /*  9.43 */
+  --warning: #fbbf24; /* 10.86 — PRODUÇÃO / evento real */
+  --danger: #fb7185; /*  6.74 */
+
+  /* =======================================================================
+     Ponte para os nomes que os primitivos shadcn/Base UI já usam.
+     `border-border` = divisória sutil · `border-input` = borda de controle.
+     ======================================================================= */
+  --background: var(--surface-0);
+  --foreground: var(--fg-body);
+  --card: var(--surface-1);
+  --card-foreground: var(--fg-strong);
+  --popover: var(--surface-3);
+  --popover-foreground: var(--fg-strong);
+  --primary: var(--accent-fill);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--fg-strong);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--fg-strong);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border-subtle);
+  --input: var(--border-control);
+  --ring: var(--border-focus);
+
+  --chart-1: #0064e0;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #fb7185;
+
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--fg-body);
+  --sidebar-primary: var(--accent-fill);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--fg-strong);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--border-focus);
+}
+
+/* O app é dark-only. `.dark` existe só para os seletores dos primitivos. */
+.dark {
+  color-scheme: dark;
+}
+
+@theme inline {
+  /* --- Cores ------------------------------------------------------------ */
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-default);
+  --color-line-control: var(--border-control);
+
+  --color-fg-strong: var(--fg-strong);
+  --color-fg-body: var(--fg-body);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-disabled: var(--fg-disabled);
+
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-accent-fill-active: var(--accent-fill-active);
+  --color-accent-text: var(--accent-text);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* --- Tipografia ------------------------------------------------------- */
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Escala nomeada. Proibido text-[9px] e text-[10px].
+     text-micro só com uppercase + tracking. */
+  --text-micro: 0.6875rem; /* 11px */
+  --text-micro--line-height: 1rem; /* 16px */
+  --text-caption: 0.75rem; /* 12px */
+  --text-caption--line-height: 1.125rem; /* 18px */
+  --text-label: 0.8125rem; /* 13px */
+  --text-label--line-height: 1.25rem; /* 20px */
+  --text-body: 0.875rem; /* 14px */
+  --text-body--line-height: 1.375rem; /* 22px */
+  --text-title: 1rem; /* 16px */
+  --text-title--line-height: 1.5rem; /* 24px */
+  --text-heading: 1.25rem; /* 20px */
+  --text-heading--line-height: 1.75rem; /* 28px */
+  --text-data: 1.75rem; /* 28px */
+  --text-data--line-height: 2rem; /* 32px */
+
+  /* --- Raios ------------------------------------------------------------ */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 16px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  --radius-dialog: 14px;
+
+  /* --- Alturas de controle ----------------------------------------------
+     Em PX de propósito, não em rem: alvo de toque é medida física do dedo e
+     do ponteiro, não medida tipográfica. Se ficassem em rem, a densidade
+     compacta os encolheria abaixo do mínimo de 36px.                        */
+  --spacing-control-sm: 36px; /* só toolbar desktop */
+  --spacing-control-md: 40px; /* padrão             */
+  --spacing-control-lg: 44px; /* primário e mobile  */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    font-size: calc(16px * var(--ui-scale));
+    color-scheme: dark;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Números sempre tabulares em dados — evita layout shift. */
+  [data-numeric],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* fbc, fbp, event_id, tokens e URLs quebram em vez de estourar. */
+  .wrap-token {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  /* Foco visível e consistente em tudo que é interativo. */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Autofill do WebKit não pode forçar fundo branco no dark mode. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--fg-body);
+    -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+    caret-color: var(--fg-body);
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+/* Presets de densidade. O padrão é compacta: este console é uma ferramenta de
+   trabalho densa, e a maioria das telas Windows já aplica escala do sistema. */
+:root[data-densidade='compacta'] {
+  --ui-scale: 0.875;
+}
+:root[data-densidade='padrao'] {
+  --ui-scale: 1;
+}
+:root[data-densidade='confortavel'] {
+  --ui-scale: 1.0625;
+}
+
+/* =========================================================================
+   Movimento — nada se move para quem pediu para nada se mover.
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =========================================================================
+   Fundo: malha estática de custo zero (substitui o canvas animado).
+   ========================================================================= */
+.app-mesh {
+  background-color: var(--surface-0);
+  background-image:
+    radial-gradient(
+      ellipse 80% 50% at 15% -10%,
+      rgba(0, 100, 224, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 45% at 92% 8%,
+      rgba(77, 166, 255, 0.1),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 50% 105%,
+      rgba(0, 100, 224, 0.08),
+      transparent 65%
+    );
+  background-attachment: fixed;
+}
+
+/* Ligado só por quem marcar "Fundo com movimento" nas preferências.
+   O @media prefers-reduced-motion acima zera a animação de quem pediu. */
+.app-mesh-vivo {
+  background-size: 200% 200%;
+  animation: derivar-malha 40s ease-in-out infinite alternate;
+}
+
+@keyframes derivar-malha {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}
+
+/* =========================================================================
+   Scrollbar
+   ========================================================================= */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-control);
+  background-clip: content-box;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}

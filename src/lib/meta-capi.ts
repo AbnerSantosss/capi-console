@@ -1,0 +1,174 @@
+import crypto from 'crypto';
+
+const GRAPH_VERSION_PADRAO = 'v26.0';
+
+export function sha256(s: string): string {
+  return crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+}
+
+export function normEmail(v: string): string {
+  return String(v || '').trim().toLowerCase();
+}
+
+export function normTelefone(v: string, adicionarDDI55: boolean): string {
+  let d = String(v || '').replace(/\D+/g, '');
+  d = d.replace(/^0+/, '');
+  if (!d) return '';
+  if (adicionarDDI55 && (d.length === 10 || d.length === 11) && !d.startsWith('55')) {
+    d = '55' + d;
+  }
+  return d;
+}
+
+export function normNome(v: string): string {
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} ]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function normIp(v: string): string {
+  return String(v || '').trim().replace(/^::ffff:/i, '');
+}
+
+export interface EventUser {
+  email?: string;
+  phone?: string;
+  addDDI?: boolean;
+  firstName?: string;
+  lastName?: string;
+  externalId?: string;
+  fbc?: string;
+  fbp?: string;
+  ip?: string;
+  userAgent?: string;
+}
+
+export interface EventCustom {
+  value?: string | number;
+  currency?: string;
+  orderId?: string;
+  contentName?: string;
+}
+
+export interface EventInput {
+  event_name?: string;
+  event_time?: number;
+  event_id?: string;
+  event_source_url?: string;
+  action_source?: string;
+  user?: EventUser;
+  custom?: EventCustom;
+}
+
+export interface MetaEvent {
+  event_name: string;
+  event_time: number;
+  action_source: string;
+  user_data: Record<string, unknown>;
+  event_id?: string;
+  event_source_url?: string;
+  custom_data?: Record<string, unknown>;
+}
+
+export function montarEvento(ev: EventInput): MetaEvent {
+  const u = ev.user || {};
+  const c = ev.custom || {};
+  const user_data: Record<string, unknown> = {};
+
+  const email = normEmail(u.email || '');
+  if (email) user_data.em = [sha256(email)];
+
+  const tel = normTelefone(u.phone || '', u.addDDI !== false);
+  if (tel) user_data.ph = [sha256(tel)];
+
+  const fn = normNome(u.firstName || '');
+  if (fn) user_data.fn = [sha256(fn)];
+
+  const ln = normNome(u.lastName || '');
+  if (ln) user_data.ln = [sha256(ln)];
+
+  const ext = String(u.externalId || '').trim();
+  if (ext) user_data.external_id = [sha256(ext)];
+
+  const fbc = String(u.fbc || '').trim();
+  if (fbc) user_data.fbc = fbc;
+
+  const fbp = String(u.fbp || '').trim();
+  if (fbp) user_data.fbp = fbp;
+
+  const ip = normIp(u.ip || '');
+  if (ip) user_data.client_ip_address = ip;
+
+  const ua = String(u.userAgent || '').trim();
+  if (ua) user_data.client_user_agent = ua;
+
+  const evento: MetaEvent = {
+    event_name: ev.event_name || 'Purchase',
+    event_time: Math.floor(Number(ev.event_time)),
+    action_source: ev.action_source || 'website',
+    user_data,
+  };
+  if (ev.event_id) evento.event_id = String(ev.event_id).trim();
+  if (ev.event_source_url) evento.event_source_url = String(ev.event_source_url).trim();
+
+  const custom_data: Record<string, unknown> = {};
+  if (c.value !== undefined && c.value !== null && c.value !== '') custom_data.value = Number(c.value);
+  if (c.currency) custom_data.currency = String(c.currency).trim().toUpperCase();
+  if (c.orderId) custom_data.order_id = String(c.orderId).trim();
+  if (c.contentName) custom_data.content_name = String(c.contentName).trim();
+  if (Object.keys(custom_data).length) evento.custom_data = custom_data;
+
+  return evento;
+}
+
+export function validar(evento: MetaEvent): string[] {
+  const erros: string[] = [];
+  const agora = Math.floor(Date.now() / 1000);
+  const seteDias = 7 * 24 * 3600;
+
+  if (!evento.event_time || Number.isNaN(evento.event_time)) {
+    erros.push('event_time inválido.');
+  } else {
+    if (evento.event_time < agora - seteDias + 120) {
+      erros.push('event_time com mais de 7 dias — a Meta rejeita.');
+    }
+    if (evento.event_time > agora + 600) {
+      erros.push('event_time no futuro.');
+    }
+  }
+  if (!Object.keys(evento.user_data).length) {
+    erros.push('Informe pelo menos um dado do cliente.');
+  }
+  if (evento.event_name === 'Purchase') {
+    if (!evento.custom_data || evento.custom_data.value === undefined || !evento.custom_data.currency) {
+      erros.push('Purchase exige valor e moeda.');
+    }
+  }
+  return erros;
+}
+
+export async function enviarParaMeta(params: {
+  pixelId: string;
+  accessToken: string;
+  testEventCode?: string;
+  apiVersion?: string;
+  evento: MetaEvent;
+}): Promise<{ httpStatus: number; resposta: Record<string, unknown> }> {
+  const versao = (params.apiVersion || GRAPH_VERSION_PADRAO).replace(/[^v0-9.]/g, '');
+  const url = `https://graph.facebook.com/${versao}/${encodeURIComponent(params.pixelId)}/events`;
+  const corpo: Record<string, unknown> = { data: [params.evento], access_token: params.accessToken };
+  if (params.testEventCode) corpo.test_event_code = String(params.testEventCode).trim();
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  const texto = await resp.text();
+  let json: Record<string, unknown>;
+  try { json = JSON.parse(texto); } catch { json = { raw: texto }; }
+  return { httpStatus: resp.status, resposta: json };
+}

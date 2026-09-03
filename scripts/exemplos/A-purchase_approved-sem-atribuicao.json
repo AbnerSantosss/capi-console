@@ -1,0 +1,29 @@
+{
+  "event": "purchase_approved",
+  "event_id": "evt_1788473954158_buy",
+  "version": "1.0",
+  "created_at": "2026-09-03T22:18:14.158Z",
+  "data": {
+    "purchase_id": "10",
+    "order_id": "6",
+    "product": {
+      "id": "6",
+      "slug": "codigo-vencedor",
+      "name": "Acesso Código Vencedor"
+    },
+    "amount": 1990,
+    "currency": "BRL",
+    "payment_method": "pix",
+    "buyer": {
+      "external_id": "15"
+    },
+    "approved_at": "2026-09-03T22:18:14.158Z",
+    "lead": {
+      "email": "comprador.exemplo@dominio-ficticio.com.br",
+      "name": "Maria Exemplo Da Silva",
+      "phone": "11988887777",
+      "phone_country_code": "55",
+      "birth_date": "1990-05-15"
+    }
+  }
+}

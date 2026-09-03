@@ -1,0 +1,178 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+const DIR_LOG = path.join(process.cwd(), 'logs');
+const ARQ_JSONL = path.join(DIR_LOG, 'disparos.jsonl');
+const ARQ_MD = path.join(DIR_LOG, 'disparos.md');
+
+export interface Utms {
+  source?: string;
+  medium?: string;
+  campaign?: string;
+  content?: string;
+  term?: string;
+  id?: string;
+}
+
+export interface Atribuicao {
+  /** Convencao do Código Vencedor: utm_campaign/utm_id = campanha, utm_term = conjunto, utm_content/ad_id = anuncio */
+  campaignId: string;
+  adsetId: string;
+  adId: string;
+  placement: string;
+  utms: Utms;
+  links: {
+    campanha?: string;
+    conjunto?: string;
+    anuncio?: string;
+    biblioteca?: string;
+  };
+  /** Sem estes o Gerenciador nao abre filtrado */
+  faltando: string[];
+}
+
+function param(url: string, nome: string): string {
+  const m = url.match(new RegExp('[?&]' + nome + '=([^&#]+)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+/** Aceita "act_123", "123" ou vazio; devolve so os digitos. */
+function normalizarConta(v?: string): string {
+  return String(v || '').replace(/\D+/g, '');
+}
+
+function janelaDeUmDia(quando: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  const d = `${quando.getUTCFullYear()}-${p(quando.getUTCMonth() + 1)}-${p(quando.getUTCDate())}`;
+  return `${d}_${d}`;
+}
+
+/**
+ * Le a atribuicao de anuncio da event_source_url e monta deep links do
+ * Gerenciador de Anuncios ja filtrados na campanha / conjunto / anuncio
+ * que trouxe a venda.
+ */
+export function extrairAtribuicao(
+  eventSourceUrl: string,
+  opts: { adAccountId?: string; quando?: Date } = {}
+): Atribuicao {
+  const url = String(eventSourceUrl || '');
+  const utms: Utms = {
+    source: param(url, 'utm_source'),
+    medium: param(url, 'utm_medium'),
+    campaign: param(url, 'utm_campaign'),
+    content: param(url, 'utm_content'),
+    term: param(url, 'utm_term'),
+    id: param(url, 'utm_id'),
+  };
+
+  const campaignId = utms.campaign || utms.id || '';
+  const adsetId = utms.term || '';
+  const adId = param(url, 'ad_id') || utms.content || '';
+  const placement = param(url, 'placement');
+
+  const conta = normalizarConta(opts.adAccountId ?? process.env.AD_ACCOUNT_ID);
+  const data = janelaDeUmDia(opts.quando || new Date());
+  const base = 'https://adsmanager.facebook.com/adsmanager/manage';
+
+  const links: Atribuicao['links'] = {};
+  const faltando: string[] = [];
+
+  if (!conta) faltando.push('AD_ACCOUNT_ID (defina no .env.local)');
+  if (!campaignId) faltando.push('utm_campaign / utm_id');
+  if (!adsetId) faltando.push('utm_term (id do conjunto)');
+  if (!adId) faltando.push('ad_id / utm_content');
+
+  if (conta) {
+    const q = (extra: string) => `?act=${conta}&date=${data}${extra}`;
+    if (campaignId) {
+      links.campanha = `${base}/campaigns${q(`&selected_campaign_ids=${campaignId}`)}`;
+    }
+    if (adsetId) {
+      links.conjunto = `${base}/adsets${q(
+        `${campaignId ? `&selected_campaign_ids=${campaignId}` : ''}&selected_adset_ids=${adsetId}`
+      )}`;
+    }
+    if (adId) {
+      links.anuncio = `${base}/ads${q(
+        `${campaignId ? `&selected_campaign_ids=${campaignId}` : ''}` +
+          `${adsetId ? `&selected_adset_ids=${adsetId}` : ''}` +
+          `&selected_ad_ids=${adId}`
+      )}`;
+    }
+  }
+
+  // Independe da conta e do token: mostra o criativo se o anuncio estiver ativo.
+  if (adId) links.biblioteca = `https://www.facebook.com/ads/library/?id=${adId}`;
+
+  return { campaignId, adsetId, adId, placement, utms, links, faltando };
+}
+
+export interface EntradaLog {
+  eventName: string;
+  eventId?: string;
+  eventTime: number;
+  value?: number;
+  currency?: string;
+  orderId?: string;
+  httpStatus: number;
+  fbtraceId?: string;
+  eventsReceived?: number;
+  temFbc: boolean;
+  temFbp: boolean;
+  eventSourceUrl?: string;
+  atribuicao: Atribuicao;
+  /** Sem o pixel no log, a deduplicacao nao consegue distinguir dois pixels. */
+  pixelId?: string;
+  marcaId?: string;
+}
+
+/** Grava uma linha JSON (maquina) + um bloco legivel com os links (humano). */
+export async function registrarDisparo(e: EntradaLog): Promise<{ jsonl: string; md: string }> {
+  await fs.mkdir(DIR_LOG, { recursive: true });
+  const agora = new Date();
+  const a = e.atribuicao;
+
+  await fs.appendFile(ARQ_JSONL, JSON.stringify({ registradoEm: agora.toISOString(), ...e }) + '\n', 'utf8');
+
+  const brl =
+    e.value !== undefined
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: e.currency || 'BRL' }).format(e.value)
+      : '—';
+  const ok = e.httpStatus === 200 && (e.eventsReceived ?? 0) > 0;
+
+  const linhas = [
+    ``,
+    `## ${ok ? 'OK' : 'FALHA'} · ${e.eventName} · ${brl} · ${agora.toLocaleString('pt-BR')}`,
+    ``,
+    `| | |`,
+    `|---|---|`,
+    `| event_id | \`${e.eventId || '—'}\` |`,
+    `| pixel | \`${e.pixelId || '—'}\`${e.marcaId ? ` (marca \`${e.marcaId}\`)` : ''} |`,
+    `| event_time | ${e.eventTime} (${new Date(e.eventTime * 1000).toISOString()}) |`,
+    `| pedido | \`${e.orderId || '—'}\` |`,
+    `| HTTP / recebidos | ${e.httpStatus} / ${e.eventsReceived ?? 0} |`,
+    `| fbtrace_id | \`${e.fbtraceId || '—'}\` |`,
+    `| fbc / fbp | ${e.temFbc ? 'sim' : 'NAO'} / ${e.temFbp ? 'sim' : 'NAO'} |`,
+    ``,
+    `**Criativo que converteu**`,
+    ``,
+    `| nivel | id | UTM de origem |`,
+    `|---|---|---|`,
+    `| campanha | \`${a.campaignId || '—'}\` | utm_campaign / utm_id |`,
+    `| conjunto | \`${a.adsetId || '—'}\` | utm_term |`,
+    `| anuncio | \`${a.adId || '—'}\` | ad_id / utm_content |`,
+    `| posicionamento | ${a.placement || '—'} | placement |`,
+    `| origem / midia | ${a.utms.source || '—'} / ${a.utms.medium || '—'} | utm_source / utm_medium |`,
+    ``,
+  ];
+
+  if (a.links.anuncio) linhas.push(`- **Abrir o anúncio no Gerenciador:** ${a.links.anuncio}`);
+  if (a.links.conjunto) linhas.push(`- Abrir o conjunto: ${a.links.conjunto}`);
+  if (a.links.campanha) linhas.push(`- Abrir a campanha: ${a.links.campanha}`);
+  if (a.links.biblioteca) linhas.push(`- Ver o criativo na Biblioteca de Anúncios: ${a.links.biblioteca}`);
+  if (a.faltando.length) linhas.push(`- ⚠️ Link incompleto, faltou: ${a.faltando.join(', ')}`);
+
+  await fs.appendFile(ARQ_MD, linhas.join('\n') + '\n---\n', 'utf8');
+  return { jsonl: ARQ_JSONL, md: ARQ_MD };
+}

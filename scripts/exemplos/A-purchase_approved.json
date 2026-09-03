@@ -1,0 +1,50 @@
+{
+  "event": "purchase_approved",
+  "event_id": "evt_preview_0000000000000",
+  "version": "1.0",
+  "created_at": "2026-09-03T22:17:14.158Z",
+  "data": {
+    "purchase_id": "9",
+    "order_id": "5",
+    "product": {
+      "id": "6",
+      "slug": "codigo-vencedor",
+      "name": "Acesso Código Vencedor"
+    },
+    "amount": 1990,
+    "currency": "BRL",
+    "payment_method": "pix",
+    "original_amount": 2490,
+    "discount": 500,
+    "coupon_code": "BEMVINDO10",
+    "buyer": {
+      "external_id": "14"
+    },
+    "approved_at": "2026-09-03T22:17:14.158Z",
+    "lead": {
+      "email": "lead@example.com",
+      "name": "Lead Convidado",
+      "phone": "11988887777",
+      "birth_date": "1990-05-15"
+    },
+    "attribution": {
+      "utm": {
+        "source": "facebook",
+        "medium": "cpc",
+        "campaign": "52564275344761",
+        "term": "52567602614161",
+        "content": "52567985998561"
+      },
+      "cookies": {
+        "fbp": "fb.1.1788473054158.2324207034",
+        "fbc": "fb.1.1788473054158.IwZXh0bgNhZW0BMABhZGlkAasdEXEMPLO",
+        "fbclid": "IwZXh0bgNhZW0BMABhZGlkAasdEXEMPLO",
+        "gclid": null
+      },
+      "referrer": "https://l.instagram.com/",
+      "landing_page": "https://codigovencedor.com/?placement=Instagram_Feed&utm_source=facebook&utm_campaign=52564275344761",
+      "ip": "187.10.20.30",
+      "user_agent": "Mozilla/5.0 (Linux; Android 16; SM-A566B Build/UP1A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/500.0.0.0;]"
+    }
+  }
+}

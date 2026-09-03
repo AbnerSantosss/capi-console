@@ -1,0 +1,46 @@
+{
+  "lead": {
+    "name": "Maria Exemplo Da Silva",
+    "email": "comprador.exemplo@dominio-ficticio.com.br",
+    "phone": "11988887777",
+    "taxId": "00000000191"
+  },
+  "event": "checkout.session.completed",
+  "method": "pix",
+  "eventId": "b_1788473954158_completed",
+  "pricing": {
+    "couponCode": null,
+    "discountMinor": 0,
+    "originalAmountMinor": 2790
+  },
+  "currency": "BRL",
+  "tracking": {
+    "cv_visit": "exemplo-visit-0001"
+  },
+  "paymentId": "pay_exemplo_0001",
+  "sessionId": "sess_exemplo_0001",
+  "occurredAt": "2026-09-03T22:16:14.158Z",
+  "productIds": [
+    "plan-4"
+  ],
+  "amountMinor": 2790,
+  "paymentStatus": "paid",
+  "attribution": {
+    "utm": {
+      "term": "52567602614161",
+      "medium": "paid",
+      "source": "facebook",
+      "content": "52567985998561",
+      "campaign": "52564275344761"
+    },
+    "cookies": {
+      "fbc": "fb.1.1788473054158.PAcGRvEXEMPLO",
+      "fbp": "fb.1.1788473054158.2324207034",
+      "fbclid": "PAcGRvEXEMPLO",
+      "gclid": null
+    },
+    "ipAddress": "::ffff:10.244.16.187",
+    "userAgent": "Mozilla/5.0 (Linux; Android 16; SM-A566B) AppleWebKit/537.36 Chrome/142.0.0.0 Mobile Safari/537.36",
+    "eventSourceUrl": "https://codigovencedor.com/?placement=Instagram_Feed&ad_id=52567985998561&utm_source=facebook&utm_campaign=52564275344761"
+  }
+}
