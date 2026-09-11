@@ -173,7 +173,7 @@ export function QualityModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-heading font-semibold text-fg-strong">
             Qualidade do evento

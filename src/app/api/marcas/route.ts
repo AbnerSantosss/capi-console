@@ -6,6 +6,7 @@ import {
   removerMarca,
   acharMarca,
 } from '@/lib/config-store';
+import { exigirSessao } from '@/lib/sessao';
 
 /** Lista as marcas SEM o token de acesso. */
 export async function GET() {
@@ -16,6 +17,7 @@ export async function GET() {
 /** Cria ou atualiza uma marca. O token so trafega nesta direcao. */
 export async function PUT(request: NextRequest) {
   try {
+    exigirSessao(request);
     const body = await request.json();
     const id = String(body.id || '').trim();
     if (!id) {
@@ -44,6 +46,7 @@ export async function PUT(request: NextRequest) {
       marca: mesclada ? publicarMarca(mesclada) : null,
     });
   } catch (e) {
+    if (e instanceof Response) return e;
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return NextResponse.json({ erro: msg }, { status: 500 });
   }
@@ -51,10 +54,12 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    exigirSessao(request);
     const id = new URL(request.url).searchParams.get('id') ?? '';
     await removerMarca(id);
     return NextResponse.json({ ok: true });
   } catch (e) {
+    if (e instanceof Response) return e;
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return NextResponse.json({ erro: msg }, { status: 400 });
   }

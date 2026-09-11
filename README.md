@@ -19,10 +19,13 @@ npm run dev      # http://localhost:3333
 ```
 src/
   app/
-    page.tsx              console (coluna de trabalho + painel de controle)
-    guia/                 como usar, onde achar cada dado, regras da Meta
-    integracoes/          webhooks de entrada e saída
+    (console)/            rotas protegidas com layout compartilhado e defesa em profundidade
+      page.tsx            console (coluna de trabalho + painel de controle)
+      guia/               como usar, onde achar cada dado, regras da Meta
+      integracoes/        webhooks de entrada e saída
+    login/                tela de entrada do console (/login)
     api/
+      sessao/             GET sonda · POST autentica (cookie assinado) · DELETE encerra
       enviar/             POST -> monta o payload, assina em SHA-256 e envia à Meta
       marcas/             GET/PUT/DELETE das marcas (o token nunca volta ao cliente)
       webhook/in/         recebe webhook por header X-CAPI-Secret
@@ -34,6 +37,8 @@ src/
       relay/              log de entregas e teste de destino
       integracoes/        configuração de entrada e saída
   lib/
+    cliente-api.ts        fetch unificado com captura de 401 e redirecionamento
+    sessao.ts             cookie de sessão assinado (HMAC-SHA256, node:crypto)
     meta-capi.ts          hashing, normalização, validação e POST para a Graph API
     parser.ts             lê o webhook de qualquer plataforma e extrai os campos
     attribution-log.ts    grava logs/disparos.md com o link do criativo
@@ -44,11 +49,23 @@ src/
     perfil-atribuicao.ts  guarda fbc/fbp/ip/ua do pré-checkout por e-mail
     dedup.ts              índice pixel|evento|event_id do que a Meta já aceitou
     inbox.ts / relay.ts   fila de entrada e relay de saída com retry
-  proxy.ts                Basic Auth do console (webhook e health ficam livres)
+  proxy.ts                autenticação do console (livres: webhook, health, /login, /api/sessao)
   components/
+    auth/LoginForm.tsx    formulário de login com proteção CSRF e limitação de taxa
     common/primitives.tsx Field, Section, Panel, StatusDot, HelpTip
     ui/brand-icons.tsx    Meta, Pix e WhatsApp — vetores oficiais
 ```
+
+---
+
+## Acesso ao console
+
+O console usa autenticação por sessão com cookie assinado via HMAC-SHA256 (`capi_sessao`), emitido através da página `/login`.
+
+- **Sessão padrão:** 12 horas (ou 30 dias marcando "Continuar conectado").
+- **Sem Basic Auth:** Sem popups do navegador ou cabeçalhos `Authorization` em plain-text.
+- **Invalidação imediata:** Alterar `CONSOLE_PASSWORD` ou `SESSION_SECRET` revoga instantaneamente todas as sessões.
+- **Proteção contra força bruta:** 8 tentativas falhas bloqueiam o IP por 10 minutos.
 
 ---
 
@@ -62,8 +79,9 @@ ACCESS_TOKEN=...        # Gerenciador de Eventos -> API de Conversões -> Gerar 
 API_VERSION=v26.0
 AD_ACCOUNT_ID=act_...   # opcional: habilita o link direto do criativo
 TEST_EVENT_CODE=        # opcional: com valor aqui nada entra nas métricas reais
-CONSOLE_USER=admin      # obrigatório fora do localhost
+CONSOLE_USER=admin      # usuário da tela de login
 CONSOLE_PASSWORD=       # mínimo 12 caracteres; sem ela o console responde 503
+SESSION_SECRET=         # chave de 32+ caracteres (openssl rand -base64 32)
 ```
 
 A lista completa está em `env.example`.
@@ -138,6 +156,7 @@ npm run check:contrast  # todos os pares de cor contra a WCAG 2.2
 npm run test:relay      # nenhum segredo pode sair no payload de relay
 npm run test:parser     # os 24 eventos do xWinner e os dois formatos de payload
 npm run test:atribuicao # herança do fbc e deduplicação
+npm run test:sessao     # integridade de assinatura, expiração e validação de sessão
 ```
 
 Os exemplos de payload usados nos testes são gerados com data de hoje por

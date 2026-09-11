@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { pedir, ErroApi, SessaoExpirada } from '@/lib/cliente-api';
 import { useEventStore } from '@/stores/useEventStore';
 import { useBrandStore } from '@/stores/useBrandStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -30,14 +31,12 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
 
   /** Trata a resposta da Meta. Separado para o reenvio forçado reaproveitar. */
   const concluir = async (
-    resposta: Response,
     dados: { httpStatus?: number; erros?: string[]; resposta?: Record<string, unknown> }
   ) => {
     const respostaMeta = dados.resposta as
       | { events_received?: number; error?: { message?: string } }
       | undefined;
     const ok =
-      resposta.ok &&
       !dados.erros?.length &&
       !respostaMeta?.error &&
       (respostaMeta?.events_received ?? 0) > 0;
@@ -56,6 +55,7 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
       toast.success('Evento recebido pela Meta', {
         description: `${respostaMeta?.events_received ?? 1} evento confirmado no Pixel ${ativa?.pixelId ?? ''}.`,
       });
+      marcarSubmetido(true);
       onResult({ sucesso: true, httpStatus: dados.httpStatus ?? 200, dados });
       return;
     }
@@ -68,26 +68,35 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
     toast.error('A Meta recusou o evento', { description: lista[0] });
     onResult({
       sucesso: false,
-      httpStatus: dados.httpStatus ?? resposta.status,
+      httpStatus: dados.httpStatus ?? 400,
       dados,
       erros: lista,
     });
   };
 
+  /** Resposta esperada da rota /api/enviar */
+  interface RespostaEnvio {
+    httpStatus?: number;
+    erros?: string[];
+    resposta?: Record<string, unknown>;
+    duplicado?: boolean;
+  }
+
   /** Reenvia o MESMO corpo com forcar: true, depois de a pessoa confirmar. */
   const reenviarForcado = async (corpo: Record<string, unknown>) => {
     setEnviando(true);
     try {
-      const resposta = await fetch('/api/enviar', {
+      const dados = await pedir<RespostaEnvio>('/api/enviar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...corpo, forcar: true }),
       });
-      await concluir(resposta, await resposta.json());
+      await concluir(dados);
     } catch (e) {
+      if (e instanceof SessaoExpirada) return;
       const msg = e instanceof Error ? e.message : 'Falha de conexão com o servidor local.';
       toast.error('Não foi possível enviar', { description: msg });
-      onResult({ sucesso: false, httpStatus: 0, erros: [msg] });
+      onResult({ sucesso: false, httpStatus: e instanceof ErroApi ? e.status : 0, erros: [msg] });
     } finally {
       setEnviando(false);
     }
@@ -96,6 +105,7 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
   const executar = async () => {
     setEnviando(true);
     const campos = useEventStore.getState().camposEvento();
+    let corpo: Record<string, unknown> = {};
 
     try {
       const quando = lerEventTime(campos.eventTime);
@@ -103,7 +113,7 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
         ? Math.floor(quando.getTime() / 1000)
         : Math.floor(Date.now() / 1000);
 
-      const corpo = {
+      corpo = {
           brandId: ativa?.id ?? 'default',
           event: {
             event_name:
@@ -135,17 +145,20 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
           },
       };
 
-      const resposta = await fetch('/api/enviar', {
+      const dados = await pedir<RespostaEnvio>('/api/enviar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(corpo),
       });
 
-      const dados = await resposta.json();
+      await concluir(dados);
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
 
       // 409: este event_id já foi aceito neste pixel. Reenviar conta a venda
       // duas vezes, então quem decide é a pessoa — não o código.
-      if (resposta.status === 409 && dados.duplicado) {
+      if (e instanceof ErroApi && e.status === 409 && (e.dados as RespostaEnvio | undefined)?.duplicado) {
+        const dados = e.dados as RespostaEnvio;
         toast.warning('Esta conversão já foi enviada', {
           description:
             'A Meta já aceitou este event_id neste pixel. Reenviar contaria a venda duas vezes.',
@@ -155,16 +168,13 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
             onClick: () => void reenviarForcado(corpo),
           },
         });
-        onResult({ sucesso: false, httpStatus: 409, dados, erros: dados.erros });
+        onResult({ sucesso: false, httpStatus: 409, dados: dados as Record<string, unknown>, erros: dados.erros });
         return;
       }
 
-      await concluir(resposta, dados);
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : 'Falha de conexão com o servidor local.';
+      const msg = e instanceof Error ? e.message : 'Falha de conexão com o servidor local.';
       toast.error('Não foi possível enviar', { description: msg });
-      onResult({ sucesso: false, httpStatus: 0, erros: [msg] });
+      onResult({ sucesso: false, httpStatus: e instanceof ErroApi ? e.status : 0, erros: [msg] });
     } finally {
       setEnviando(false);
     }

@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Braces, Inbox, Trash2, Wand2, Zap } from 'lucide-react';
+import { Braces, Inbox, Trash2, Wand2, Webhook, Zap } from 'lucide-react';
+import Link from 'next/link';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { parseWebhook } from '@/lib/parser';
@@ -45,8 +46,10 @@ export function SourceSection() {
     <Section
       id="secao-origem"
       step={1}
-      title="Origem dos dados"
-      description="Traga o evento de um webhook recebido, cole o JSON, ou preencha os campos abaixo à mão."
+      icon={Webhook}
+      variant="card"
+      title="De onde vem o evento"
+      description="Escolha um evento que já chegou, cole o JSON do webhook, ou preencha os campos abaixo à mão."
     >
       <Tabs value={aba} onValueChange={(v) => v && setAba(String(v))}>
         <TabsList className="h-auto w-full bg-surface-2 p-1 sm:w-auto">
@@ -67,7 +70,26 @@ export function SourceSection() {
         </TabsList>
 
         <TabsContent value="inbox" className="mt-4 outline-none">
+          {/* Os dois botoes de cada item faziam coisas diferentes com nomes
+              parecidos. Uma frase resolve o que nenhum rotulo curto resolvia. */}
+          <p className="mb-3 rounded-control border border-line bg-surface-2 p-3 text-caption text-fg-muted">
+            <strong className="font-semibold text-fg-body">
+              Carregar no formulário
+            </strong>{' '}
+            traz os dados para os campos abaixo, para você conferir antes de
+            enviar — nada é disparado.{' '}
+            <strong className="font-semibold text-fg-body">
+              Disparar direto
+            </strong>{' '}
+            envia o evento do jeito que ele chegou, sem passar pelo formulário.
+          </p>
           <InboxList compacto />
+          <Link
+            href="/integracoes#inbox"
+            className="mt-3 inline-flex min-h-10 items-center text-label font-medium text-accent-text underline-offset-4 hover:underline"
+          >
+            Ver caixa de entrada completa
+          </Link>
         </TabsContent>
 
         <TabsContent value="json" className="mt-4 outline-none">

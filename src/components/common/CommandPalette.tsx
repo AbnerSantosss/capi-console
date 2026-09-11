@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   BookOpen,
@@ -25,6 +26,8 @@ import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void }) {
   const [aberta, setAberta] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const naRaiz = pathname === '/';
 
   const reset = useEventStore((s) => s.reset);
   const setField = useEventStore((s) => s.setField);
@@ -73,10 +76,11 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             Nenhum comando encontrado.
           </Command.Empty>
 
-          <Command.Group
-            heading="Formulário"
-            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-micro [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
-          >
+          {naRaiz && (
+            <Command.Group
+              heading="Formulário"
+              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-micro [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
+            >
             <Item
               icone={Clock}
               onSelect={() => {
@@ -110,28 +114,37 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             >
               Limpar o formulário
             </Item>
-          </Command.Group>
+            </Command.Group>
+          )}
 
           <Command.Group
             heading="Ir para"
             className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-micro [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
           >
             <Item icone={Target} onSelect={() => { fechar(); onAbrirMarcas(); }}>
-              Marcas e destinos
+              Pixel e token
             </Item>
             <Item
               icone={Inbox}
               onSelect={() => {
                 fechar();
-                document
-                  .getElementById('secao-origem')
-                  ?.scrollIntoView({ behavior: 'smooth' });
+                if (naRaiz) {
+                  document
+                    .getElementById('secao-origem')
+                    ?.scrollIntoView({
+                      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                        ? 'auto'
+                        : 'smooth',
+                    });
+                } else {
+                  router.push('/integracoes#inbox');
+                }
               }}
             >
               Caixa de entrada
             </Item>
             <Item icone={Plug} onSelect={() => { fechar(); router.push('/integracoes'); }}>
-              Integrações
+              Disparo automático (Integrações)
             </Item>
             <Item icone={BookOpen} onSelect={() => { fechar(); router.push('/guia'); }}>
               Guia

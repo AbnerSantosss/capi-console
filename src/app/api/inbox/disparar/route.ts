@@ -3,6 +3,7 @@ import { acharEntrada } from '@/lib/inbox';
 import { parseWebhook } from '@/lib/parser';
 import { lerIntegracoes, acharRegra } from '@/lib/config-store';
 import { dispararItem } from '@/lib/auto-dispatch';
+import { exigirSessao } from '@/lib/sessao';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    exigirSessao(request);
     const body = (await request.json()) as { id?: string; marcas?: string[]; eventoMeta?: string };
     const item = await acharEntrada(String(body.id || ''));
     if (!item) return NextResponse.json({ erro: 'Entrada não encontrada.' }, { status: 404 });
@@ -39,6 +41,7 @@ export async function POST(request: NextRequest) {
     const resultados = await dispararItem({ item, campos: r.fields, eventoMeta, marcas, origem: 'manual' });
     return NextResponse.json({ resultados });
   } catch (e) {
+    if (e instanceof Response) return e;
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return NextResponse.json({ erro: msg }, { status: 400 });
   }

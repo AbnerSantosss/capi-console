@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import {
   AlertTriangle,
   ArrowUpRight,
   Check,
   Copy,
+  Eye,
+  EyeOff,
+  GitBranch,
+  History,
   Inbox,
   KeyRound,
   Plus,
@@ -15,6 +20,7 @@ import {
   ShieldAlert,
   Terminal,
   Trash2,
+  Webhook,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -30,6 +36,17 @@ import {
 import { InboxList } from './InboxList';
 import { RulesSection, type RegraRoteamento } from './RulesSection';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  IntegrationFlow,
+  type IntegrationTab,
+} from './IntegrationFlow';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 type EventoRelay = 'dispatch.success' | 'dispatch.error' | 'inbox.received';
 
@@ -66,6 +83,25 @@ const ROTULO_EVENTO: Record<EventoRelay, string> = {
   'inbox.received': 'Webhook recebido',
 };
 
+const ABAS: Array<{
+  value: IntegrationTab;
+  label: string;
+  icon: typeof Webhook;
+}> = [
+  { value: 'recebimento', label: 'Recebimento', icon: Webhook },
+  { value: 'inbox', label: 'Caixa de entrada', icon: Inbox },
+  { value: 'regras', label: 'Regras', icon: GitBranch },
+  { value: 'retornos', label: 'Retornos', icon: ArrowUpRight },
+  { value: 'historico', label: 'Histórico', icon: History },
+];
+
+const ABA_PADRAO: IntegrationTab = 'recebimento';
+
+function abaDoHash(hash: string): IntegrationTab {
+  const value = hash.replace(/^#/, '') as IntegrationTab;
+  return ABAS.some((item) => item.value === value) ? value : ABA_PADRAO;
+}
+
 export function IntegrationsPage({
   inicial,
   publicBaseUrl,
@@ -81,14 +117,40 @@ export function IntegrationsPage({
   const [entregas, setEntregas] = useState<Entrega[]>(inicial.entregas);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [aba, setAba] = useState<IntegrationTab>(ABA_PADRAO);
+  const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
+  const [mostrarSegredo, setMostrarSegredo] = useState(false);
+
+  useEffect(() => {
+    const sincronizar = () => setAba(abaDoHash(window.location.hash));
+    sincronizar();
+    window.addEventListener('hashchange', sincronizar);
+    window.addEventListener('popstate', sincronizar);
+    return () => {
+      window.removeEventListener('hashchange', sincronizar);
+      window.removeEventListener('popstate', sincronizar);
+    };
+  }, []);
+
+  const selecionarAba = (value: IntegrationTab) => {
+    setAba(value);
+    if (window.location.hash !== `#${value}`) {
+      window.history.pushState(null, '', `${window.location.pathname}#${value}`);
+    }
+  };
 
   const carregar = useCallback(async () => {
-    const [a, b] = await Promise.all([
-      fetch('/api/integracoes', { cache: 'no-store' }).then((r) => r.json()),
-      fetch('/api/relay', { cache: 'no-store' }).then((r) => r.json()),
-    ]);
-    setCfg(a.integracoes);
-    setEntregas(b.entregas ?? []);
+    try {
+      const [a, b] = await Promise.all([
+        pedir<{ integracoes: Integracoes }>('/api/integracoes', { cache: 'no-store' }),
+        pedir<{ entregas?: Entrega[] }>('/api/relay', { cache: 'no-store' }),
+      ]);
+      setCfg(a.integracoes);
+      setEntregas(b.entregas ?? []);
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      /* servidor pode estar reiniciando */
+    }
   }, []);
 
   const copiar = async (texto: string, chave: string) => {
@@ -102,14 +164,14 @@ export function IntegrationsPage({
     setSalvando(true);
     setCfg(novo);
     try {
-      const r = await fetch('/api/integracoes', {
+      await pedir('/api/integracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(novo),
       });
-      if (!r.ok) throw new Error('Falha ao salvar.');
       toast.success('Integrações salvas.');
-    } catch {
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
       toast.error('Não foi possível salvar.');
       void carregar();
     } finally {
@@ -118,12 +180,16 @@ export function IntegrationsPage({
   };
 
   const novoSegredo = async () => {
-    const r = await fetch('/api/integracoes', { method: 'POST' });
-    const d = await r.json();
-    setCfg({ ...cfg, entrada: { ...cfg.entrada, segredo: d.segredo } });
-    toast.warning('Segredo trocado', {
-      description: 'O segredo anterior parou de funcionar agora. Atualize o n8n.',
-    });
+    try {
+      const d = await pedir<{ segredo: string }>('/api/integracoes', { method: 'POST' });
+      setCfg({ ...cfg, entrada: { ...cfg.entrada, segredo: d.segredo } });
+      toast.warning('Segredo trocado', {
+        description: 'O segredo anterior parou de funcionar agora. Atualize o n8n.',
+      });
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      toast.error('Não foi possível trocar o segredo.');
+    }
   };
 
   const simular = async () => {
@@ -150,40 +216,49 @@ export function IntegrationsPage({
       },
     };
 
-    const r = await fetch('/api/webhook/in', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CAPI-Secret': cfg.entrada.segredo,
-      },
-      body: JSON.stringify(exemplo),
-    });
+    try {
+      await pedir('/api/webhook/in', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CAPI-Secret': cfg.entrada.segredo,
+        },
+        body: JSON.stringify(exemplo),
+      });
 
-    if (r.ok) {
       toast.success('Webhook simulado recebido', {
         description: 'Ele aparece na caixa de entrada abaixo.',
       });
-    } else {
-      toast.error('A simulação falhou.', { description: `HTTP ${r.status}` });
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      toast.error('A simulação falhou.', {
+        description: e instanceof Error ? e.message : 'Erro desconhecido.',
+      });
     }
   };
 
   const testarDestino = async (id: string) => {
     toast.info('Enviando ping…');
-    const r = await fetch('/api/relay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ destinoId: id }),
-    });
-    const d = await r.json();
-    const e: Entrega | undefined = d.entrega;
-    if (e?.ok) {
-      toast.success(`Destino respondeu ${e.httpStatus}`, {
-        description: `${e.duracaoMs} ms · ${e.tentativas} tentativa(s)`,
+    try {
+      const d = await pedir<{ entrega?: Entrega }>('/api/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinoId: id }),
       });
-    } else {
-      toast.error('O destino não respondeu', {
-        description: e?.erro ?? 'Sem resposta após 3 tentativas.',
+      const e: Entrega | undefined = d.entrega;
+      if (e?.ok) {
+        toast.success(`Destino respondeu ${e.httpStatus}`, {
+          description: `${e.duracaoMs} ms · ${e.tentativas} tentativa(s)`,
+        });
+      } else {
+        toast.error('O destino não respondeu', {
+          description: e?.erro ?? 'Sem resposta após 3 tentativas.',
+        });
+      }
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      toast.error('Falha ao testar destino.', {
+        description: e instanceof Error ? e.message : 'Erro desconhecido.',
       });
     }
     void carregar();
@@ -203,22 +278,70 @@ export function IntegrationsPage({
   -H "Content-Type: application/json" \
   -H "X-CAPI-Secret: ${cfg.entrada.segredo}" \
   -d '{"event":"purchase_approved","data":{...}}'`;
+  const mascara = '••••••••••••';
+  const ocultarSegredo = (texto: string) =>
+    cfg.entrada.segredo ? texto.replace(cfg.entrada.segredo, mascara) : texto;
+  const endpointCaminhoVisivel = mostrarUrlSensivel
+    ? endpointCaminho
+    : ocultarSegredo(endpointCaminho);
+  const curlVisivel = mostrarSegredo
+    ? curl
+    : ocultarSegredo(curl);
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="min-w-0">
+      <IntegrationFlow onNavigate={selecionarAba} />
+      <Tabs
+        value={aba}
+        onValueChange={(value) => value && selecionarAba(value as IntegrationTab)}
+        className="mt-6 min-w-0 gap-5"
+      >
+        <div className="max-w-full overflow-x-auto rounded-xl border border-line-strong bg-surface-1/95 p-1.5">
+          <TabsList className="h-auto min-w-max gap-1 bg-transparent p-0">
+            {ABAS.map((item) => {
+              const Icon = item.icon;
+              const count =
+                item.value === 'regras'
+                  ? cfg.regras.length
+                  : item.value === 'retornos'
+                    ? cfg.saida.length
+                    : item.value === 'historico'
+                      ? entregas.length
+                      : undefined;
+              return (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="h-11 gap-2 rounded-lg px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
+                >
+                  <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
+                  {item.label}
+                  {count !== undefined && (
+                    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-micro text-fg-muted tabular">
+                      {count}
+                    </span>
+                  )}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
+
+        <TabsContent value="recebimento" className="min-w-0 outline-none">
       {/* ---------------------------------------------------------- */}
       <Section
-        step={1}
+        icon={Webhook}
+        variant="card"
         title="Receber webhooks"
         description="Aponte a plataforma de vendas ou o n8n para este endereço e o payload chega pronto para revisão."
       >
-        <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="flex flex-col gap-4">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="flex min-w-0 flex-col gap-4">
             {ehLocal && (
               <Callout tone="warning" icon={AlertTriangle} title="O xWinner exige https">
                 O campo do backoffice é <strong>URL (https)</strong> e este
                 console está em <code className="font-mono">{base}</code>. Abra o
-                túnel primeiro (bloco ao lado) e use a URL gerada no lugar de{' '}
+                acesso público nas instruções desta aba e use a URL gerada no lugar de{' '}
                 <code className="font-mono">localhost:3333</code>.
               </Callout>
             )}
@@ -227,25 +350,22 @@ export function IntegrationsPage({
               id="endpoint-caminho"
               label="URL para o xWinner"
               helper="O backoffice do xWinner só tem o campo de URL — o segredo vai no próprio caminho. Cole esta URL em Integrações → Webhooks → Novo endpoint."
-              action={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copiar(endpointCaminho, 'ep-caminho')}
-                >
-                  {copiado === 'ep-caminho' ? (
-                    <Check className="size-3.5 text-success" aria-hidden />
-                  ) : (
-                    <Copy className="size-3.5" aria-hidden />
-                  )}
+              className="rounded-lg border border-line bg-surface-2/55 p-4"
+              action={<div className="flex gap-1">
+                <Button size="sm" variant="ghost" aria-pressed={mostrarUrlSensivel} onClick={() => setMostrarUrlSensivel((value) => !value)}>
+                  {mostrarUrlSensivel ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
+                  {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => copiar(endpointCaminho, 'ep-caminho')}>
+                  {copiado === 'ep-caminho' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
                   Copiar
                 </Button>
-              }
+              </div>}
             >
               <Input
                 id="endpoint-caminho"
                 readOnly
-                value={endpointCaminho}
+                value={endpointCaminhoVisivel}
                 className="wrap-token font-mono"
               />
             </Field>
@@ -254,6 +374,7 @@ export function IntegrationsPage({
               id="endpoint-header"
               label="URL para o n8n"
               helper="Quando o remetente aceita header customizado, prefira este formato: a URL fica limpa e o segredo não aparece nela."
+              className="rounded-lg border border-line bg-surface-2/55 p-4"
               action={
                 <Button
                   size="sm"
@@ -282,8 +403,13 @@ export function IntegrationsPage({
               label="Segredo"
               param="X-CAPI-Secret"
               helper="Vale para as duas URLs acima. Sem o segredo correto o endpoint responde 401."
+              className="rounded-lg border border-line bg-surface-2/55 p-4"
               action={
                 <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" aria-pressed={mostrarSegredo} onClick={() => setMostrarSegredo((value) => !value)}>
+                    {mostrarSegredo ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
+                    {mostrarSegredo ? 'Ocultar' : 'Mostrar'}
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -306,28 +432,39 @@ export function IntegrationsPage({
               <Input
                 id="segredo"
                 readOnly
-                value={cfg.entrada.segredo}
+                value={mostrarSegredo ? cfg.entrada.segredo : mascara}
                 className="wrap-token font-mono"
               />
             </Field>
 
-            <div>
-              <p className="mb-2 flex items-center gap-2 text-label font-medium text-fg-body">
-                <Terminal className="size-4 text-fg-muted" aria-hidden />
-                Testar pela linha de comando
-              </p>
-              <pre className="wrap-token overflow-x-auto rounded-control border border-line-strong bg-surface-2 p-3 font-mono text-caption text-fg-muted">
-                {curl}
-              </pre>
-            </div>
+            <Accordion className="rounded-lg border border-line bg-surface-2/45">
+              <AccordionItem value="instrucoes" className="last:border-b-0">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <span className="flex items-center gap-2 text-label font-semibold text-fg-body">
+                    <Terminal className="size-4 text-fg-muted" strokeWidth={1.75} aria-hidden />
+                    Instruções técnicas
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <p className="mb-2 text-caption text-fg-muted">Teste pela linha de comando somente em um ambiente isolado.</p>
+                  <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-muted">
+                    {curlVisivel}
+                  </pre>
+                  <Button variant="outline" className="mt-3" onClick={simular}>
+                    <Send className="size-4" aria-hidden />
+                    Simular recebimento
+                  </Button>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-4">
             <Panel title="Modo de recebimento" icon={Inbox}>
               <p className="text-caption text-fg-muted">
                 Quem decide o que acontece com cada webhook é a tabela de{' '}
                 <strong className="text-fg-body">regras de roteamento</strong>{' '}
-                (passo 2). Um evento sem regra própria fica na fila.
+                (aba Regras). Um evento sem regra própria fica na fila.
               </p>
 
               <Callout tone="warning" icon={ShieldAlert} className="mt-3">
@@ -336,9 +473,9 @@ export function IntegrationsPage({
                 são barrados antes da Meta, mesmo em modo automático.
               </Callout>
 
-              <Button variant="outline" className="mt-3 w-full" onClick={simular}>
-                <Send className="size-4" aria-hidden />
-                Simular recebimento
+              <Button variant="outline" className="mt-3 w-full" onClick={() => selecionarAba('regras')}>
+                <GitBranch className="size-4" aria-hidden />
+                Ver regras
               </Button>
             </Panel>
 
@@ -364,17 +501,26 @@ export function IntegrationsPage({
           </div>
         </div>
 
-        <div className="mt-2">
-          <h3 className="mb-3 text-label font-semibold text-fg-strong">
-            Caixa de entrada
-          </h3>
-          <InboxList />
-        </div>
       </Section>
+        </TabsContent>
+
+        <TabsContent value="inbox" className="min-w-0 outline-none">
+          <Section
+            id="inbox"
+            icon={Inbox}
+            variant="card"
+            title="Caixa de entrada"
+            description="Eventos recebidos das plataformas. Carregue no formulário para revisar ou use o disparo direto."
+          >
+            <InboxList />
+          </Section>
+        </TabsContent>
 
       {/* ---------------------------------------------------------- */}
+        <TabsContent value="regras" className="min-w-0 outline-none">
       <Section
-        step={2}
+        icon={GitBranch}
+        variant="card"
         title="Regras de roteamento"
         description="Para cada evento da plataforma: qual evento vira na Meta, para quais pixels vai e se dispara sozinho ou espera revisão."
       >
@@ -385,11 +531,14 @@ export function IntegrationsPage({
           salvando={salvando}
         />
       </Section>
+        </TabsContent>
 
       {/* ---------------------------------------------------------- */}
+        <TabsContent value="retornos" className="min-w-0 outline-none">
       <Section
-        step={3}
-        title="Enviar resultados"
+        icon={ArrowUpRight}
+        variant="card"
+        title="Retorno para outros sistemas"
         description="Depois de cada disparo, devolva ao n8n ou ao CRM o que a Meta respondeu."
         action={
           <Button
@@ -476,7 +625,7 @@ export function IntegrationsPage({
                     </div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-4">
                     <Field id={`nome-${d.id}`} label="Nome">
                       <Input
                         id={`nome-${d.id}`}
@@ -507,6 +656,10 @@ export function IntegrationsPage({
                       />
                     </Field>
                   </div>
+
+                  <p className="text-caption text-fg-muted">
+                    Nome e URL são salvos quando você sai do campo.
+                  </p>
 
                   <fieldset>
                     <legend className="mb-2 text-label font-medium text-fg-body">
@@ -542,16 +695,18 @@ export function IntegrationsPage({
 
         <Callout tone="info" icon={KeyRound}>
           O token da Meta e o segredo de entrada nunca entram no corpo enviado.
-          Um teste automatizado (<code className="font-mono">npm run test:relay</code>)
-          falha se alguma chave sensível vazar.
+          O retorno contém apenas os dados necessários para o sistema configurado.
         </Callout>
       </Section>
+        </TabsContent>
 
       {/* ---------------------------------------------------------- */}
+        <TabsContent value="historico" className="min-w-0 outline-none">
       <Section
-        step={4}
-        title="Histórico de entregas"
-        description="As últimas 50 tentativas de envio aos destinos."
+        icon={History}
+        variant="card"
+        title="Histórico de retornos"
+        description="As últimas 50 tentativas de entrega ao n8n ou CRM."
         action={
           <Button size="sm" variant="ghost" onClick={carregar} disabled={salvando}>
             <RefreshCw className="size-3.5" aria-hidden />
@@ -564,7 +719,12 @@ export function IntegrationsPage({
             Nenhuma entrega registrada ainda.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            className="max-w-full overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela do histórico de retornos"
+          >
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-line">
@@ -601,6 +761,9 @@ export function IntegrationsPage({
                         )}
                       >
                         {e.httpStatus || '—'}
+                        <span className="ml-2 font-sans text-caption font-medium">
+                          {e.ok ? 'Entregue' : 'Falhou'}
+                        </span>
                       </span>
                       {e.erro && (
                         <span className="ml-2 text-caption text-fg-muted">
@@ -621,6 +784,8 @@ export function IntegrationsPage({
           </div>
         )}
       </Section>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

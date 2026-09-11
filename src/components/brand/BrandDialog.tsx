@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { Check, Eye, EyeOff, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 
+import { pedir } from '@/lib/cliente-api';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import {
   Dialog,
@@ -69,13 +70,11 @@ export function BrandDialog({ open, onOpenChange }: Props) {
 
     setSalvando(true);
     try {
-      const r = await fetch('/api/marcas', {
+      await pedir('/api/marcas', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      const dados = await r.json();
-      if (!r.ok) throw new Error(dados.erro ?? 'Falha ao salvar.');
       await carregar();
       setEditando(null);
       toast.success('Marca salva', {
@@ -90,11 +89,9 @@ export function BrandDialog({ open, onOpenChange }: Props) {
 
   const remover = async (id: string) => {
     try {
-      const r = await fetch(`/api/marcas?id=${encodeURIComponent(id)}`, {
+      await pedir(`/api/marcas?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
-      const dados = await r.json();
-      if (!r.ok) throw new Error(dados.erro ?? 'Falha ao remover.');
       await carregar();
       toast.success('Marca removida.');
     } catch (e) {
@@ -104,14 +101,14 @@ export function BrandDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-heading font-semibold text-fg-strong">
-            Marcas e destinos
+            Pixels de destino
           </DialogTitle>
           <DialogDescription className="text-caption text-fg-muted">
-            Cada marca guarda o Pixel, o token e o código de teste que serão
-            usados no disparo.
+            Cada marca guarda um Pixel, o token de acesso e o código de teste.
+            É para onde o evento vai quando você dispara.
           </DialogDescription>
         </DialogHeader>
 

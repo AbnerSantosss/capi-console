@@ -16,6 +16,7 @@ import {
 
 import { useEventStore } from '@/stores/useEventStore';
 import { parseWebhook } from '@/lib/parser';
+import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusDot, Callout } from '@/components/common/primitives';
@@ -104,6 +105,7 @@ const TOM_RESULTADO: Record<ResultadoDisparo['status'], 'success' | 'danger' | '
 export function InboxList({ compacto = false }: { compacto?: boolean }) {
   const [itens, setItens] = useState<ItemInbox[]>([]);
   const [aoVivo, setAoVivo] = useState(false);
+  const [tentandoReconectar, setTentandoReconectar] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [marcas, setMarcas] = useState<MarcaPublica[]>([]);
   const [alvo, setAlvo] = useState<ItemInbox | null>(null);
@@ -114,57 +116,103 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
 
   const buscar = useCallback(async () => {
     try {
-      const r = await fetch('/api/inbox', { cache: 'no-store' });
-      const d = await r.json();
+      const d = await pedir<{ itens: ItemInbox[] }>('/api/inbox', { cache: 'no-store' });
       setItens(d.itens ?? []);
     } catch {
-      /* servidor pode estar reiniciando */
+      /* servidor pode estar reiniciando ou offline */
     } finally {
       setCarregando(false);
     }
   }, []);
 
-  // Nao buscamos no mount: o proprio SSE entrega a lista no evento "inicial".
-  // Isso evita um fetch redundante e o setState sincrono dentro do efeito.
+  // D9: Conexão SSE resiliente com sonda de autenticação e backoff
   useEffect(() => {
-    const es = new EventSource('/api/webhook/stream');
-    es.onopen = () => setAoVivo(true);
-    es.onerror = () => setAoVivo(false);
-    es.addEventListener('inicial', (e) => {
-      try {
-        setItens(JSON.parse((e as MessageEvent).data));
-        setCarregando(false);
-      } catch {
-        /* payload malformado */
-      }
-    });
-    es.addEventListener('entrada', (e) => {
-      try {
-        const novo = JSON.parse((e as MessageEvent).data) as ItemInbox;
-        setItens((atuais) => [novo, ...atuais].slice(0, 50));
-        toast.info('Webhook recebido', {
-          description: `${novo.evento ?? 'evento'} · ${dinheiro(novo.valor, novo.moeda)}`,
-        });
-      } catch {
-        /* payload malformado */
-      }
-    });
-    // Disparo automatico ou de outra aba: o item ja existe e muda de estado.
-    es.addEventListener('atualizado', (e) => {
-      try {
-        const mudou = JSON.parse((e as MessageEvent).data) as ItemInbox;
-        setItens((atuais) => atuais.map((i) => (i.id === mudou.id ? mudou : i)));
-      } catch {
-        /* payload malformado */
-      }
-    });
+    let ativo = true;
+    let es: EventSource | null = null;
+    let timerReconexao: ReturnType<typeof setTimeout> | null = null;
+    let atrasoReconexao = 2000;
 
-    return () => es.close();
+    const conectar = () => {
+      if (!ativo) return;
+      es = new EventSource('/api/webhook/stream');
+
+      es.onopen = () => {
+        if (!ativo) return;
+        setAoVivo(true);
+        setTentandoReconectar(false);
+        atrasoReconexao = 2000;
+      };
+
+      es.onerror = async () => {
+        if (!ativo) return;
+        setAoVivo(false);
+        setCarregando(false);
+        setTentandoReconectar(true);
+        if (es) {
+          es.close();
+          es = null;
+        }
+
+        // Sonda a sessão: se expirada, pedir() redireciona para /login
+        try {
+          await pedir('/api/sessao');
+        } catch (e) {
+          if (e instanceof SessaoExpirada) {
+            return;
+          }
+        }
+
+        // Reconexão com backoff (2s, 4s, 8s... até 30s)
+        const espera = atrasoReconexao;
+        atrasoReconexao = Math.min(atrasoReconexao * 2, 30_000);
+        timerReconexao = setTimeout(() => {
+          if (ativo) conectar();
+        }, espera);
+      };
+
+      es.addEventListener('inicial', (e) => {
+        try {
+          setItens(JSON.parse((e as MessageEvent).data));
+          setCarregando(false);
+        } catch {
+          /* payload malformado */
+        }
+      });
+
+      es.addEventListener('entrada', (e) => {
+        try {
+          const novo = JSON.parse((e as MessageEvent).data) as ItemInbox;
+          setItens((atuais) => [novo, ...atuais].slice(0, 50));
+          toast.info('Webhook recebido', {
+            description: `${novo.evento ?? 'evento'} · ${dinheiro(novo.valor, novo.moeda)}`,
+          });
+        } catch {
+          /* payload malformado */
+        }
+      });
+
+      // Disparo automático ou de outra aba: o item já existe e muda de estado
+      es.addEventListener('atualizado', (e) => {
+        try {
+          const mudou = JSON.parse((e as MessageEvent).data) as ItemInbox;
+          setItens((atuais) => atuais.map((i) => (i.id === mudou.id ? mudou : i)));
+        } catch {
+          /* payload malformado */
+        }
+      });
+    };
+
+    conectar();
+
+    return () => {
+      ativo = false;
+      if (timerReconexao) clearTimeout(timerReconexao);
+      if (es) es.close();
+    };
   }, []);
 
   useEffect(() => {
-    fetch('/api/marcas', { cache: 'no-store' })
-      .then((r) => r.json())
+    pedir<{ marcas: MarcaPublica[] }>('/api/marcas', { cache: 'no-store' })
       .then((d) => setMarcas(d.marcas ?? []))
       .catch(() => setMarcas([]));
   }, []);
@@ -172,9 +220,9 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   const carregarNoFormulario = async (item: ItemInbox) => {
     try {
       const r = parseWebhook(JSON.stringify(item.payload));
-      // zera o formulario antes de aplicar: nada do payload anterior sobrevive
+      // zera o formulário antes de aplicar: nada do payload anterior sobrevive
       carregarDoParser(r.fields as never, r.eventName);
-      await fetch('/api/inbox', {
+      await pedir('/api/inbox', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id, status: 'carregado' }),
@@ -189,6 +237,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
         .getElementById('secao-evento')
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
+      if (e instanceof SessaoExpirada) return;
       toast.error('Não foi possível ler este payload', {
         description: e instanceof Error ? e.message : 'Formato não reconhecido.',
       });
@@ -204,17 +253,18 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
     if (!alvo) return;
     setDisparando(true);
     try {
-      const r = await fetch('/api/inbox/disparar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: alvo.id,
-          marcas: marcasEscolhidas,
-          eventoMeta: alvo.eventoMeta ?? alvo.evento,
-        }),
-      });
-      const d = (await r.json()) as { resultados?: ResultadoDisparo[]; erro?: string };
-      if (!r.ok) throw new Error(d.erro || `HTTP ${r.status}`);
+      const d = await pedir<{ resultados?: ResultadoDisparo[]; erro?: string }>(
+        '/api/inbox/disparar',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: alvo.id,
+            marcas: marcasEscolhidas,
+            eventoMeta: alvo.eventoMeta ?? alvo.evento,
+          }),
+        }
+      );
 
       const enviados = (d.resultados ?? []).filter((x) => x.status === 'enviado');
       if (enviados.length) {
@@ -234,6 +284,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       setAlvo(null);
       void buscar();
     } catch (e) {
+      if (e instanceof SessaoExpirada) return;
       toast.error('Falha ao disparar', {
         description: e instanceof Error ? e.message : 'Erro desconhecido.',
       });
@@ -243,9 +294,16 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   };
 
   const limpar = async () => {
-    await fetch('/api/inbox', { method: 'DELETE' });
-    setItens([]);
-    toast.success('Caixa de entrada limpa.');
+    try {
+      await pedir('/api/inbox', { method: 'DELETE' });
+      setItens([]);
+      toast.success('Caixa de entrada limpa.');
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      toast.error('Falha ao limpar a caixa de entrada.', {
+        description: e instanceof Error ? e.message : '',
+      });
+    }
   };
 
   const escolhidasEmProducao = marcas.filter(
@@ -264,10 +322,14 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <StatusDot
-          tone={aoVivo ? 'success' : 'neutral'}
+          tone={aoVivo ? 'success' : tentandoReconectar ? 'warning' : 'neutral'}
           icon={aoVivo ? Radio : CircleDot}
         >
-          {aoVivo ? 'Ouvindo em tempo real' : 'Sem conexão ao vivo'}
+          {aoVivo
+            ? 'Ouvindo em tempo real'
+            : tentandoReconectar
+            ? 'Sem conexão ao vivo — tentando reconectar…'
+            : 'Sem conexão ao vivo'}
         </StatusDot>
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={buscar}>
@@ -410,12 +472,12 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
                     onClick={() => carregarNoFormulario(item)}
                   >
                     <ArrowDownToLine className="size-3.5" aria-hidden />
-                    Carregar
+                    Carregar no formulário
                   </Button>
                   {!ignorado && (
                     <Button size="sm" onClick={() => abrirDisparo(item)}>
                       <Send className="size-3.5" aria-hidden />
-                      Disparar agora
+                      Disparar direto
                     </Button>
                   )}
                 </div>
@@ -435,7 +497,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       )}
 
       <Dialog open={alvo !== null} onOpenChange={(v) => !v && setAlvo(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
               <Send className="size-5 text-accent-text" aria-hidden />

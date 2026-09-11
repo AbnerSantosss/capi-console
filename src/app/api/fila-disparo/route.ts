@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { montarFilaDisparo, dispararFila } from '@/lib/batch-processor';
 import { acharMarca } from '@/lib/config-store';
+import { exigirSessao } from '@/lib/sessao';
 
 export async function POST(request: NextRequest) {
   try {
+    exigirSessao(request);
     const body = await request.json();
 
     // Pode receber entregas como: { deliveries: [...] }, { data: [...] } ou diretamente [...]
@@ -86,6 +88,7 @@ export async function POST(request: NextRequest) {
       resultado: resultadoDisparo,
     });
   } catch (err) {
+    if (err instanceof Response) return err;
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ erro: 'Falha no processamento da fila: ' + msg }, { status: 500 });
   }

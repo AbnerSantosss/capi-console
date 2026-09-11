@@ -1,67 +1,77 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import {
+  COOKIE_SESSAO,
+  SENHA_MIN,
+  senhaForte,
+  validarDestino,
+  verificarSessao,
+} from '@/lib/sessao';
+
 /**
- * Autenticacao do console (Basic Auth).
+ * Autenticação do console (F2).
  *
- * Ate agora o console so existia em localhost. Na VPS ele fica acessivel pela
- * internet, e a tela mostra o segredo de entrada e permite disparar eventos que
- * custam dinheiro — entao precisa de senha. Basic Auth foi escolhido porque o
- * EventSource (SSE da caixa de entrada) reaproveita as credenciais sozinho, sem
- * codigo extra, e o curl tambem.
+ * O proxy roda no runtime Node.js (Next 16).
  *
- * Livres de senha: o recebimento de webhook (que ja se autentica pelo segredo
- * no caminho) e o healthcheck (que o Docker consulta e nao devolve segredo).
+ * Arquitetura de autenticação (D1, D4, D5, D12):
+ * - O Basic Auth foi removido por completo: o único caminho é o cookie assinado `capi_sessao`.
+ * - Sem cabeçalho `WWW-Authenticate`: o navegador nunca entra em laço de autenticação nativa.
+ * - O EventSource da caixa de entrada trafega o cookie automaticamente por ser da mesma origem.
+ * - Rotas de API sem sessão respondem HTTP 401 JSON (para clientes fetch consumirem).
+ * - Rotas de página sem sessão sofrem redirect HTTP 307 para `/login?destino=<pathname validado>`.
+ * - Todas as respostas protegidas recebem `Cache-Control: private, no-store`.
  *
- * Sem CONSOLE_PASSWORD definido o console responde 503 em vez de abrir: e
- * melhor o operador ver "console fechado" do que o console ficar publico por
- * esquecimento de variavel de ambiente.
+ * Livres de senha:
+ * - Webhooks do xWinner (`/api/webhook/in*`), protegidos por segredo no path.
+ * - Healthcheck do Docker (`/api/health`).
+ * - Tela de login (`/login`) e endpoint de autenticação (`/api/sessao`).
+ * - Atalho de desenvolvimento (`/api/sessao/dev-admin`, desativado em produção).
  */
-const LIVRES = [/^\/api\/webhook\/in(\/|$)/, /^\/api\/health$/];
+const LIVRES = [
+  /^\/api\/webhook\/in(\/|$)/,
+  /^\/api\/health$/,
+  /^\/login$/,
+  /^\/api\/sessao$/,
+  /^\/api\/sessao\/dev-admin$/, // atalho de dev — remover antes de subir para produção
+];
 
-/** Comparacao em tempo constante sem depender de node:crypto. */
-function iguais(a: string, b: string): boolean {
-  const x = new TextEncoder().encode(a);
-  const y = new TextEncoder().encode(b);
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  return diff === 0;
-}
-
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (LIVRES.some((r) => r.test(pathname))) return NextResponse.next();
 
-  const usuario = process.env.CONSOLE_USER || 'admin';
-  const senha = process.env.CONSOLE_PASSWORD || '';
-  if (!senha || senha.length < 12) {
+  if (!senhaForte(process.env.CONSOLE_PASSWORD)) {
     return new NextResponse(
-      'Console fechado: defina CONSOLE_PASSWORD (mínimo 12 caracteres) nas variáveis de ambiente.',
+      `Console fechado: defina CONSOLE_PASSWORD (mínimo ${SENHA_MIN} caracteres) nas variáveis de ambiente.`,
       { status: 503, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 
-  const auth = req.headers.get('authorization') || '';
-  if (auth.startsWith('Basic ')) {
-    try {
-      const decodificado = atob(auth.slice(6));
-      const i = decodificado.indexOf(':');
-      const u = decodificado.slice(0, i);
-      const p = decodificado.slice(i + 1);
-      if (iguais(u, usuario) && iguais(p, senha)) return NextResponse.next();
-    } catch {
-      /* base64 invalido */
-    }
+  const token = req.cookies.get(COOKIE_SESSAO)?.value;
+  if (verificarSessao(token)) {
+    const resposta = NextResponse.next();
+    resposta.headers.set('Cache-Control', 'private, no-store');
+    return resposta;
   }
 
-  return new NextResponse('Autenticação necessária.', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="Meta CAPI Console", charset="UTF-8"',
-      'Cache-Control': 'no-store',
-    },
-  });
+  // Requisições de API respondem 401 JSON sem WWW-Authenticate
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { erro: 'Sessão expirada ou ausente. Entre novamente em /login.', login: '/login' },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } }
+    );
+  }
+
+  // Páginas do console: redirecionamento 307 com destino validado
+  const destinoValido = validarDestino(pathname);
+  const destinoUrl = new URL('/login', req.url);
+  destinoUrl.searchParams.set('destino', destinoValido);
+
+  const resposta = NextResponse.redirect(destinoUrl, 307);
+  resposta.headers.set('Cache-Control', 'private, no-store');
+  return resposta;
 }
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|brand/).*)'],
 };
+

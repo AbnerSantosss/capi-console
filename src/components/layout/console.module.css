@@ -1,0 +1,286 @@
+.shell {
+  --surface-0: #090b0f;
+  --surface-1: #12151a;
+  --surface-2: #1a1e25;
+  --surface-3: #222730;
+  --border-subtle: #292f38;
+  --border-default: #3b4350;
+  --border-control: #697586;
+  --fg-strong: #fafafa;
+  --fg-body: #e4e7ec;
+  --fg-muted: #adb5c2;
+  --fg-disabled: #7f8896;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  overflow-x: clip;
+  background: var(--surface-0);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.background {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.background::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 900px 600px at 10% 0%, rgb(0 100 224 / 14%), transparent 65%),
+    radial-gradient(ellipse 700px 500px at 100% 10%, rgb(167 139 250 / 7%), transparent 65%),
+    radial-gradient(ellipse 600px 420px at 4% 78%, rgb(34 211 238 / 5%), transparent 68%);
+  content: '';
+}
+
+/* Camada da grade. O filho (estatico ou animado) e absoluto e herda a
+   mascara daqui, entao trocar um pelo outro nao mexe no enquadramento. */
+.gridLayer {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 420px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, black 0%, rgb(0 0 0 / 68%) 50%, transparent 100%);
+}
+
+.gridStatic {
+  fill: rgb(147 161 181 / 4%);
+  stroke: rgb(147 161 181 / 4%);
+}
+
+/* Ruido fino. Sem ele as superficies grandes ficam com cara de chapa. */
+.noise {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+}
+
+.network {
+  position: absolute;
+  top: 72px;
+  right: max(24px, calc((100vw - 1280px) / 2));
+  width: min(32vw, 420px);
+  color: var(--accent-text);
+  opacity: 0.12;
+}
+
+.live::before {
+  animation: background-drift 36s ease-in-out infinite alternate;
+}
+
+.page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1280px;
+  min-width: 0;
+  padding: 24px 16px 104px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.pageHeaderLead {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.pageHeaderIcon {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(77 166 255 / 28%);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgb(0 100 224 / 20%), rgb(17 22 31 / 92%));
+  color: var(--accent-text);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 20%);
+}
+
+.eyebrow {
+  margin-bottom: 4px;
+  color: var(--accent-text);
+  font-size: max(11px, 0.6875rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.pageTitle {
+  color: var(--fg-strong);
+  font-size: max(24px, 1.75rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.pageDescription {
+  max-width: 680px;
+  margin-top: 6px;
+  color: var(--fg-muted);
+  font-size: max(14px, 0.875rem);
+  line-height: 1.55;
+}
+
+.sectionCard {
+  min-width: 0;
+  scroll-margin-top: 88px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: rgb(18 21 26 / 97%);
+  padding: 16px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 14%);
+}
+
+.sectionCard :global(.text-caption),
+.shell :global(.text-caption) {
+  font-size: max(12px, 0.75rem);
+  line-height: 1.5;
+}
+
+.sectionCard :global(.text-label),
+.shell :global(.text-label) {
+  font-size: max(13px, 0.8125rem);
+  line-height: 1.5;
+}
+
+.sectionCard :global(.text-body),
+.shell :global(.text-body) {
+  font-size: max(14px, 0.875rem);
+  line-height: 1.55;
+}
+
+.sectionCard :global(.text-title) {
+  font-size: max(17px, 1rem);
+  line-height: 1.45;
+}
+
+.mainGrid {
+  display: grid;
+  min-width: 0;
+  gap: 24px;
+}
+
+.workColumn,
+.reviewColumn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.guideGrid {
+  display: grid;
+  min-width: 0;
+  gap: 24px;
+}
+
+.guideNav {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: rgb(17 22 31 / 94%);
+  padding: 12px;
+}
+
+.guideArticle {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.tabsViewport {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding-inline: 24px;
+  }
+
+  .sectionCard {
+    padding: 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding: 32px 32px 64px;
+  }
+
+  .gridLayer {
+    height: 760px;
+  }
+
+  .guideGrid {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .guideNav {
+    position: sticky;
+    top: 88px;
+    align-self: start;
+  }
+}
+
+@media (min-width: 1200px) {
+  .mainGrid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1200px) and (min-height: 800px) {
+  .reviewColumn {
+    position: sticky;
+    top: 88px;
+  }
+}
+
+@media (max-width: 767px) {
+  .network {
+    display: none;
+  }
+
+  .pageHeader {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live::before {
+    animation: none;
+  }
+}
+
+@keyframes background-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(12px, 8px, 0); }
+}

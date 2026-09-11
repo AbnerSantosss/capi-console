@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Clock, Wand2 } from 'lucide-react';
+import { Clock, ReceiptText, Wand2 } from 'lucide-react';
 
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EVENTOS_META, acharEvento } from '@/lib/meta-events';
@@ -32,8 +32,10 @@ export function TransactionSection() {
     <Section
       id="secao-evento"
       step={2}
-      title="Evento e transação"
-      description="O que aconteceu, quando e por quanto."
+      icon={ReceiptText}
+      variant="card"
+      title="O que aconteceu"
+      description="Qual foi o evento, o dia e a hora em que aconteceu, e o valor da venda."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Evento */}

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Save, ShieldAlert, Trash2, Zap } from 'lucide-react';
+import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,14 @@ import {
 import { Field, Callout, StatusDot } from '@/components/common/primitives';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
+import { pedir } from '@/lib/cliente-api';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { cn } from '@/lib/utils';
 
 export type ModoRegra = 'auto' | 'fila' | 'ignorar';
 
@@ -56,10 +64,12 @@ export function RulesSection({
   salvando: boolean;
 }) {
   const [marcas, setMarcas] = useState<MarcaPublica[]>([]);
+  const [busca, setBusca] = useState('');
+  const [filtro, setFiltro] = useState<'todas' | ModoRegra | 'desativadas'>('todas');
+  const [abertas, setAbertas] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch('/api/marcas', { cache: 'no-store' })
-      .then((r) => r.json())
+    pedir<{ marcas: MarcaPublica[] }>('/api/marcas', { cache: 'no-store' })
       .then((d) => setMarcas(d.marcas ?? []))
       .catch(() => setMarcas([]));
   }, []);
@@ -70,11 +80,12 @@ export function RulesSection({
     onChange(novas);
   };
 
-  const adicionar = () =>
+  const adicionar = () => {
+    const id = `r_${Date.now().toString(36)}`;
     onChange([
       ...regras,
       {
-        id: `r_${Date.now().toString(36)}`,
+        id,
         eventoOrigem: '',
         eventoMeta: 'Purchase',
         marcas: ['default'],
@@ -82,10 +93,20 @@ export function RulesSection({
         ativo: true,
       },
     ]);
+    setBusca('');
+    setFiltro('todas');
+    setAbertas((atuais) => [...new Set([...atuais, id])]);
+    window.setTimeout(() => document.getElementById(`origem-${id}`)?.focus(), 0);
+  };
 
   const salvar = async () => {
     const semNome = regras.find((r) => !r.eventoOrigem.trim());
     if (semNome) {
+      setAbertas((atuais) => [...new Set([...atuais, semNome.id])]);
+      window.setTimeout(
+        () => document.getElementById(`origem-${semNome.id}`)?.focus(),
+        0
+      );
       toast.error('Há regra sem evento de origem.', {
         description: 'Preencha o nome do evento da plataforma antes de salvar.',
       });
@@ -107,6 +128,31 @@ export function RulesSection({
       })
   );
 
+  const termo = busca.trim().toLocaleLowerCase('pt-BR');
+  const visiveis = regras
+    .map((regra, indice) => ({ regra, indice }))
+    .filter(({ regra }) => {
+      const correspondeBusca =
+        !termo ||
+        regra.eventoOrigem.toLocaleLowerCase('pt-BR').includes(termo) ||
+        regra.eventoMeta.toLocaleLowerCase('pt-BR').includes(termo);
+      const correspondeFiltro =
+        filtro === 'todas'
+          ? true
+          : filtro === 'desativadas'
+            ? !regra.ativo
+            : regra.modo === filtro;
+      return correspondeBusca && correspondeFiltro;
+    });
+
+  const filtros: Array<{ value: typeof filtro; label: string }> = [
+    { value: 'todas', label: 'Todas' },
+    { value: 'fila', label: 'Fila' },
+    { value: 'auto', label: 'Automático' },
+    { value: 'ignorar', label: 'Ignorar' },
+    { value: 'desativadas', label: 'Desativadas' },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       {autoEmProducao.length > 0 ? (
@@ -124,8 +170,81 @@ export function RulesSection({
         </Callout>
       )}
 
-      <ul className="flex flex-col gap-3">
-        {regras.map((r, i) => {
+      <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/70 p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">Buscar regra</span>
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+            <Input
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar evento da plataforma ou da Meta"
+              className="w-full pl-9"
+            />
+          </label>
+          <div className="flex flex-wrap gap-1" aria-label="Filtrar regras">
+            {filtros.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                aria-pressed={filtro === item.value}
+                onClick={() => setFiltro(item.value)}
+                className={cn(
+                  'min-h-10 rounded-control border px-3 text-caption font-medium transition-colors',
+                  filtro === item.value
+                    ? 'border-accent-text/50 bg-accent-text/10 text-accent-text'
+                    : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={adicionar}>
+            <Plus className="size-4" aria-hidden />
+            Adicionar regra
+          </Button>
+          <Button onClick={salvar} disabled={salvando}>
+            <Save className="size-4" aria-hidden />
+            {salvando ? 'Salvando…' : 'Salvar regras'}
+          </Button>
+          <span className="text-caption text-fg-muted">
+            {visiveis.length} de {regras.length} regra{regras.length === 1 ? '' : 's'}
+          </span>
+        </div>
+      </div>
+
+      {visiveis.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line-strong bg-surface-2/40 p-8 text-center">
+          <p className="text-label font-semibold text-fg-strong">Nenhuma regra encontrada</p>
+          <p className="mt-1 text-caption text-fg-muted">
+            Ajuste a busca ou remova os filtros para ver a lista completa.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => {
+              setBusca('');
+              setFiltro('todas');
+            }}
+          >
+            Limpar filtros
+          </Button>
+        </div>
+      ) : (
+      <Accordion
+        multiple
+        value={abertas}
+        onValueChange={(value) => setAbertas(value as string[])}
+        className="gap-3"
+      >
+        {visiveis.map(({ regra: r, indice: i }) => {
           const foraDoCatalogo =
             r.eventoOrigem.trim() !== '' &&
             r.eventoOrigem !== '*' &&
@@ -136,10 +255,29 @@ export function RulesSection({
             !EVENTOS_META.some((e) => e.value === r.eventoMeta);
 
           return (
-            <li
+            <AccordionItem
               key={r.id}
-              className="rounded-panel border border-line-strong bg-surface-1 p-4"
+              value={r.id}
+              className="overflow-hidden rounded-xl border border-line-strong bg-surface-2/55 last:border-b"
             >
+              <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
+                <span className="flex min-w-0 flex-1 flex-col gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
+                  <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
+                    {r.ativo ? 'Ativa' : 'Desativada'}
+                  </StatusDot>
+                  <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
+                    {r.eventoOrigem || 'Nova regra'}
+                  </span>
+                  <span className="hidden text-fg-disabled sm:inline" aria-hidden>→</span>
+                  <span className="break-words font-mono text-caption text-fg-body">
+                    {r.modo === 'ignorar' ? 'Ignorar' : r.eventoMeta || 'Sem evento Meta'}
+                  </span>
+                  <span className="w-fit rounded-full border border-line px-2 py-0.5 text-micro font-semibold text-fg-muted uppercase">
+                    {MODOS.find((m) => m.valor === r.modo)?.rotulo}
+                  </span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="border-t border-line px-4 pt-4 pb-4">
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="flex cursor-pointer items-center gap-2.5">
@@ -294,10 +432,12 @@ export function RulesSection({
                   </fieldset>
                 )}
               </div>
-            </li>
+              </AccordionContent>
+            </AccordionItem>
           );
         })}
-      </ul>
+      </Accordion>
+      )}
 
       <datalist id="eventos-origem">
         {NOMES_CATALOGO.map((n) => (
@@ -306,21 +446,11 @@ export function RulesSection({
         <option value="*" />
       </datalist>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={adicionar}>
-          <Plus className="size-4" aria-hidden />
-          Adicionar regra
-        </Button>
-        <Button onClick={salvar} disabled={salvando}>
-          <Save className="size-4" aria-hidden />
-          {salvando ? 'Salvando…' : 'Salvar regras'}
-        </Button>
-        <span className="text-caption text-fg-muted">
-          {regras.length} regra{regras.length === 1 ? '' : 's'} ·{' '}
-          {regras.filter((r) => r.ativo && r.modo === 'auto').length} automática
-          {regras.filter((r) => r.ativo && r.modo === 'auto').length === 1 ? '' : 's'}
-        </span>
-      </div>
+      <p className="text-caption text-fg-muted">
+        {regras.length} regra{regras.length === 1 ? '' : 's'} ·{' '}
+        {regras.filter((r) => r.ativo && r.modo === 'auto').length} automática
+        {regras.filter((r) => r.ativo && r.modo === 'auto').length === 1 ? '' : 's'}
+      </p>
     </div>
   );
 }

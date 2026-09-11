@@ -180,6 +180,8 @@ export function Section({
   children,
   className = '',
   id,
+  icon: Icon,
+  variant = 'plain',
 }: {
   step?: number;
   title: string;
@@ -188,13 +190,20 @@ export function Section({
   children: React.ReactNode;
   className?: string;
   id?: string;
+  icon?: React.ElementType;
+  variant?: 'plain' | 'card';
 }) {
   const headingId = id ? `${id}-titulo` : undefined;
   return (
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn('flex flex-col gap-4', className)}
+      className={cn(
+        'flex min-w-0 flex-col gap-4 scroll-mt-32',
+        variant === 'card' &&
+          'rounded-xl border border-line-strong bg-surface-1/95 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.14)] sm:p-6',
+        className
+      )}
     >
       <div className="flex items-start justify-between gap-4 border-b border-line pb-3">
         <div className="flex min-w-0 items-center gap-3">
@@ -209,8 +218,15 @@ export function Section({
           <div className="min-w-0">
             <h2
               id={headingId}
-              className="text-title font-semibold text-fg-strong"
+              className="flex items-center gap-2 text-title font-semibold text-fg-strong"
             >
+              {Icon && (
+                <Icon
+                  className="size-5 shrink-0 text-accent-text"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+              )}
               {title}
             </h2>
             {description && (
@@ -321,12 +337,14 @@ export function Callout({
   title,
   children,
   className = '',
+  id,
 }: {
   tone?: 'warning' | 'danger' | 'success' | 'info';
   icon?: React.ElementType;
   title?: string;
   children?: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
   const estilo = {
     warning: 'border-warning/40 bg-warning/8 text-warning',
@@ -337,6 +355,7 @@ export function Callout({
 
   return (
     <div
+      id={id}
       className={cn(
         'flex items-start gap-2.5 rounded-control border p-3',
         estilo,

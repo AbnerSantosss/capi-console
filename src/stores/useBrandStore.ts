@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { pedir } from '@/lib/cliente-api';
 
 /**
  * Marcas no cliente.
@@ -59,8 +60,7 @@ export const useBrandStore = create<BrandState>()(
         if (get().carregando) return;
         set({ carregando: true });
         try {
-          const r = await fetch('/api/marcas', { cache: 'no-store' });
-          const dados = (await r.json()) as { marcas: MarcaPublica[] };
+          const dados = await pedir<{ marcas: MarcaPublica[] }>('/api/marcas', { cache: 'no-store' });
           const marcas = dados.marcas ?? [];
           set((s) => ({
             marcas,

@@ -16,10 +16,55 @@ import { useDisparo } from './useDisparo';
 import { CORES_EMQ } from '@/lib/emq';
 import { cn } from '@/lib/utils';
 import type { DispatchResult } from './tipos';
+import { useBrandStore } from '@/stores/useBrandStore';
 
 interface Props {
   onResult: (r: DispatchResult) => void;
   onAbrirMarcas: () => void;
+}
+
+export function DestinationSummary({ onAbrirMarcas }: { onAbrirMarcas: () => void }) {
+  const marcas = useBrandStore((state) => state.marcas);
+  const marcaAtivaId = useBrandStore((state) => state.marcaAtivaId);
+  const ativa = marcas.find((marca) => marca.id === marcaAtivaId) ?? marcas[0];
+  const emTeste = Boolean(ativa?.testCode?.trim());
+
+  return (
+    <Panel
+      title="Pixel e ambiente"
+      icon={Target}
+      tone={emTeste ? 'default' : 'warning'}
+      action={
+        <Button size="sm" variant="ghost" onClick={onAbrirMarcas}>
+          Trocar pixel
+        </Button>
+      }
+    >
+      <dl className="grid gap-3 text-caption sm:grid-cols-3">
+        <div>
+          <dt className="text-fg-muted">Marca</dt>
+          <dd className="mt-1 font-medium text-fg-body">{ativa?.nome ?? '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-fg-muted">Pixel</dt>
+          <dd className="mt-1 wrap-token font-mono text-fg-body tabular">
+            {ativa?.pixelId || '—'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-fg-muted">Ambiente e token</dt>
+          <dd className="mt-1 flex flex-wrap items-center gap-2">
+            <StatusDot tone={emTeste ? 'accent' : 'warning'}>
+              {emTeste ? 'Teste' : 'Produção'}
+            </StatusDot>
+            <StatusDot tone={ativa?.temToken ? 'success' : 'danger'}>
+              {ativa?.temToken ? 'Token configurado' : 'Token ausente'}
+            </StatusDot>
+          </dd>
+        </div>
+      </dl>
+    </Panel>
+  );
 }
 
 /* ================================================================== */
@@ -41,12 +86,12 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
   return (
     <>
       <Panel
-        title="Destino"
+        title="Pixel de destino"
         icon={Target}
         tone={d.emTeste ? 'default' : 'warning'}
         action={
           <Button size="sm" variant="ghost" onClick={onAbrirMarcas}>
-            Trocar
+            Trocar pixel
           </Button>
         }
       >
@@ -168,7 +213,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
   return (
     <>
       <div
-        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0/95 backdrop-blur-md xl:hidden"
+        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0/95 backdrop-blur-md min-[1200px]:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">
@@ -187,7 +232,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
             ) : (
               <AlertTriangle className="size-4" aria-hidden />
             )}
-            <span className="hidden sm:inline">
+            <span>
               {d.emTeste ? 'Teste' : 'Produção'}
             </span>
           </button>

@@ -5,9 +5,11 @@ import { acharMarca } from '@/lib/config-store';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { jaEnviado, marcarEnviado } from '@/lib/dedup';
+import { exigirSessao } from '@/lib/sessao';
 
 export async function POST(request: NextRequest) {
   try {
+    exigirSessao(request);
     const body = await request.json();
 
     // O token vem do servidor, nunca do cliente. Ver config-store.ts.
@@ -144,6 +146,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...r, eventoMontado: evento, atribuicao });
   } catch (e) {
+    if (e instanceof Response) return e;
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return NextResponse.json({ erros: ['Erro interno: ' + msg] }, { status: 500 });
   }

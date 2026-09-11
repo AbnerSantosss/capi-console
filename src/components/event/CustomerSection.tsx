@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Lock } from 'lucide-react';
+import { Fingerprint, Lock } from 'lucide-react';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { Field, Section } from '@/components/common/primitives';
@@ -21,12 +21,14 @@ export function CustomerSection() {
     <Section
       id="secao-cliente"
       step={3}
-      title="Cliente e atribuição"
+      icon={Fingerprint}
+      variant="card"
+      title="Quem é o cliente"
       description={
         <span className="inline-flex items-center gap-1.5">
           <Lock className="size-3 text-success" aria-hidden />
-          E-mail, telefone, nome e CPF vão criptografados em SHA-256. A Meta
-          nunca recebe o dado em claro.
+          Quanto mais dados, maior a chance de a Meta reconhecer a pessoa. E-mail,
+          telefone, nome e CPF saem embaralhados em SHA-256 — a Meta nunca recebe o dado legível.
         </span>
       }
     >
@@ -118,6 +120,7 @@ export function CustomerSection() {
           label="CPF"
           param="external_id"
           helper="Ou o ID do cliente no seu CRM. Também vai criptografado."
+          className="sm:col-span-2"
         >
           <Input
             id="campo-cpf"
@@ -129,25 +132,17 @@ export function CustomerSection() {
           />
         </Field>
 
-        <Field
-          id="campo-ip"
-          label="IP do cliente"
-          param="client_ip_address"
-          helper="IP público do comprador. Vai sem criptografia, por exigência da Meta."
-          error={erros.ip}
-          tip="IP de proxy, de rede interna (10.x, 192.168.x, 172.16–31.x) ou loopback não serve: a Meta descarta e o dado geográfico fica errado."
-        >
-          <Input
-            id="campo-ip"
-            value={s.ip}
-            onChange={(e) => setField('ip', e.target.value)}
-            onBlur={blur('ip')}
-            placeholder="187.54.12.89"
-            className="font-mono tabular"
-          />
-        </Field>
+        <div className="sm:col-span-2 mt-2 border-t border-line pt-4">
+          <h3 className="flex items-center gap-2 text-label font-semibold text-fg-strong">
+            <Fingerprint className="size-4 text-accent-text" strokeWidth={1.75} aria-hidden />
+            Dados de rastreamento
+          </h3>
+          <p className="mt-1 text-caption text-fg-muted">
+            Estes dados seguem o formato exigido pela Meta e não recebem SHA-256.
+          </p>
+        </div>
 
-        <div className="sm:col-span-2">
+        <div className="min-w-0">
           <Field
             id="campo-fbc"
             label="Click ID do anúncio"
@@ -169,6 +164,26 @@ export function CustomerSection() {
         </div>
 
         <div className="sm:col-span-2">
+          <Field
+            id="campo-ip"
+            label="IP do cliente"
+            param="client_ip_address"
+            helper="IP público do comprador. Vai sem criptografia, por exigência da Meta."
+            error={erros.ip}
+            tip="IP de proxy, de rede interna (10.x, 192.168.x, 172.16–31.x) ou loopback não serve: a Meta descarta e o dado geográfico fica errado."
+          >
+            <Input
+              id="campo-ip"
+              value={s.ip}
+              onChange={(e) => setField('ip', e.target.value)}
+              onBlur={blur('ip')}
+              placeholder="187.54.12.89"
+              className="font-mono tabular"
+            />
+          </Field>
+        </div>
+
+        <div className="min-w-0">
           <Field
             id="campo-fbp"
             label="ID do navegador"

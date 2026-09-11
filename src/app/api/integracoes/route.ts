@@ -7,6 +7,7 @@ import {
   REGRAS_SEMENTE,
   type Integracoes,
 } from '@/lib/config-store';
+import { exigirSessao } from '@/lib/sessao';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,12 +43,19 @@ const regrasSchema = z
  * para configurar o n8n, e este servidor roda em localhost, para ele mesmo.
  * O segredo nunca entra em log nem no payload de relay.
  */
-export async function GET() {
-  return NextResponse.json({ integracoes: await lerIntegracoes() });
+export async function GET(request: NextRequest) {
+  try {
+    exigirSessao(request);
+    return NextResponse.json({ integracoes: await lerIntegracoes() });
+  } catch (e) {
+    if (e instanceof Response) return e;
+    return NextResponse.json({ erro: 'Não autorizado' }, { status: 401 });
+  }
 }
 
 export async function PUT(request: NextRequest) {
   try {
+    exigirSessao(request);
     const body = (await request.json()) as Integracoes;
     const atual = await lerIntegracoes();
 
@@ -73,12 +81,19 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ integracoes: salva });
   } catch (e) {
+    if (e instanceof Response) return e;
     const msg = e instanceof Error ? e.message : 'Erro desconhecido';
     return NextResponse.json({ erro: msg }, { status: 400 });
   }
 }
 
 /** Gera um segredo novo. Invalida o anterior imediatamente. */
-export async function POST() {
-  return NextResponse.json({ segredo: await novoSegredoEntrada() });
+export async function POST(request: NextRequest) {
+  try {
+    exigirSessao(request);
+    return NextResponse.json({ segredo: await novoSegredoEntrada() });
+  } catch (e) {
+    if (e instanceof Response) return e;
+    return NextResponse.json({ erro: 'Não autorizado' }, { status: 401 });
+  }
 }
