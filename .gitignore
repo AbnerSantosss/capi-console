@@ -45,3 +45,6 @@ logs/
 
 # config local com segredos de integracao
 config/
+
+# segredos de operacao gerados na maquina do operador (nunca versionar)
+*.local
