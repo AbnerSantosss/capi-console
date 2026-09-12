@@ -189,14 +189,24 @@ export function ehTesteInterno(fields: Record<string, string | boolean>, eventId
   return false;
 }
 
+/**
+ * Acha o objeto que realmente carrega o pedido dentro do envelope.
+ *
+ * `buyer` entrou na lista depois da auditoria de 12/09/2026: as entregas reais
+ * de checkout_abandoned chegam como { event, data: { buyer: { email } } }, sem
+ * lead e sem attribution. Sem reconhecer esse formato a raiz virava o envelope,
+ * o e-mail se perdia e o perfil de atribuicao ficava sem chave — a compra que
+ * chegasse depois nao herdava o fbc e a venda ia para a Meta sem anuncio.
+ */
 function encontrarRaiz(j: any): any {
   if (j.payload) {
-    if (j.payload.data && (j.payload.data.lead || j.payload.data.attribution)) return j.payload.data;
-    if (j.payload.lead || j.payload.attribution) return j.payload;
+    if (j.payload.data && (j.payload.data.lead || j.payload.data.buyer || j.payload.data.attribution)) return j.payload.data;
+    if (j.payload.lead || j.payload.buyer || j.payload.attribution) return j.payload;
   }
   if (
     j.data &&
     (j.data.lead ||
+      j.data.buyer ||
       j.data.amount !== undefined ||
       j.data.amountMinor !== undefined ||
       j.data.attribution ||
@@ -303,8 +313,35 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push('nome');
   }
   if (lead.taxId) { fields.externalId = lead.taxId; preenchidos.push('external_id (CPF)'); }
-  if (!fields.externalId && raiz.buyer?.external_id) {
-    fields.externalId = String(raiz.buyer.external_id);
+
+  // Queda para `buyer`: parte das entregas (checkout_abandoned real, 12/09/2026)
+  // nao manda `lead` nenhum e poe o contato so em data.buyer. Ler so o
+  // external_id daqui jogava fora o e-mail — e sem e-mail o item nao tem chave
+  // de perfil, entao o fbc daquela visita nunca alcanca a compra que vem depois.
+  const buyer = (raiz.buyer || {}) as any;
+  if (!fields.email && buyer.email) {
+    fields.email = String(buyer.email);
+    preenchidos.push('e-mail (buyer)');
+  }
+  if (!fields.phone && buyer.phone) {
+    const ddi = String(buyer.phone_country_code || '').replace(/\D+/g, '');
+    const digitos = String(buyer.phone).replace(/\D+/g, '');
+    fields.phone = ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+    preenchidos.push('telefone (buyer)');
+  }
+  if (!fields.firstName) {
+    const nomeBuyer = String(
+      buyer.name || `${buyer.first_name || ''} ${buyer.last_name || ''}`
+    ).trim();
+    if (nomeBuyer) {
+      const partes = nomeBuyer.split(/\s+/);
+      fields.firstName = partes[0];
+      if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+      preenchidos.push('nome (buyer)');
+    }
+  }
+  if (!fields.externalId && buyer.external_id) {
+    fields.externalId = String(buyer.external_id);
     preenchidos.push('external_id (buyer)');
   }
 
@@ -375,7 +412,25 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push('fbc reconstruido do fbclid');
   }
 
+  // O fbclid cru vale sozinho: o fbc guardado no perfil envelhece junto com o
+  // event_time, e so com o fbclid da para remontar `fb.1.<ms>.<fbclid>` na hora
+  // do disparo. Sem ele um replay antigo perde a atribuicao do anuncio.
+  if (fbclid) { fields.fbclid = fbclid; preenchidos.push('fbclid'); }
+
   if (cookies.fbp) { fields.fbp = cookies.fbp; preenchidos.push('fbp'); }
+
+  // Click ids das outras redes e o referrer NAO vao para a Meta. Ficam no perfil
+  // de atribuicao e no log porque sao a unica prova de qual canal trouxe a venda
+  // quando o operador vai conferir o gasto de Google/TikTok contra o faturamento.
+  // Nas entregas reais esses cookies vem como null, entao `||` ja os descarta.
+  const gclid = (cookies.gclid || extrairParam(urlBruta, 'gclid') || '') as string;
+  if (gclid) { fields.gclid = gclid; preenchidos.push('gclid'); }
+  const ttclid = (cookies.ttclid || extrairParam(urlBruta, 'ttclid') || '') as string;
+  if (ttclid) { fields.ttclid = ttclid; preenchidos.push('ttclid'); }
+  const msclkid = (cookies.msclkid || extrairParam(urlBruta, 'msclkid') || '') as string;
+  if (msclkid) { fields.msclkid = msclkid; preenchidos.push('msclkid'); }
+  const referrer = (attr.referrer || attr.referer || '') as string;
+  if (referrer) { fields.referrer = referrer; preenchidos.push('referrer'); }
   if (attr.userAgent) { fields.userAgent = attr.userAgent; preenchidos.push('user agent'); }
   if (attr.user_agent) { fields.userAgent = attr.user_agent; preenchidos.push('user agent'); }
 
@@ -397,6 +452,28 @@ export function parseWebhook(bruto: string): ParseResult {
     }
     fields.sourceUrl = sourceUrl;
     preenchidos.push('URL de origem');
+  }
+
+  // Identificador de visita de primeira parte (cv_visit).
+  //
+  // Na pagina de vendas o visitante e ANONIMO: o e-mail so nasce depois, no
+  // backoffice. Este id e a unica chave que casa o hit da tag com a venda que
+  // chega pelo webhook. Nao ler significa a tag coletar fbc/fbp de uma visita
+  // que nunca encontra o pedido — a compra sai para a Meta sem anuncio.
+  //
+  // A tag tambem propaga ?cv_visit=<id> nos links de checkout, entao a URL de
+  // origem e a segunda fonte quando o gateway nao repassa o bloco `tracking`.
+  const tracking = (raiz.tracking || j.tracking || {}) as any;
+  const visitId = String(
+    tracking.cv_visit ||
+      tracking.visit_id ||
+      tracking.visitId ||
+      extrairParam(sourceUrl, 'cv_visit') ||
+      ''
+  ).trim();
+  if (visitId) {
+    fields.visitId = visitId;
+    preenchidos.push('cv_visit (visita)');
   }
 
   return {

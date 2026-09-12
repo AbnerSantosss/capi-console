@@ -9,10 +9,11 @@
     "lint": "eslint",
     "check:contrast": "node scripts/contrast-check.mjs",
     "test:relay": "node scripts/relay-sem-segredos.test.mjs",
-    "test:parser": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/parser-eventos.test.mjs",
-    "test:atribuicao": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/atribuicao-dedup.test.mjs",
-    "test:sessao": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/sessao.test.mjs",
-    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao"
+    "test:parser": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/parser-eventos.test.mjs",
+    "test:atribuicao": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/atribuicao-dedup.test.mjs",
+    "test:sessao": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/sessao.test.mjs",
+    "test:tag": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/tag-navegador.test.mjs",
+    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

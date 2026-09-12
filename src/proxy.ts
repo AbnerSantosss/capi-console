@@ -23,12 +23,16 @@ import {
  *
  * Livres de senha:
  * - Webhooks do xWinner (`/api/webhook/in*`), protegidos por segredo no path.
+ * - Coletor da tag do navegador (`/api/tag/coletar`), protegido pela chave
+ *   pública da tag e pela lista branca de domínios cadastrados — o visitante
+ *   nunca tem sessão, então exigir cookie aqui desligaria a coleta inteira.
  * - Healthcheck do Docker (`/api/health`).
  * - Tela de login (`/login`) e endpoint de autenticação (`/api/sessao`).
  * - Atalho de desenvolvimento (`/api/sessao/dev-admin`, desativado em produção).
  */
 const LIVRES = [
   /^\/api\/webhook\/in(\/|$)/,
+  /^\/api\/tag\/coletar$/, // hits do navegador; quem protege é a chave pública + a lista de domínios
   /^\/api\/health$/,
   /^\/login$/,
   /^\/api\/sessao$/,

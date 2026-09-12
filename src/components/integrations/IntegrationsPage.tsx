@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Check,
+  Code2,
   Copy,
   Eye,
   EyeOff,
@@ -35,6 +36,8 @@ import {
 } from '@/components/common/primitives';
 import { InboxList } from './InboxList';
 import { RulesSection, type RegraRoteamento } from './RulesSection';
+import { TagDoSite } from './TagDoSite';
+import type { ConfigTag, DominioTag } from '@/lib/tag-dominios';
 import { erroDoRotulo, normalizarRotulo, ROTULO_PADRAO } from './rotulo';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -65,6 +68,8 @@ interface Integracoes {
   entrada: { segredo: string; modo: 'fila' | 'auto'; rotulo?: string };
   regras: RegraRoteamento[];
   saida: Destino[];
+  /** Chave publica da tag do site e dominios autorizados a usa-la. */
+  tag: ConfigTag;
 }
 
 interface Entrega {
@@ -95,6 +100,7 @@ const ABAS: Array<{
   { value: 'regras', label: 'Regras', icon: GitBranch },
   { value: 'retornos', label: 'Retornos', icon: ArrowUpRight },
   { value: 'historico', label: 'Histórico', icon: History },
+  { value: 'tag', label: 'Tag do site', icon: Code2 },
 ];
 
 const ABA_PADRAO: IntegrationTab = 'recebimento';
@@ -196,6 +202,60 @@ export function IntegrationsPage({
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
       toast.error('Não foi possível trocar o segredo.');
+    }
+  };
+
+  /**
+   * Grava a lista de domínios da tag.
+   *
+   * O servidor é quem manda: ele preserva a chave, os contadores e o último hit
+   * de cada domínio. Adotar a resposta evita a tela zerar o histórico de acesso
+   * de um cliente só porque o navegador mandou o objeto sem esses campos.
+   */
+  const salvarDominios = async (dominios: DominioTag[]): Promise<boolean> => {
+    setSalvando(true);
+    try {
+      const d = await pedir<{ integracoes: Integracoes }>('/api/integracoes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cfg, tag: { ...cfg.tag, dominios } }),
+      });
+      setCfg(d.integracoes);
+      toast.success('Domínios da tag salvos.');
+      return true;
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return false;
+      toast.error('Não foi possível salvar os domínios.', {
+        description: e instanceof Error ? e.message : 'Erro desconhecido.',
+      });
+      return false;
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  /**
+   * Gira só a chave pública da tag. O segredo do xWinner não é tocado: a
+   * entrega de vendas continua funcionando, o que para é a coleta do navegador
+   * até o cliente recolar o código novo no site.
+   */
+  const novaChaveDaTag = async (): Promise<boolean> => {
+    try {
+      const d = await pedir<{ chave: string }>('/api/integracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alvo: 'tag' }),
+      });
+      setCfg({ ...cfg, tag: { ...cfg.tag, chave: d.chave } });
+      toast.warning('Chave da tag trocada', {
+        description:
+          'Toda tag já instalada parou de enviar. Mande o código novo para o cliente colar no site.',
+      });
+      return true;
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return false;
+      toast.error('Não foi possível gerar a chave nova.');
+      return false;
     }
   };
 
@@ -353,7 +413,9 @@ export function IntegrationsPage({
                     ? cfg.saida.length
                     : item.value === 'historico'
                       ? entregas.length
-                      : undefined;
+                      : item.value === 'tag'
+                        ? cfg.tag.dominios.length
+                        : undefined;
               return (
                 <TabsTrigger
                   key={item.value}
@@ -894,6 +956,25 @@ export function IntegrationsPage({
           </div>
         )}
       </Section>
+        </TabsContent>
+
+        <TabsContent value="tag" className="min-w-0 outline-none">
+          <Section
+            icon={Code2}
+            variant="card"
+            title="Tag do site"
+            description="O código que mede a visita no site do cliente e guarda a atribuição antes de a venda por PIX acontecer fora do navegador."
+          >
+            <TagDoSite
+              tag={cfg.tag}
+              regras={cfg.regras}
+              base={base}
+              ehLocal={ehLocal}
+              onSalvarDominios={salvarDominios}
+              onTrocarChave={novaChaveDaTag}
+              salvando={salvando}
+            />
+          </Section>
         </TabsContent>
       </Tabs>
     </div>

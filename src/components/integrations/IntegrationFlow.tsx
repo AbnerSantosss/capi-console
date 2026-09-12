@@ -12,7 +12,8 @@ export type IntegrationTab =
   | 'inbox'
   | 'regras'
   | 'retornos'
-  | 'historico';
+  | 'historico'
+  | 'tag';
 
 const STEPS: Array<{
   tab: IntegrationTab;

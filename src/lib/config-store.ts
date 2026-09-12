@@ -9,6 +9,13 @@ import crypto from 'node:crypto';
 // compilacao, nao um evento personalizado silencioso no Gerenciador.
 import type { NomeEventoMetaPadrao } from './meta-events';
 
+// Import de TIPO do bloco da tag: tag-dominios.ts e um arquivo puro, usado
+// tambem pela tela no navegador, e daqui so interessa a forma do dado. Ja o
+// catalogo de eventos da tag entra como VALOR, porque as regras semente dele
+// precisam ir para dentro do arquivo gravado em disco.
+import type { ConfigTag } from './tag-dominios';
+import { regrasSementeTag } from './tag-eventos';
+
 /**
  * Configuracao local do console, guardada em disco no servidor.
  *
@@ -206,6 +213,23 @@ export interface Integracoes {
   };
   regras: RegraRoteamento[];
   saida: DestinoRelay[];
+  /**
+   * Tag do navegador: chave publica de escrita e dominios autorizados.
+   *
+   * `tag.chave` NAO e `entrada.segredo` e os dois nunca podem se encostar. A
+   * chave viaja dentro do HTML do cliente (GTM ou script colado na pagina), ou
+   * seja, qualquer visitante le no codigo-fonte; o segredo de entrada autentica
+   * o xWinner e nunca sai do servidor. Se o segredo fosse parar na tag,
+   * qualquer pessoa forjaria um Purchase e a Meta aprenderia com venda que nao
+   * existiu (regra 1 do CLAUDE.md).
+   *
+   * Como a chave nao vale dinheiro sozinha — o coletor recusa Purchase e
+   * Subscribe e so aceita Origin da lista de dominios —, ela pode ser girada a
+   * qualquer momento: o pior que acontece e a tag do cliente parar de coletar
+   * ate ele colar o codigo novo. A entrega de vendas pelo webhook continua
+   * intacta, porque nao depende dela.
+   */
+  tag: ConfigTag;
 }
 
 /* ------------------------------------------------------------------ */
@@ -341,10 +365,40 @@ export const REGRAS_SEMENTE = (): RegraRoteamento[] => [
   ignorar('endpoint.test'),
 ];
 
+/**
+ * As sementes do webhook mais as da tag do navegador, numa lista so.
+ *
+ * Existe para a mesclagem de `lerIntegracoes` enxergar as duas origens de uma
+ * vez. Se a tag ficasse de fora, a instalacao que ja roda na VPS receberia
+ * 'tag.pageview' sem regra nenhuma: o evento cairia no fallback invisivel e o
+ * operador nao teria onde ver, na tela, por que o PageView nao chega na Meta.
+ */
+function todasSementes(): RegraRoteamento[] {
+  return [...REGRAS_SEMENTE(), ...regrasSementeTag()];
+}
+
+/* ------------------------------------------------------------------ */
+/* Chave publica da tag do navegador                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Prefixo legivel. O operador vai encontrar essa string no meio do HTML do
+ * cliente ou num print de suporte; com 'cvt_' na frente ele reconhece na hora
+ * que aquilo e a chave da tag (publica, pode aparecer) e nao o segredo de
+ * entrada (que, se aparecer, tem que ser girado imediatamente).
+ */
+const PREFIXO_CHAVE_TAG = 'cvt_';
+
+/** Chave nova da tag. Publica por natureza, mas nao adivinhavel. */
+function gerarChaveTag(): string {
+  return PREFIXO_CHAVE_TAG + crypto.randomBytes(24).toString('base64url');
+}
+
 const INTEGRACOES_PADRAO = (): Integracoes => ({
   entrada: { segredo: crypto.randomUUID(), modo: 'fila', rotulo: ROTULO_PADRAO },
-  regras: REGRAS_SEMENTE(),
+  regras: todasSementes(),
   saida: [],
+  tag: { chave: gerarChaveTag(), dominios: [] },
 });
 
 export async function lerIntegracoes(): Promise<Integracoes> {
@@ -354,7 +408,7 @@ export async function lerIntegracoes(): Promise<Integracoes> {
 
     // Migracao: arquivo criado antes das regras existirem.
     if (!Array.isArray(atual.regras)) {
-      atual.regras = REGRAS_SEMENTE();
+      atual.regras = todasSementes();
       mudou = true;
     } else {
       // A semente so roda em instalacao nova; em producao o arquivo ja existe.
@@ -362,7 +416,7 @@ export async function lerIntegracoes(): Promise<Integracoes> {
       // que falta, por eventoOrigem: NUNCA sobrescreve regra existente — o
       // operador pode ter editado o modo a mao e a decisao dele vale mais.
       const existentes = new Set(atual.regras.map((r) => r.eventoOrigem));
-      const novas = REGRAS_SEMENTE().filter((r) => !existentes.has(r.eventoOrigem));
+      const novas = todasSementes().filter((r) => !existentes.has(r.eventoOrigem));
       if (novas.length) {
         atual.regras.push(...novas);
         mudou = true;
@@ -373,6 +427,22 @@ export async function lerIntegracoes(): Promise<Integracoes> {
     // segmento ja cadastrada no xWinner continua entregando igual.
     if (!atual.entrada.rotulo) {
       atual.entrada.rotulo = ROTULO_PADRAO;
+      mudou = true;
+    }
+
+    // Migracao do bloco da tag. Sem ela, TODA instalacao que ja existe le
+    // `tag` como undefined e a tela de dominios quebra no primeiro acesso —
+    // inclusive a producao, que nunca passou por INTEGRACOES_PADRAO.
+    if (!atual.tag || typeof atual.tag !== 'object') {
+      atual.tag = { chave: gerarChaveTag(), dominios: [] };
+      mudou = true;
+    }
+    if (!atual.tag.chave?.trim()) {
+      atual.tag.chave = gerarChaveTag();
+      mudou = true;
+    }
+    if (!Array.isArray(atual.tag.dominios)) {
+      atual.tag.dominios = [];
       mudou = true;
     }
 
@@ -404,6 +474,21 @@ export async function novoSegredoEntrada(): Promise<string> {
   atual.entrada.segredo = crypto.randomUUID();
   await salvarIntegracoes(atual);
   return atual.entrada.segredo;
+}
+
+/**
+ * Gira a chave publica da tag. Invalida a anterior na hora.
+ *
+ * Diferente de `novoSegredoEntrada`, isto NAO derruba a entrega de vendas: o
+ * webhook do xWinner autentica pelo segredo de entrada, que nao e tocado aqui.
+ * O custo de girar e o cliente precisar colar o codigo novo no site — ate la a
+ * tag dele para de coletar navegacao, mas nenhum Purchase se perde.
+ */
+export async function novaChaveTag(): Promise<string> {
+  const atual = await lerIntegracoes();
+  atual.tag.chave = gerarChaveTag();
+  await salvarIntegracoes(atual);
+  return atual.tag.chave;
 }
 
 /** Comparacao em tempo constante — evita vazar o segredo por timing. */
