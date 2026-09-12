@@ -112,6 +112,11 @@ export function Header() {
   const ativa = marcas.find((m) => m.id === marcaAtivaId) ?? marcas[0];
   const emTeste = Boolean(ativa?.testCode?.trim());
 
+  // O hook devolve "—" enquanto le as regras, e travessao nao e estado: em
+  // tela estreita isso ficava indistinguivel de "desligado".
+  const rotuloAuto =
+    automatico.situacao === 'carregando' ? 'lendo…' : automatico.rotulo;
+
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface-0/90 backdrop-blur-md">
       <div className="mx-auto flex min-h-16 w-full max-w-[1280px] items-center gap-2 px-4 py-2 sm:px-6 lg:gap-4 lg:px-8">
@@ -162,7 +167,7 @@ export function Header() {
                           SELO_AUTO[automatico.situacao]
                         )}
                       >
-                        {automatico.rotulo}
+                        {rotuloAuto}
                       </span>
                     )}
                   </span>
@@ -272,25 +277,11 @@ export function Header() {
                   : 'text-fg-muted hover:text-fg-body'
               )}
             >
-              <span className="relative shrink-0">
+              <span className="shrink-0">
                 <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
-                {item.estado && automatico.situacao !== 'carregando' && (
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-surface-0',
-                      automatico.situacao === 'producao' && 'bg-warning',
-                      automatico.situacao === 'teste' && 'bg-accent-text',
-                      automatico.situacao === 'desligado' && 'bg-fg-disabled'
-                    )}
-                  />
-                )}
               </span>
               <span className="max-w-full truncate">{item.curto}</span>
-              <span className="sr-only">
-                {item.rotulo}
-                {item.estado ? `: ${automatico.rotulo}` : ''}
-              </span>
+              <span className="sr-only">{item.rotulo}</span>
             </Link>
           );
         })}
@@ -304,6 +295,21 @@ export function Header() {
           <span className="truncate">Pixel</span>
         </button>
       </nav>
+
+      {/* Estado do automatico por escrito. Em tela estreita ele so existia
+          como um ponto colorido no icone — cor sozinha nao e rotulo. */}
+      <div className="mx-auto flex w-full max-w-[1280px] items-center gap-2 border-t border-line px-4 py-1.5 sm:px-6 lg:hidden">
+        <Workflow className="size-3.5 shrink-0 text-fg-muted" strokeWidth={1.75} aria-hidden />
+        <span className="text-caption text-fg-muted">Disparo automático:</span>
+        <span
+          className={cn(
+            'rounded-full border px-1.5 py-px text-micro font-semibold tracking-wide',
+            SELO_AUTO[automatico.situacao]
+          )}
+        >
+          {rotuloAuto}
+        </span>
+      </div>
 
       <BrandDialog open={marcaAberta} onOpenChange={setMarcaAberta} />
       <SettingsDialog open={prefsAbertas} onOpenChange={setPrefsAbertas} />

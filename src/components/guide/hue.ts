@@ -5,6 +5,7 @@ import styles from './guide.module.css';
 export const CLASSE_HUE: Record<Hue, string> = {
   manual: styles.hueManual,
   auto: styles.hueAuto,
+  conferencia: styles.hueConferencia,
   dados: styles.hueDados,
   qualidade: styles.hueQualidade,
   regras: styles.hueRegras,

@@ -35,6 +35,7 @@ import {
 } from '@/components/common/primitives';
 import { InboxList } from './InboxList';
 import { RulesSection, type RegraRoteamento } from './RulesSection';
+import { erroDoRotulo, normalizarRotulo, ROTULO_PADRAO } from './rotulo';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -60,7 +61,8 @@ interface Destino {
 }
 
 interface Integracoes {
-  entrada: { segredo: string; modo: 'fila' | 'auto' };
+  /** `rotulo` é o apelido público da URL; o segredo continua sendo o último segmento. */
+  entrada: { segredo: string; modo: 'fila' | 'auto'; rotulo?: string };
   regras: RegraRoteamento[];
   saida: Destino[];
 }
@@ -120,6 +122,10 @@ export function IntegrationsPage({
   const [aba, setAba] = useState<IntegrationTab>(ABA_PADRAO);
   const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
+  const [rotuloRascunho, setRotuloRascunho] = useState(
+    inicial.integracoes.entrada.rotulo?.trim() || ROTULO_PADRAO
+  );
+  const [salvandoRotulo, setSalvandoRotulo] = useState(false);
 
   useEffect(() => {
     const sincronizar = () => setAba(abaDoHash(window.location.hash));
@@ -146,6 +152,7 @@ export function IntegrationsPage({
         pedir<{ entregas?: Entrega[] }>('/api/relay', { cache: 'no-store' }),
       ]);
       setCfg(a.integracoes);
+      setRotuloRascunho(a.integracoes.entrada.rotulo?.trim() || ROTULO_PADRAO);
       setEntregas(b.entregas ?? []);
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
@@ -274,6 +281,42 @@ export function IntegrationsPage({
   const endpointHeader = `${base}/api/webhook/in`;
   const ehLocal = base.includes('localhost') || base.includes('127.0.0.1');
 
+  // Apelido só para dar nome à URL no backoffice do xWinner. O segredo continua
+  // sendo o ÚLTIMO segmento — o apelido não autentica nada.
+  const rotuloSalvo = cfg.entrada.rotulo?.trim() || ROTULO_PADRAO;
+  const rotuloLimpo = normalizarRotulo(rotuloRascunho);
+  const erroRotulo = erroDoRotulo(rotuloLimpo);
+  const rotuloMudou = rotuloLimpo !== rotuloSalvo;
+  const endpointRotulado = `${base}/api/webhook/in/${rotuloSalvo}/${cfg.entrada.segredo}`;
+
+  const salvarRotulo = async () => {
+    if (erroRotulo || !rotuloMudou) return;
+    const novo: Integracoes = { ...cfg, entrada: { ...cfg.entrada, rotulo: rotuloLimpo } };
+    setSalvandoRotulo(true);
+    try {
+      // PUT próprio em vez de `salvar`: aqui o aviso de "recadastre no xWinner"
+      // só pode aparecer se a gravação realmente deu certo.
+      await pedir('/api/integracoes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novo),
+      });
+      setCfg(novo);
+      setRotuloRascunho(rotuloLimpo);
+      toast.warning('Apelido salvo — a URL mudou', {
+        description:
+          'Cadastre a URL nova no xWinner. A anterior continua funcionando, mas o apelido antigo aparece marcado na caixa de entrada.',
+      });
+    } catch (e) {
+      if (e instanceof SessaoExpirada) return;
+      toast.error('Não foi possível salvar o apelido.', {
+        description: e instanceof Error ? e.message : 'Erro desconhecido.',
+      });
+    } finally {
+      setSalvandoRotulo(false);
+    }
+  };
+
   const curl = `curl -X POST ${endpointHeader} \
   -H "Content-Type: application/json" \
   -H "X-CAPI-Secret: ${cfg.entrada.segredo}" \
@@ -281,6 +324,9 @@ export function IntegrationsPage({
   const mascara = '••••••••••••';
   const ocultarSegredo = (texto: string) =>
     cfg.entrada.segredo ? texto.replace(cfg.entrada.segredo, mascara) : texto;
+  const endpointRotuladoVisivel = mostrarUrlSensivel
+    ? endpointRotulado
+    : ocultarSegredo(endpointRotulado);
   const endpointCaminhoVisivel = mostrarUrlSensivel
     ? endpointCaminho
     : ocultarSegredo(endpointCaminho);
@@ -347,28 +393,92 @@ export function IntegrationsPage({
             )}
 
             <Field
-              id="endpoint-caminho"
+              id="endpoint-rotulado"
               label="URL para o xWinner"
-              helper="O backoffice do xWinner só tem o campo de URL — o segredo vai no próprio caminho. Cole esta URL em Integrações → Webhooks → Novo endpoint."
+              helper="Cole esta URL em Integrações → Webhooks → Novo endpoint. O apelido é só para você reconhecer a linha no backoffice; quem autentica é o segredo, sempre o último pedaço do endereço."
               className="rounded-lg border border-line bg-surface-2/55 p-4"
               action={<div className="flex gap-1">
                 <Button size="sm" variant="ghost" aria-pressed={mostrarUrlSensivel} onClick={() => setMostrarUrlSensivel((value) => !value)}>
                   {mostrarUrlSensivel ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
                   {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => copiar(endpointCaminho, 'ep-caminho')}>
-                  {copiado === 'ep-caminho' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                <Button size="sm" variant="ghost" onClick={() => copiar(endpointRotulado, 'ep-rotulado')}>
+                  {copiado === 'ep-rotulado' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
                   Copiar
                 </Button>
               </div>}
             >
               <Input
-                id="endpoint-caminho"
+                id="endpoint-rotulado"
                 readOnly
-                value={endpointCaminhoVisivel}
+                value={endpointRotuladoVisivel}
                 className="wrap-token font-mono"
               />
             </Field>
+
+            <Field
+              id="rotulo-endpoint"
+              label="Apelido desta URL"
+              helper={`Minúsculas, dígitos e hífen. Aparece no endereço como /api/webhook/in/${rotuloLimpo || 'apelido'}/…`}
+              error={erroRotulo ?? undefined}
+              className="rounded-lg border border-line bg-surface-2/55 p-4"
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={salvarRotulo}
+                  disabled={salvandoRotulo || Boolean(erroRotulo) || !rotuloMudou}
+                >
+                  {salvandoRotulo ? 'Salvando…' : 'Salvar apelido'}
+                </Button>
+              }
+            >
+              <Input
+                id="rotulo-endpoint"
+                value={rotuloRascunho}
+                onChange={(e) => setRotuloRascunho(e.target.value)}
+                onBlur={() => setRotuloRascunho(normalizarRotulo(rotuloRascunho))}
+                placeholder={ROTULO_PADRAO}
+                className="wrap-token font-mono"
+              />
+            </Field>
+
+            {rotuloMudou && !erroRotulo && (
+              <Callout tone="warning" icon={AlertTriangle} title="Trocar o apelido muda a URL">
+                Depois de salvar você precisa <strong>cadastrar a URL nova no xWinner</strong>.
+                Enquanto o backoffice apontar para o apelido antigo, as entregas continuam
+                chegando — o segredo é o mesmo —, mas aparecem marcadas como{' '}
+                <em>apelido antigo</em> na caixa de entrada.
+              </Callout>
+            )}
+
+            <Accordion className="rounded-lg border border-line bg-surface-2/45">
+              <AccordionItem value="url-antiga" className="last:border-b-0">
+                <AccordionTrigger className="px-4 hover:no-underline">
+                  <span className="text-label font-semibold text-fg-body">
+                    URL antiga, sem apelido (continua valendo)
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <p className="mb-2 text-caption text-fg-muted">
+                    É o formato que está cadastrado hoje no xWinner. Não precisa trocar: o
+                    endpoint aceita os dois. Serve de saída se algo der errado com o apelido.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={endpointCaminhoVisivel}
+                      aria-label="URL antiga sem apelido"
+                      className="wrap-token font-mono"
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => copiar(endpointCaminho, 'ep-caminho')}>
+                      {copiado === 'ep-caminho' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                      Copiar
+                    </Button>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <Field
               id="endpoint-header"

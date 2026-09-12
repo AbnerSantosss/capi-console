@@ -5,20 +5,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-micro font-semibold whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-micro font-semibold whitespace-nowrap transition-all focus-visible:border-accent-text focus-visible:ring-[3px] focus-visible:ring-accent-text/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-danger aria-invalid:ring-danger/20 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
         default: "bg-accent-fill text-white",
-        secondary:
-          "bg-surface-2 text-fg-body",
+        secondary: "bg-surface-2 text-fg-body",
         destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        outline:
-          "border-line-strong text-fg-muted",
-        ghost:
-          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-danger/10 text-danger focus-visible:ring-danger/20 [a]:hover:bg-danger/20",
+        // O selo `outline` só existe pela borda: por isso line-control, que é
+        // o único que cruza 3:1 também sobre a superfície de modal.
+        outline: "border-line-control text-fg-muted",
+        ghost: "hover:bg-surface-2 hover:text-fg-strong",
+        link: "text-accent-text underline-offset-4 hover:underline",
       },
     },
     defaultVariants: {

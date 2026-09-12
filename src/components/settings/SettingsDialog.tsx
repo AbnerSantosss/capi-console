@@ -45,12 +45,10 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-heading font-semibold text-fg-strong">
-            Preferências
-          </DialogTitle>
-          <DialogDescription className="text-caption text-fg-muted">
+          <DialogTitle>Preferências</DialogTitle>
+          <DialogDescription>
             Ajustes locais deste navegador. Não afetam o disparo.
           </DialogDescription>
         </DialogHeader>
@@ -90,7 +88,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                     'flex cursor-pointer flex-col items-start gap-0.5 rounded-control border p-2.5 text-left transition-colors ' +
                     (densidade === d.valor
                       ? 'border-accent-text bg-accent-text/10'
-                      : 'border-line-strong bg-surface-2 hover:border-fg-disabled')
+                      : 'border-line-control bg-surface-2 hover:border-fg-muted')
                   }
                 >
                   <span
@@ -113,7 +111,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               Movimento
             </legend>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-strong bg-surface-2 p-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-control bg-surface-2 p-3">
               <Checkbox
                 id="pref-fundo"
                 checked={fundoAnimado}
@@ -131,7 +129,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               </span>
             </label>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-strong bg-surface-2 p-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-control bg-surface-2 p-3">
               <Checkbox
                 id="pref-confete"
                 checked={confeteSoEmTeste}

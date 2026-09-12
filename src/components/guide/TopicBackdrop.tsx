@@ -31,6 +31,7 @@ export function TopicBackdrop({
     <div className={styles.cover}>
       {textura === 'pontos' && <Pontos />}
       {textura === 'fluxo' && <Fluxo animar={animar} />}
+      {textura === 'trilha' && <Trilha />}
       {textura === 'grade-marcada' && <GradeMarcada />}
       {textura === 'barras' && <Barras pesos={pesos ?? []} />}
       {textura === 'listras' && <Listras />}
@@ -90,6 +91,40 @@ function Fluxo({ animar }: { animar: boolean }) {
         ))}
       </g>
       <style>{'@keyframes fluxo-corre { to { stroke-dashoffset: -180; } }'}</style>
+    </svg>
+  );
+}
+
+/* -- Conferencia: trilha com paradas, uma delas carimbada ----------------- */
+function Trilha() {
+  // Cada parada e um evento na caixa de entrada; a carimbada e a que foi
+  // aceita pela Meta. Ambienta a ideia de percurso — o texto e que informa.
+  const paradas = [40, 130, 220, 310, 400, 490, 560];
+  return (
+    <svg
+      className="absolute inset-0 h-full w-full"
+      viewBox="0 0 600 96"
+      preserveAspectRatio="none"
+      aria-hidden
+      focusable="false"
+    >
+      <path
+        d="M-10 62C90 62 140 34 240 34S400 66 500 66 590 44 610 44"
+        stroke="var(--hue)"
+        strokeWidth="1.6"
+        fill="none"
+        opacity="0.4"
+      />
+      {paradas.map((x, i) => (
+        <circle
+          key={x}
+          cx={x}
+          cy={i % 2 === 0 ? 56 : 42}
+          r={i === paradas.length - 2 ? 8 : 4.5}
+          fill="var(--hue)"
+          opacity={i === paradas.length - 2 ? 0.5 : 0.24}
+        />
+      ))}
     </svg>
   );
 }

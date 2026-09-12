@@ -4,6 +4,9 @@ import {
   lerIntegracoes,
   salvarIntegracoes,
   novoSegredoEntrada,
+  normalizarRotulo,
+  erroDoRotulo,
+  rotuloDaConfig,
   REGRAS_SEMENTE,
   type Integracoes,
 } from '@/lib/config-store';
@@ -69,11 +72,24 @@ export async function PUT(request: NextRequest) {
       regras = r.data;
     }
 
+    // O rotulo e cosmetico, mas some do arquivo se nao for reescrito aqui — e
+    // sem ele a URL divulgada ao xWinner deixa de bater com a configurada.
+    let rotulo = rotuloDaConfig(atual);
+    if (body.entrada?.rotulo !== undefined) {
+      const limpo = normalizarRotulo(body.entrada.rotulo);
+      const erro = erroDoRotulo(limpo);
+      if (erro) {
+        return NextResponse.json({ erro: `Apelido da URL inválido. ${erro}` }, { status: 400 });
+      }
+      rotulo = limpo;
+    }
+
     const salva = await salvarIntegracoes({
       entrada: {
         // o segredo so muda pela rota POST
         segredo: atual.entrada.segredo,
         modo: body.entrada?.modo === 'auto' ? 'auto' : 'fila',
+        rotulo,
       },
       regras,
       saida: Array.isArray(body.saida) ? body.saida : [],

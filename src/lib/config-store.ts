@@ -4,6 +4,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+// Import de TIPO: o `tsc --noEmit` recusa uma regra semente com nome de evento
+// que nao existe em EVENTOS_META. Sincronizacao das duas listas vira erro de
+// compilacao, nao um evento personalizado silencioso no Gerenciador.
+import type { NomeEventoMetaPadrao } from './meta-events';
+
 /**
  * Configuracao local do console, guardada em disco no servidor.
  *
@@ -189,43 +194,155 @@ export interface Integracoes {
   entrada: {
     /** Segredo exigido no header X-CAPI-Secret. Nunca vai inteiro ao cliente. */
     segredo: string;
-    /** Modo usado quando NENHUMA regra casa (fallback). */
+    /**
+     * Campo legado. NAO e lido por `processarWebhook`: o fallback de evento sem
+     * regra propria e sempre 'fila', por decisao de projeto (regra 3 do
+     * CLAUDE.md). Ligar automatico e sempre por regra nomeada, nunca por um
+     * interruptor global.
+     */
     modo: 'fila' | 'auto';
+    /** Apelido publico do endpoint. NAO autentica nada — quem protege e o segredo. */
+    rotulo?: string;
   };
   regras: RegraRoteamento[];
   saida: DestinoRelay[];
 }
 
+/* ------------------------------------------------------------------ */
+/* Rotulo do endpoint de entrada (apelido publico, nao credencial)     */
+/* ------------------------------------------------------------------ */
+
+export const ROTULO_PADRAO = 'xwinner-codigo-vencedor';
+export const ROTULO_MIN = 3;
+export const ROTULO_MAX = 40;
+const RE_ROTULO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Aceita o que o operador digitou e devolve o slug. Nao valida, normaliza. */
+export function normalizarRotulo(v: string): string {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, ROTULO_MAX)
+    .replace(/-+$/g, '');
+}
+
+/** Erro legivel, ou null se o slug serve. */
+export function erroDoRotulo(v: string): string | null {
+  if (v.length < ROTULO_MIN) return `Use ao menos ${ROTULO_MIN} caracteres.`;
+  if (v.length > ROTULO_MAX) return `Máximo de ${ROTULO_MAX} caracteres.`;
+  // [a-z0-9-] ja elimina por construcao '/', '..', '%2e%2e', espaco, '<' e aspas:
+  // o rotulo nunca vira travessia de caminho nem HTML injetado.
+  if (!RE_ROTULO.test(v)) return 'Só minúsculas, dígitos e hífen entre palavras.';
+  if (RE_UUID.test(v)) return 'Isso tem cara de segredo. O rótulo é público — use um apelido.';
+  return null;
+}
+
+export function rotuloDaConfig(cfg: Integracoes): string {
+  return cfg.entrada.rotulo?.trim() || ROTULO_PADRAO;
+}
+
+/* ------------------------------------------------------------------ */
+/* Regras semente                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Nome do evento da Meta que a semente pode usar. '' = a regra ignora. */
+type EventoMetaSemente = NomeEventoMetaPadrao | '';
+
+function regra(
+  id: string,
+  eventoOrigem: string,
+  eventoMeta: EventoMetaSemente,
+  modo: ModoRegra
+): RegraRoteamento {
+  return {
+    id,
+    eventoOrigem,
+    eventoMeta,
+    marcas: eventoMeta ? ['default'] : [],
+    modo,
+    ativo: true,
+  };
+}
+
+/** Regra de ignorar, com id derivado do nome de origem. */
+function ignorar(eventoOrigem: string, eventoMeta: EventoMetaSemente = ''): RegraRoteamento {
+  return regra(`r-ign-${eventoOrigem.replace(/\W+/g, '-')}`, eventoOrigem, eventoMeta, 'ignorar');
+}
+
 /**
- * Regras iniciais. TODAS nascem em 'fila' ou 'ignorar' de proposito: nada pode
- * disparar sozinho antes de o humano ver funcionando no Test Events. Ligar o
- * 'auto' do Purchase e uma decisao consciente, feita na tela de Integracoes.
+ * Regras iniciais — uma para CADA nome de MAPA_EVENTOS_ORIGEM, para o operador
+ * conseguir explicar na tela o destino de todo evento que chega. Nada aqui muda
+ * o que o parser ja fazia em silencio: so torna visivel e editavel.
+ *
+ * TODAS nascem em 'fila' ou 'ignorar' de proposito: nada pode disparar sozinho
+ * antes de o humano ver funcionando no Test Events. Ligar o 'auto' do Purchase
+ * e uma decisao consciente, feita na tela de Integracoes.
  */
 export const REGRAS_SEMENTE = (): RegraRoteamento[] => [
-  { id: 'r-precheckout', eventoOrigem: 'precheckout_opened', eventoMeta: 'Lead', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-precheckout-b', eventoOrigem: 'pre.checkout.session.opened', eventoMeta: 'Lead', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-checkout', eventoOrigem: 'checkout_session_opened', eventoMeta: 'InitiateCheckout', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-checkout-b', eventoOrigem: 'checkout.session.opened', eventoMeta: 'InitiateCheckout', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-pix', eventoOrigem: 'payment_generated', eventoMeta: 'AddPaymentInfo', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-pix-b', eventoOrigem: 'checkout.pix.generated', eventoMeta: 'AddPaymentInfo', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-card', eventoOrigem: 'checkout_card_attempted', eventoMeta: 'AddPaymentInfo', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-purchase', eventoOrigem: 'purchase_approved', eventoMeta: 'Purchase', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-purchase-b', eventoOrigem: 'checkout.session.completed', eventoMeta: 'Purchase', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-purchase-c', eventoOrigem: 'payment.paid', eventoMeta: 'Purchase', marcas: ['default'], modo: 'fila', ativo: true },
-  { id: 'r-registro', eventoOrigem: 'user_registered', eventoMeta: 'CompleteRegistration', marcas: ['default'], modo: 'ignorar', ativo: true },
-  { id: 'r-assinatura', eventoOrigem: 'subscription_started', eventoMeta: 'Subscribe', marcas: ['default'], modo: 'ignorar', ativo: true },
-  ...['precheckout_expired', 'checkout_abandoned', 'checkout_lead_abandoned', 'checkout.session.expired', 'checkout.lead.abandoned', 'pre.checkout.session.expired', 'purchase_refunded', 'chargeback_opened'].map((e) => ({
-    id: `r-ign-${e.replace(/\W+/g, '-')}`,
-    eventoOrigem: e,
-    eventoMeta: '',
-    marcas: [] as string[],
-    modo: 'ignorar' as ModoRegra,
-    ativo: true,
-  })),
+  // --- formato A (xWinner) que vira conversao ---
+  regra('r-precheckout', 'precheckout_opened', 'Lead', 'fila'),
+  regra('r-checkout', 'checkout_session_opened', 'InitiateCheckout', 'fila'),
+  regra('r-pix', 'payment_generated', 'AddPaymentInfo', 'fila'),
+  regra('r-card', 'checkout_card_attempted', 'AddPaymentInfo', 'fila'),
+  regra('r-purchase', 'purchase_approved', 'Purchase', 'fila'),
+
+  // --- formato B (gateway / Checkout Platform) que vira conversao ---
+  regra('r-precheckout-b', 'pre.checkout.session.opened', 'Lead', 'fila'),
+  regra('r-checkout-b', 'checkout.session.opened', 'InitiateCheckout', 'fila'),
+  regra('r-pix-b', 'checkout.pix.generated', 'AddPaymentInfo', 'fila'),
+  regra('r-purchase-b', 'checkout.session.completed', 'Purchase', 'fila'),
+  regra('r-purchase-c', 'payment.paid', 'Purchase', 'fila'),
+
+  // --- sinonimos do tracker tkr: ja produziam conversao pelo fallback 'fila'
+  // hardcoded do webhook. Aqui viram linha visivel, que o operador pode desligar.
+  regra('r-sin-purchase', 'purchase', 'Purchase', 'fila'),
+  regra('r-sin-order-approved', 'order_approved', 'Purchase', 'fila'),
+  regra('r-sin-begin-checkout', 'begin_checkout', 'InitiateCheckout', 'fila'),
+  regra('r-sin-pre-checkout-opened', 'pre_checkout_opened', 'Lead', 'fila'),
+
+  // --- mapeados, mas desligados por decisao do projeto ---
+  regra('r-registro', 'user_registered', 'CompleteRegistration', 'ignorar'),
+  regra('r-assinatura', 'subscription_started', 'Subscribe', 'ignorar'),
+
+  // --- abandono, expiracao, estorno, chargeback: nao sao conversao ---
+  ignorar('precheckout_expired'),
+  ignorar('checkout_abandoned'),
+  ignorar('checkout_lead_abandoned'),
+  ignorar('purchase_refunded'),
+  ignorar('chargeback_opened'),
+  ignorar('checkout.session.expired'),
+  ignorar('checkout.lead.abandoned'),
+  ignorar('pre.checkout.session.expired'),
+  ignorar('pre_checkout_abandoned'),
+
+  // --- ciclo de assinatura, afiliado, financeiro e engajamento: sem equivalente
+  // padrao na Meta. Enviar qualquer um seria evento ficticio (regra 1).
+  ignorar('onboarding_completed'),
+  ignorar('subscription_renewed'),
+  ignorar('subscription_cancelled'),
+  ignorar('subscription_expired'),
+  ignorar('affiliate_registered'),
+  ignorar('affiliate_approved'),
+  ignorar('commission_released'),
+  ignorar('commission_reversed'),
+  ignorar('withdrawal_requested'),
+  ignorar('withdrawal_paid'),
+  ignorar('ebook_completed'),
+  ignorar('tool_used'),
+
+  // --- testes da propria plataforma (botao "Testar" do xWinner) ---
+  regra('r-ping', 'ping', '', 'ignorar'),
+  ignorar('test'),
+  ignorar('webhook.test'),
+  ignorar('endpoint.test'),
 ];
 
 const INTEGRACOES_PADRAO = (): Integracoes => ({
-  entrada: { segredo: crypto.randomUUID(), modo: 'fila' },
+  entrada: { segredo: crypto.randomUUID(), modo: 'fila', rotulo: ROTULO_PADRAO },
   regras: REGRAS_SEMENTE(),
   saida: [],
 });
@@ -233,12 +350,34 @@ const INTEGRACOES_PADRAO = (): Integracoes => ({
 export async function lerIntegracoes(): Promise<Integracoes> {
   const atual = await lerJson<Integracoes | null>(ARQ_INTEGRACOES, null);
   if (atual?.entrada?.segredo) {
+    let mudou = false;
+
     // Migracao: arquivo criado antes das regras existirem.
     if (!Array.isArray(atual.regras)) {
       atual.regras = REGRAS_SEMENTE();
-      await gravarJson(ARQ_INTEGRACOES, atual);
+      mudou = true;
+    } else {
+      // A semente so roda em instalacao nova; em producao o arquivo ja existe.
+      // Sem esta mesclagem, regra nova nunca apareceria na VPS. Acrescenta so o
+      // que falta, por eventoOrigem: NUNCA sobrescreve regra existente — o
+      // operador pode ter editado o modo a mao e a decisao dele vale mais.
+      const existentes = new Set(atual.regras.map((r) => r.eventoOrigem));
+      const novas = REGRAS_SEMENTE().filter((r) => !existentes.has(r.eventoOrigem));
+      if (novas.length) {
+        atual.regras.push(...novas);
+        mudou = true;
+      }
     }
+
+    // Migracao do apelido do endpoint. Nao toca no segredo: a URL de um
+    // segmento ja cadastrada no xWinner continua entregando igual.
+    if (!atual.entrada.rotulo) {
+      atual.entrada.rotulo = ROTULO_PADRAO;
+      mudou = true;
+    }
+
     if (!Array.isArray(atual.saida)) atual.saida = [];
+    if (mudou) await gravarJson(ARQ_INTEGRACOES, atual);
     return atual;
   }
   const nova = INTEGRACOES_PADRAO();

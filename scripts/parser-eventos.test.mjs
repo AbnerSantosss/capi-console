@@ -13,6 +13,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseWebhook, mapearEventoOrigem, ehTesteInterno, MAPA_EVENTOS_ORIGEM } from '../src/lib/parser.ts';
+// Importado de verdade: o script roda com --conditions=react-server, que resolve
+// o 'server-only' de config-store. Antes isto era grep no arquivo-fonte — passava
+// verde com o nome da regra escrito em qualquer lugar do texto, ate num comentario.
+import { REGRAS_SEMENTE } from '../src/lib/config-store.ts';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const exemplo = (nome) => fs.readFileSync(path.join(DIR, 'exemplos', nome), 'utf8');
@@ -55,8 +59,49 @@ ok(faltando.length === 0, 'os 24 eventos do catalogo estao na tabela', faltando.
 
 // 4. Nome desconhecido com palavra negativa nao vira conversao
 ok(mapearEventoOrigem('pedido_cancelado_pelo_cliente').eventoMeta === null, 'nome novo com "cancel" -> ignorar');
-ok(mapearEventoOrigem('purchase_completed_v2').eventoMeta === 'Purchase', 'nome novo com "completed" -> Purchase (heuristica)');
-ok(mapearEventoOrigem('purchase_completed_v2').conhecido === false, 'heuristica marcada como nao-conhecida');
+
+// A heuristica so palpita: nome fora da tabela NUNCA produz evento disparavel.
+const novo = mapearEventoOrigem('purchase_completed_v2');
+ok(novo.eventoMeta === null, 'nome novo nao vira evento da Meta sozinho', String(novo.eventoMeta));
+ok(novo.conhecido === false, 'nome novo marcado como nao-conhecido');
+ok(novo.sugestao === 'Purchase', 'nome novo com "completed" apenas sugere Purchase', String(novo.sugestao));
+
+// 'renew' entre as palavras negativas: renovacao paga nao e venda nova.
+const renov = mapearEventoOrigem('subscription_renewed_paid');
+ok(renov.eventoMeta === null && renov.sugestao === undefined, 'renovacao paga nao sugere nada', String(renov.sugestao));
+
+// 4b. O botao "Testar" do xWinner manda `ping`: reconhecido, ignorado de proposito
+for (const nome of ['ping', 'test', 'webhook.test', 'endpoint.test']) {
+  const t = mapearEventoOrigem(nome);
+  ok(
+    t.conhecido === true && t.eventoMeta === null && t.testePlataforma === true && t.classificacao === 'teste-plataforma',
+    `${nome} -> teste da plataforma`,
+    `(${t.classificacao})`
+  );
+}
+const pingParse = parseWebhook(JSON.stringify({ event: 'ping', data: {} }));
+ok(pingParse.classificacao === 'teste-plataforma', 'parser classifica ping como teste da plataforma', String(pingParse.classificacao));
+ok(pingParse.motivoIgnorar === 'teste-plataforma', 'ping tem motivo proprio, nao "nome fora do catalogo"', String(pingParse.motivoIgnorar));
+ok(pingParse.eventName === undefined, 'ping nao recebe evento da Meta');
+
+// 4c. Cobertura: todo nome da tabela tem regra semente em config-store.
+const sementes = REGRAS_SEMENTE();
+const origensSemeadas = new Set(sementes.map((r) => r.eventoOrigem));
+const semRegra = Object.keys(MAPA_EVENTOS_ORIGEM).filter((e) => !origensSemeadas.has(e));
+ok(semRegra.length === 0, 'todo evento da tabela tem regra semente', semRegra.join(','));
+
+// Nenhuma semente nasce em automatico: disparar sem humano e decisao do operador,
+// tomada na tela de Integracoes, nunca herdada de um deploy.
+const emAuto = sementes.filter((r) => r.modo === 'auto').map((r) => r.eventoOrigem);
+ok(sementes.length > 0, 'REGRAS_SEMENTE devolveu regras', String(sementes.length));
+ok(emAuto.length === 0, 'nenhuma regra semente em modo auto', emAuto.join(','));
+
+// A sonda do `ping` mora no handler e depende de test_event_code. A semente
+// segue em 'ignorar': sem codigo de teste, o botao "Testar" do backoffice nao
+// pode mandar nada para o dataset que treina as campanhas.
+const ping = sementes.find((r) => r.eventoOrigem === 'ping');
+ok(ping?.modo === 'ignorar', 'semente do ping segue em ignorar (a sonda e do handler)', String(ping?.modo));
+ok(!ping?.eventoMeta, 'semente do ping nao carrega evento da Meta', String(ping?.eventoMeta));
 
 console.log('');
 

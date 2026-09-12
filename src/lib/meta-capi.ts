@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 
+import { ehNomePadraoMeta, nomePadraoParecido } from './meta-events';
+
 const GRAPH_VERSION_PADRAO = 'v26.0';
 
 export function sha256(s: string): string {
@@ -106,7 +108,10 @@ export function montarEvento(ev: EventInput): MetaEvent {
   if (ua) user_data.client_user_agent = ua;
 
   const evento: MetaEvent = {
-    event_name: ev.event_name || 'Purchase',
+    // Sem padrao nenhum aqui de proposito: `|| 'Purchase'` transformava chamada
+    // sem event_name numa compra inventada, com HTTP 200 da Meta e sem erro
+    // nenhum na tela. Nome vazio agora morre em validar().
+    event_name: String(ev.event_name ?? '').trim(),
     event_time: Math.floor(Number(ev.event_time)),
     action_source: ev.action_source || 'website',
     user_data,
@@ -128,6 +133,22 @@ export function validar(evento: MetaEvent): string[] {
   const erros: string[] = [];
   const agora = Math.floor(Date.now() / 1000);
   const seteDias = 7 * 24 * 3600;
+
+  const nome = String(evento.event_name ?? '').trim();
+  if (!nome) {
+    erros.push('Informe o nome do evento.');
+  } else {
+    // A Meta responde 200 para 'purchase' e cria um evento personalizado com
+    // esse nome: o erro fica indistinguivel do sucesso e a campanha otimiza
+    // para nada. So barramos o quase-acerto; nome personalizado de verdade
+    // (ex.: 'AulaAssistida') continua passando.
+    const parecido = nomePadraoParecido(nome);
+    if (parecido) {
+      erros.push(
+        `"${nome}" não é um nome padrão. Você quis dizer ${parecido}? O nome diferencia maiúsculas e minúsculas.`
+      );
+    }
+  }
 
   if (!evento.event_time || Number.isNaN(evento.event_time)) {
     erros.push('event_time inválido.');

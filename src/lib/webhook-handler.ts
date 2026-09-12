@@ -1,38 +1,125 @@
 import 'server-only';
 
 import { NextRequest, NextResponse, after } from 'next/server';
-import { lerIntegracoes, segredoConfere, acharRegra } from '@/lib/config-store';
+import {
+  lerIntegracoes,
+  segredoConfere,
+  acharRegra,
+  rotuloDaConfig,
+  listarMarcas,
+} from '@/lib/config-store';
 import { registrarEntrada, mascararEmail } from '@/lib/inbox';
-import { parseWebhook } from '@/lib/parser';
+import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
 
 /**
- * Handler único do recebimento de webhook, usado por duas rotas:
+ * Handler único do recebimento de webhook, usado por duas rotas e três formas
+ * de URL — todas as três valem para sempre, sem depreciação e sem redirect
+ * (redirect em POST faz muitos clientes trocarem para GET ou largarem o corpo):
  *
- *   POST /api/webhook/in            -> segredo no header X-CAPI-Secret
- *   POST /api/webhook/in/<segredo>  -> segredo no caminho da URL
+ *   POST /api/webhook/in                     -> segredo no header X-CAPI-Secret
+ *   POST /api/webhook/in/<segredo>           -> segredo no caminho (legada, é a
+ *                                               que está cadastrada no xWinner)
+ *   POST /api/webhook/in/<rotulo>/<segredo>  -> apelido legível + segredo
  *
- * A segunda existe porque o backoffice do xWinner só oferece o campo
- * "URL (https)" ao cadastrar um endpoint de saída — não há onde colocar um
- * header customizado. É o mesmo formato que a própria plataforma já usa em
- * outras integrações (`/api/webhook/auto-xxxxxx`) e o padrão de Slack e
- * Discord: o segredo é o caminho.
+ * O <rotulo> é apelido, não credencial; o segredo é sempre o ÚLTIMO segmento.
+ * Apelido errado com segredo certo é ACEITO (202) e a divergência aparece na
+ * caixa de entrada: se renomear o apelido derrubasse o endpoint já cadastrado,
+ * uma venda PIX real se perderia — exatamente o que este projeto existe para
+ * impedir.
+ *
+ * A forma com segredo no caminho existe porque o backoffice do xWinner só
+ * oferece o campo "URL (https)" ao cadastrar um endpoint de saída — não há onde
+ * colocar um header customizado. É o mesmo padrão de Slack e Discord.
  *
  * O segredo NÃO vai em query string de propósito: query string vaza em
  * `Referer`, em log de proxy e em histórico com muito mais facilidade que o
  * caminho, e alguns gateways registram a query inteira em texto claro.
  */
+
+/** Corpo acima disto não é lido inteiro: um payload gigante não pode comer o container. */
+const LIMITE_CORPO = 1_000_000;
+
+/**
+ * Evento da sonda de conexão (o `ping` do botão "Testar" do backoffice).
+ *
+ * ViewContent de propósito: é topo de funil e não é conversão. Um teste de
+ * conexão jamais pode parecer venda — nem no relatório, nem para o algoritmo.
+ */
+const EVENTO_DA_SONDA = 'ViewContent';
+
+/**
+ * Identidade da sonda. Duas exigências, as duas obrigatórias:
+ *
+ * 1. Estável, para o `event_id` deduplicar reenvio da plataforma.
+ * 2. NÃO pode casar com `ehTesteInterno` (parser.ts) — se casasse, o disparo
+ *    pararia antes da Meta e a sonda não provaria nada. Por isso nada de
+ *    `teste@` nem de domínio `example.com`.
+ *
+ * Não é cliente de mentira: é o próprio console se identificando.
+ */
+/**
+ * A trava da sonda: ela so vai ao ar se alguma marca de destino tiver
+ * `test_event_code`. E a checagem que mantem a regra 1 do CLAUDE.md de pe —
+ * evento sintetico jamais entra no dataset que treina as campanhas.
+ */
+async function algumaMarcaEmTeste(ids: string[]): Promise<boolean> {
+  try {
+    const todas = await listarMarcas();
+    return ids.some((id) => todas.find((m) => m.id === id)?.testCode?.trim());
+  } catch {
+    return false; // na duvida, nao dispara
+  }
+}
+
+function camposDaSonda(
+  req: NextRequest,
+  sourceUrl: string | undefined,
+  idItem: string
+): Record<string, string> {
+  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim();
+  return {
+    email: 'sonda.webhook@codigovencedor.com',
+    firstName: 'Sonda',
+    lastName: 'Webhook',
+    externalId: `sonda-${idItem}`,
+    eventId: `sonda-${idItem}`,
+    sourceUrl: sourceUrl || process.env.PUBLIC_BASE_URL || '',
+    userAgent: req.headers.get('user-agent') ?? '',
+    ...(ip ? { ip } : {}),
+  };
+}
+
+/**
+ * Tentativas com segredo errado. Fica só em memória e sem payload nenhum
+ * (tráfego hostil não merece disco); serve para o /api/health mostrar que
+ * alguém está batendo na porta.
+ */
+let segredosRecusados = 0;
+export function tentativasComSegredoInvalido(): number {
+  return segredosRecusados;
+}
+
+/** Formato do payload, só para a caixa de entrada dizer por onde o evento veio. */
+function formatoDoEvento(nome: string | undefined, conhecido: boolean): 'A' | 'B' | 'outro' {
+  if (!nome || !conhecido) return 'outro';
+  return nome.includes('.') ? 'B' : 'A';
+}
+
 export async function processarWebhook(
   request: NextRequest,
-  segredoDaUrl?: string
+  segredoDaUrl?: string,
+  rotuloDaUrl?: string
 ) {
   const cfg = await lerIntegracoes();
 
+  // 1. O segredo decide sozinho, antes de qualquer olhar no rótulo.
   const enviado = segredoDaUrl ?? request.headers.get('x-capi-secret') ?? '';
   if (!segredoConfere(enviado, cfg.entrada.segredo)) {
+    segredosRecusados++;
     return NextResponse.json(
       {
         erro: segredoDaUrl
@@ -43,20 +130,54 @@ export async function processarWebhook(
     );
   }
 
-  // Um corpo gigante não pode consumir a memória do container.
+  // 2. Só depois o rótulo, com comparação comum: ele é cosmético, não decide
+  // nada, então tempo constante aqui seria teatro.
+  const rotuloEsperado = rotuloDaConfig(cfg);
+  const rotuloRecebido = rotuloDaUrl ?? null;
+  const rotuloDivergente = Boolean(rotuloDaUrl) && rotuloDaUrl !== rotuloEsperado;
+
+  const origem = request.headers.get('user-agent') ?? 'desconhecida';
+
+  // Um corpo gigante não pode consumir a memória do container. Mesmo recusado,
+  // a tentativa vira item na caixa: sem isso, a entrega "não existiu" na tela e
+  // o xWinner reentrega em silêncio.
   const tamanho = Number(request.headers.get('content-length') || 0);
-  if (tamanho > 1_000_000) {
+  if (tamanho > LIMITE_CORPO) {
+    await registrarNaoLido({
+      origem,
+      motivo: 'acima de 1 MB',
+      amostra: '',
+      rotuloRecebido,
+      rotuloDivergente,
+    });
+    return NextResponse.json({ erro: 'Payload acima de 1 MB.' }, { status: 413 });
+  }
+
+  // Lê como texto para ter amostra do que chegou mesmo quando não é JSON.
+  const texto_cru = await request.text();
+  if (texto_cru.length > LIMITE_CORPO) {
+    await registrarNaoLido({
+      origem,
+      motivo: 'acima de 1 MB',
+      amostra: texto_cru.slice(0, 2000),
+      rotuloRecebido,
+      rotuloDivergente,
+    });
     return NextResponse.json({ erro: 'Payload acima de 1 MB.' }, { status: 413 });
   }
 
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = JSON.parse(texto_cru);
   } catch {
-    return NextResponse.json(
-      { erro: 'O corpo não é um JSON válido.' },
-      { status: 400 }
-    );
+    await registrarNaoLido({
+      origem,
+      motivo: 'corpo não é JSON',
+      amostra: texto_cru.slice(0, 2000),
+      rotuloRecebido,
+      rotuloDivergente,
+    });
+    return NextResponse.json({ erro: 'O corpo não é um JSON válido.' }, { status: 400 });
   }
 
   // O parser nunca pode derrubar o recebimento: se falhar, guardamos cru.
@@ -65,6 +186,10 @@ export async function processarWebhook(
   let eventoOrigem: string | undefined;
   let conhecido = false;
   let ignorarPeloParser = false;
+  let classificacao: ClassificacaoEvento = 'sem-evento';
+  let motivoDoParser: MotivoIgnorar | undefined;
+  let testePlataforma = false;
+  let eventoMetaSugerido: string | undefined;
   try {
     const r = parseWebhook(JSON.stringify(payload));
     campos = r.fields;
@@ -72,6 +197,10 @@ export async function processarWebhook(
     eventoOrigem = r.eventoOrigem;
     conhecido = r.eventoConhecido;
     ignorarPeloParser = r.ignorar;
+    classificacao = r.classificacao;
+    motivoDoParser = r.motivoIgnorar;
+    testePlataforma = r.testePlataforma;
+    eventoMetaSugerido = r.eventoMetaSugerido;
   } catch {
     /* segue com o payload cru */
   }
@@ -101,28 +230,61 @@ export async function processarWebhook(
 
   // A regra decide evento da Meta, pixels e modo. Sem regra: o que o parser
   // disser — e se ele mandou ignorar, ignoramos (abandono não é conversão).
+  //
+  // O fallback é 'fila' por decisão de projeto (regra 3 do CLAUDE.md): não
+  // existe interruptor global de automático, `cfg.entrada.modo` não é lido.
+  // Ligar automático é sempre por regra nomeada, na tela de Integrações.
   const regra = nomeOriginal ? acharRegra(cfg, nomeOriginal) : undefined;
-  const modo: 'auto' | 'fila' | 'ignorar' = regra
+  const modoDaRegra: 'auto' | 'fila' | 'ignorar' = regra
     ? regra.modo
     : ignorarPeloParser
       ? 'ignorar'
       : 'fila';
-  const eventoFinal =
+  const eventoDaRegra =
     regra && regra.modo !== 'ignorar' && regra.eventoMeta ? regra.eventoMeta : evento;
   const marcas = regra?.marcas?.length ? regra.marcas : ['default'];
+
+  // A sonda de conexao. O botao "Testar" do backoffice manda `ping`: sem
+  // cliente, sem valor, sem pedido. Ate aqui ele morria na caixa de entrada
+  // como "ignorado" e provava apenas que a URL respondia 202 — nao provava
+  // que o token vale, que o pixel existe, nem que a Meta aceita o evento.
+  //
+  // Agora ele fecha o circuito ate o Gerenciador de Eventos. Com uma trava:
+  // so dispara quando a marca de destino tem `test_event_code`. Com codigo de
+  // teste o evento cai em "Testar eventos" e fica fora das metricas e da
+  // otimizacao; sem codigo, iria para o dataset de producao como dado
+  // inventado — o que a regra 1 do CLAUDE.md proibe. Sem codigo de teste o
+  // `ping` volta a ser exatamente o que era: ignorado.
+  const sonda = testePlataforma && (await algumaMarcaEmTeste(marcas));
+
+  const modo: 'auto' | 'fila' | 'ignorar' = sonda ? 'auto' : modoDaRegra;
+  const eventoFinal = sonda ? EVENTO_DA_SONDA : eventoDaRegra;
+
+  const motivoIgnorar: MotivoIgnorar | undefined =
+    modo !== 'ignorar' ? undefined : regra ? 'regra' : motivoDoParser;
 
   // Qualquer evento que traga fbc/fbp/ip/ua alimenta o perfil do comprador.
   // É isso que salva o Purchase do PIX, que chega sem atribuição nenhuma.
   await guardarPerfil(campos).catch(() => {});
 
   const item = await registrarEntrada({
-    origem: request.headers.get('user-agent') ?? 'desconhecida',
+    origem,
     evento: eventoFinal ?? nomeOriginal,
     eventoOrigem: nomeOriginal,
     eventoMeta: eventoFinal,
+    eventoMetaSugerido,
     regraId: regra?.id,
     modo,
     conhecido,
+    classificacao,
+    motivoIgnorar,
+    testePlataforma,
+    // Marcado já no recebimento: antes só o disparo sabia disso, e o item de
+    // teste da equipe ficava indistinguível de uma venda na fila.
+    testeInterno: ehTesteInterno(campos, texto('eventId')),
+    formato: formatoDoEvento(nomeOriginal, conhecido),
+    rotuloRecebido,
+    rotuloDivergente,
     valor: texto('value') ? Number(texto('value')) : undefined,
     moeda: texto('currency'),
     emailMascarado: mascararEmail(texto('email')),
@@ -153,7 +315,19 @@ export async function processarWebhook(
   if (modo === 'auto' && eventoFinal) {
     after(async () => {
       try {
-        await dispararItem({ item, campos, eventoMeta: eventoFinal, marcas, origem: 'auto' });
+        // A sonda substitui os campos: o `ping` chega vazio e um evento vazio
+        // nao prova entrega. O item ja existe aqui, entao o id dele vira o
+        // `event_id` — reenvio da plataforma deduplica em vez de duplicar.
+        const camposDoDisparo = sonda
+          ? { ...campos, ...camposDaSonda(request, texto('sourceUrl'), item.id) }
+          : campos;
+        await dispararItem({
+          item,
+          campos: camposDoDisparo,
+          eventoMeta: eventoFinal,
+          marcas,
+          origem: 'auto',
+        });
       } catch (e) {
         console.error('[webhook] auto-dispatch falhou:', e);
       }
@@ -166,10 +340,39 @@ export async function processarWebhook(
       id: item.id,
       eventoOrigem: nomeOriginal,
       eventoMeta: eventoFinal ?? null,
+      classificacao,
       modo,
       regra: regra?.id ?? null,
+      rotulo: rotuloRecebido,
+      rotuloDivergente,
       emq: emq.nota,
     },
     { status: 202 }
   );
+}
+
+/**
+ * Corpo que o console não conseguiu ler (não-JSON ou grande demais). Vira item
+ * visível na caixa de entrada, sem evento nenhum e portanto sem como disparar.
+ */
+async function registrarNaoLido(params: {
+  origem: string;
+  motivo: string;
+  amostra: string;
+  rotuloRecebido: string | null;
+  rotuloDivergente: boolean;
+}) {
+  await registrarEntrada({
+    origem: params.origem,
+    temFbc: false,
+    temFbp: false,
+    modo: 'ignorar',
+    status: 'ignorado',
+    classificacao: 'sem-evento',
+    motivoIgnorar: 'nao-lido',
+    formato: 'outro',
+    rotuloRecebido: params.rotuloRecebido,
+    rotuloDivergente: params.rotuloDivergente,
+    payload: { __naoLido: true, motivo: params.motivo, amostra: params.amostra },
+  }).catch(() => {});
 }

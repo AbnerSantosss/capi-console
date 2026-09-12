@@ -43,21 +43,28 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  variant = "default",
+  variant,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /**
+   * @deprecated Não faz nada e não deve ser usado. Existia para forkar a
+   * paleta dentro do modal, o que criava uma segunda escala de cor que não
+   * alcançava os tokens computados no `:root` e misturava as duas. A
+   * superfície do modal é --surface-3, definida uma única vez em globals.css.
+   * A prop continua aceita só para não quebrar chamadas antigas.
+   */
   variant?: "default" | "console"
 }) {
+  void variant // descartada de propósito: não pode virar atributo no DOM
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-dialog border border-line-strong bg-surface-3 p-5 text-body text-fg-body shadow-2xl duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          variant === "console" &&
-            "[--surface-1:#12151a] [--surface-2:#1a1e25] [--surface-3:#222730] [--border-subtle:#292f38] [--border-default:#3b4350] [--border-control:#697586] [--fg-strong:#fafafa] [--fg-body:#e4e7ec] [--fg-muted:#adb5c2] [--fg-disabled:#7f8896]",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-dialog border border-line-control bg-surface-3 p-5 text-body text-fg-body shadow-2xl duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -106,7 +113,10 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        // -mx-5/-mb-5 casa com o p-5 do DialogContent: a faixa sangra até a
+        // borda. A régua é border-line-control porque o fill sozinho (1.13
+        // contra a superfície do modal) não delimita nada.
+        "-mx-5 -mb-5 flex flex-col-reverse gap-2 rounded-b-dialog border-t border-line-control bg-surface-2 px-5 py-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
@@ -126,7 +136,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-heading text-base leading-none font-medium",
+        "text-heading leading-none font-semibold text-fg-strong",
         className
       )}
       {...props}
@@ -142,7 +152,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-caption text-fg-muted *:[a]:text-accent-text *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-strong",
         className
       )}
       {...props}

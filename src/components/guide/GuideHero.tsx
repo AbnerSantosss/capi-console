@@ -8,12 +8,13 @@
  * nunca contradizer a aba Regras.
  */
 
-import { BookOpenIcon } from '@phosphor-icons/react';
+import { BookOpenIcon, LightningIcon, SignpostIcon } from '@phosphor-icons/react';
 
 import { DotPattern } from '@/components/ui/dot-pattern';
 import { useEstadoAutomatico } from '@/hooks/useEstadoAutomatico';
 import { CAMINHOS } from './conteudo';
 import { PathCard } from './PathCard';
+import { TaskCards } from './TaskCards';
 import styles from './guide.module.css';
 
 const ESTADO_AUTO: Record<string, string> = {
@@ -58,9 +59,22 @@ export function GuideHero({ animar }: { animar: boolean }) {
           Guia
         </h1>
         <p className={styles.heroLead}>
-          Dois caminhos levam um evento até a Meta. Escolha o seu, siga os
-          passos e confira as regras da API antes de disparar.
+          Comece pelas duas perguntas do dia a dia. A explicação dos dois
+          caminhos até a Meta vem logo abaixo, para quando a resposta curta
+          não bastar.
         </p>
+
+        {/* Tarefas antes da teoria: sao elas que trazem o operador aqui. */}
+        <h2 className={styles.tasksLabel}>
+          <LightningIcon size={14} weight="duotone" aria-hidden />
+          Tarefas frequentes
+        </h2>
+        <TaskCards />
+
+        <h2 className={styles.pathsLabel}>
+          <SignpostIcon size={14} weight="duotone" aria-hidden />
+          Os dois caminhos até a Meta
+        </h2>
 
         {/* Sem animacao de entrada de proposito. O BlurFade deixava os dois
             cards em opacity:0 ate o motion assumir, e num console de operacao

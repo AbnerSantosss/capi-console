@@ -20,9 +20,13 @@ import {
   FlaskIcon,
   GaugeIcon,
   LightningIcon,
+  ListChecksIcon,
   LockKeyIcon,
+  MagnifyingGlassIcon,
   MapTrifoldIcon,
   PaperPlaneTiltIcon,
+  ProhibitIcon,
+  QueueIcon,
   ReceiptIcon,
   SealCheckIcon,
   ShieldCheckIcon,
@@ -30,10 +34,22 @@ import {
 } from '@phosphor-icons/react';
 
 /** Matiz de identificacao do topico. So fundo, icone e linha — nunca texto. */
-export type Hue = 'manual' | 'auto' | 'dados' | 'qualidade' | 'regras';
+export type Hue =
+  | 'manual'
+  | 'auto'
+  | 'conferencia'
+  | 'dados'
+  | 'qualidade'
+  | 'regras';
 
 /** Textura da capa do card. Implementada em TopicBackdrop.tsx. */
-export type Textura = 'pontos' | 'fluxo' | 'grade-marcada' | 'barras' | 'listras';
+export type Textura =
+  | 'pontos'
+  | 'fluxo'
+  | 'trilha'
+  | 'grade-marcada'
+  | 'barras'
+  | 'listras';
 
 export interface ItemGuia {
   id: string;
@@ -71,6 +87,71 @@ export interface Topico {
   /** Conteudo especial renderizado depois dos itens. */
   extra?: 'tabela-emq' | 'regra-de-ouro' | 'ordem-webhook';
 }
+
+/* ------------------------------------------------------------------ */
+/* Tarefas frequentes — o que o operador faz quase todo dia            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sao duas perguntas, e so duas, que se repetem em toda operacao. Elas vem
+ * antes da explicacao dos caminhos de proposito: quem ja sabe o que quer nao
+ * deveria precisar ler a teoria para achar o botao.
+ *
+ * Cada tarefa cabe em tres passos. Se um dia precisar de quatro, o problema
+ * esta na interface, nao no texto.
+ */
+export interface Tarefa {
+  id: string;
+  hue: Hue;
+  icone: Icon;
+  /** A pergunta nas palavras do operador, nao nas do sistema. */
+  pergunta: string;
+  /** Onde mora a resposta, em uma linha. */
+  resposta: string;
+  /** No maximo tres. Cada um cabe em uma linha. */
+  passos: string[];
+  cta: { rotulo: string; href: string };
+  /** A confusao conhecida: qual tela NAO responde isso. */
+  naoConfundir?: string;
+}
+
+export const TAREFAS: Tarefa[] = [
+  {
+    id: 'conferir-venda',
+    hue: 'conferencia',
+    icone: MagnifyingGlassIcon,
+    pergunta: 'A venda foi para a Meta?',
+    resposta:
+      'A prova fica no próprio item da caixa de entrada: situação, data e nome do evento enviado.',
+    passos: [
+      'Abra Disparo automático → aba Caixa de entrada.',
+      'Ache a venda pelo e-mail, pelo valor ou pelo número do pedido.',
+      'Leia a situação do item: Enviado à Meta, Na fila ou Ignorado.',
+    ],
+    cta: { rotulo: 'Abrir a caixa de entrada', href: '/integracoes#inbox' },
+    naoConfundir:
+      'A aba Histórico de retornos não responde isso — ela conta as entregas para n8n e CRM, não os envios para a Meta.',
+  },
+  {
+    id: 'ligar-purchase',
+    hue: 'auto',
+    icone: LightningIcon,
+    pergunta: 'Como ligo o envio automático do Purchase?',
+    resposta:
+      'Primeiro o Código de teste, depois a regra. É essa ordem que segura o erro.',
+    passos: [
+      'Preencha o Código de teste em Pixel e token.',
+      'Em Disparo automático → aba Regras, mude `purchase_approved` de Fila para Automático.',
+      'Salve e confira o selo do menu: ele sai de Desligado para "1 em teste".',
+    ],
+    cta: {
+      rotulo: 'Ver o passo a passo completo',
+      href: '/guia#webhook-automatico',
+    },
+    naoConfundir:
+      'Sem Código de teste preenchido, a compra seguinte entra nas métricas reais da campanha.',
+  },
+];
 
 /* ------------------------------------------------------------------ */
 /* Os dois caminhos                                                    */
@@ -123,6 +204,66 @@ export const CAMINHOS: Caminho[] = [
 
 export const TOPICOS: Topico[] = [
   {
+    id: 'conferir-envio',
+    hue: 'conferencia',
+    textura: 'trilha',
+    icone: SealCheckIcon,
+    titulo: 'A venda foi para a Meta?',
+    frase: 'Onde fica a prova, o que cada situação quer dizer e qual tela não responde isso.',
+    contador: '4 conferências',
+    indice: 'Conferir',
+    paraQue:
+      'Responder, com evidência na tela, se uma compra que entrou virou conversão na Meta.',
+    quandoUsar:
+      'Sempre que uma venda chegar e você precisar saber se ela foi enviada — e depois de qualquer disparo.',
+    saiSabendo:
+      'Ler a situação de um item, separar `Enviado à Meta` de `Na fila` e não confundir retorno com envio.',
+    numerado: false,
+    itens: [
+      {
+        id: 'situacao',
+        titulo: 'A situação do item',
+        resumo: 'Enviado à Meta, Na fila ou Ignorado — na linha do item.',
+        icone: ListChecksIcon,
+        oQue:
+          'Cada evento recebido mostra a própria situação: Enviado à Meta (com a data e o nome do evento que foi enviado), Na fila (chegou, mas nenhuma regra mandou enviar) ou Ignorado (a regra mandou não enviar). É a resposta direta da pergunta.',
+        onde: 'Disparo automático → aba Caixa de entrada.',
+        erro:
+          'Procurar a resposta em outra tela. Nenhuma outra aba do console lista o que foi para a Meta.',
+      },
+      {
+        id: 'events-received',
+        titulo: 'O que conta como "enviado"',
+        resumo: 'events_received igual a 1, não HTTP 200.',
+        icone: SealCheckIcon,
+        oQue:
+          'Só conta como enviado o disparo em que a Meta devolveu `events_received: 1`. HTTP 200 sozinho não prova nada. O `fbtrace_id` guardado junto é o número que o suporte da Meta usa para rastrear o evento.',
+        onde: 'No próprio item, ao abrir o resultado do disparo.',
+      },
+      {
+        id: 'na-fila',
+        titulo: 'Na fila não é erro',
+        resumo: 'Chegou e esperou. Nenhuma regra mandou enviar.',
+        icone: QueueIcon,
+        oQue:
+          'Evento sem regra própria, ou com regra em modo Fila, fica esperando uma decisão humana. É o estado normal enquanto o automático está desligado — e é ele que permite conferir o payload antes do go-live.',
+        onde: 'Disparo automático → aba Regras mostra o modo de cada evento.',
+      },
+      {
+        id: 'retorno-nao-e-envio',
+        titulo: 'Retorno para outros sistemas não é envio para a Meta',
+        resumo: 'Histórico de retornos zerado não significa nada parado.',
+        icone: ProhibitIcon,
+        oQue:
+          'As abas Destinos de retorno e Histórico de retornos tratam do repasse para n8n e CRM, depois da Meta. Sem destino cadastrado, elas mostram zero para sempre — e isso não afeta em nada o envio para a Meta.',
+        onde: 'Disparo automático → abas Destinos de retorno e Histórico de retornos.',
+        erro:
+          'Concluir que "nada foi enviado" porque essa tabela está vazia. Foi o susto mais comum desta interface.',
+      },
+    ],
+  },
+
+  {
     id: 'como-usar',
     hue: 'manual',
     textura: 'pontos',
@@ -145,7 +286,7 @@ export const TOPICOS: Topico[] = [
         icone: TargetIcon,
         oQue:
           'Veja para qual Pixel o evento vai e se está em teste ou em produção.',
-        onde: 'Selo com a seta no topo da tela, ou o botão Trocar pixel, no passo 4.',
+        onde: 'Selo de ambiente no topo da tela, ou o botão Trocar pixel no painel Pixel de destino (passo 4).',
         erro:
           'Disparar em produção achando que estava em teste. O selo âmbar "Produção" significa que o evento entra nas métricas reais.',
       },
@@ -167,7 +308,7 @@ export const TOPICOS: Topico[] = [
         icone: ChartBarIcon,
         oQue:
           'O painel mostra a nota de 0 a 10 e quais dos 9 parâmetros estão faltando.',
-        onde: 'Painel Qualidade do evento, no passo 4.',
+        onde: 'Painel Qualidade do evento, no passo 4 — Conferir e disparar.',
         erro:
           'Ignorar a nota. Abaixo de 5.0 a Meta tem dificuldade para casar a conversão com um perfil.',
       },
@@ -189,7 +330,7 @@ export const TOPICOS: Topico[] = [
         icone: ReceiptIcon,
         oQue:
           'Confirme `events_received` igual a 1, guarde o `fbtrace_id` e abra o criativo que converteu.',
-        onde: 'Painel que aparece no topo da coluna.',
+        onde: 'Painel de resultado, que aparece no topo da coluna de trabalho logo após o disparo.',
         erro:
           'Assumir que HTTP 200 basta. Se `events_received` vier 0, a Meta não registrou nada.',
       },
@@ -221,7 +362,7 @@ export const TOPICOS: Topico[] = [
         icone: MapTrifoldIcon,
         oQue:
           'A URL já vem com o segredo no caminho. Quem tiver essa URL consegue inserir eventos na sua caixa de entrada — trate como senha.',
-        onde: 'Integrações → aba Recebimento → "URL para o xWinner" → Copiar.',
+        onde: 'Disparo automático → aba Recebimento → "URL para o xWinner" → Copiar.',
       },
       {
         id: 'endpoint',
@@ -230,7 +371,7 @@ export const TOPICOS: Topico[] = [
         icone: TargetIcon,
         oQue:
           'Marque só os eventos que viram conversão: `precheckout_opened`, `checkout_session_opened`, `payment_generated`, `checkout_card_attempted` e `purchase_approved`. Abandono e estorno não precisam ser assinados.',
-        onde: 'admin.codigovencedor.com → Integrações → Webhooks → Novo endpoint.',
+        onde: 'No xWinner (admin.codigovencedor.com) → Integrações → Webhooks → Novo endpoint. Este menu é da plataforma, não deste console.',
       },
       {
         id: 'testar',
@@ -239,7 +380,7 @@ export const TOPICOS: Topico[] = [
         icone: FlaskIcon,
         oQue:
           'A plataforma envia um payload de exemplo com `lead@example.com`. Ele tem que aparecer na caixa de entrada e, se você mandar disparar, o resultado tem que ser "teste-ignorado". Se aparecer "enviado", pare tudo.',
-        onde: 'xWinner → botão Testar do endpoint; depois Integrações → Caixa de entrada.',
+        onde: 'xWinner → botão Testar do endpoint; depois Disparo automático → aba Caixa de entrada.',
       },
       {
         id: 'venda-real',
@@ -248,7 +389,7 @@ export const TOPICOS: Topico[] = [
         icone: ReceiptIcon,
         oQue:
           'Espere uma compra de verdade chegar. Confira o evento de origem, o evento da Meta escolhido pela regra, o valor e se veio com `fbc`.',
-        onde: 'Integrações → Caixa de entrada.',
+        onde: 'Disparo automático → aba Caixa de entrada.',
       },
       {
         id: 'ligar',
@@ -257,7 +398,7 @@ export const TOPICOS: Topico[] = [
         icone: LightningIcon,
         oQue:
           'Preencha o Código de teste da marca, depois mude a regra de `purchase_approved` para Automático. A próxima compra dispara sozinha e aparece só no Testar eventos.',
-        onde: 'Pixel e token → Código de teste; Integrações → aba Regras.',
+        onde: 'Pixel e token → Código de teste; depois Disparo automático → aba Regras.',
       },
       {
         id: 'go-live',

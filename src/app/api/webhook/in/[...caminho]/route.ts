@@ -4,9 +4,18 @@ import { processarWebhook } from '@/lib/webhook-handler';
 export const dynamic = 'force-dynamic';
 
 /**
- * Recebimento com o segredo no caminho da URL.
+ * Recebimento com o segredo no caminho da URL. Duas formas, as duas valem para
+ * sempre — a de um segmento esta cadastrada no xWinner AGORA, entregando venda:
  *
  *   POST /api/webhook/in/<segredo>
+ *   POST /api/webhook/in/<rotulo>/<segredo>
+ *
+ * O segredo e SEMPRE o ultimo segmento, e o rotulo e so apelido legivel: quem
+ * autentica e o segredo, comparado em tempo constante no handler. Rotulo
+ * diferente do configurado nao recusa nada; vira aviso na caixa de entrada.
+ *
+ * E uma rota catch-all, e nao um `[segredo]` fixo, porque duas rotas dinamicas
+ * no mesmo nivel (`[segredo]` e `[...caminho]`) nao coexistem no App Router.
  *
  * Existe porque o backoffice do xWinner so oferece o campo "URL (https)" ao
  * cadastrar um endpoint de saida: nao ha onde colocar um header.
@@ -33,10 +42,23 @@ export async function OPTIONS() {
 /** No Next 16 `params` e uma Promise e precisa de await. */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ segredo: string }> }
+  { params }: { params: Promise<{ caminho: string[] }> }
 ) {
-  const { segredo } = await params;
-  const r = await processarWebhook(request, segredo);
+  const { caminho } = await params;
+  const partes = caminho ?? [];
+
+  // Mais de dois segmentos nao e forma valida. Responde igualzinho a segredo
+  // errado — de proposito: quem sonda a URL nao aprende nada com a diferenca.
+  if (partes.length < 1 || partes.length > 2) {
+    const r = NextResponse.json({ erro: 'Segredo inválido no caminho da URL.' }, { status: 401 });
+    for (const [k, v] of Object.entries(CORS)) r.headers.set(k, v);
+    return r;
+  }
+
+  const segredo = partes[partes.length - 1];
+  const rotulo = partes.length === 2 ? partes[0] : undefined;
+
+  const r = await processarWebhook(request, segredo, rotulo);
   for (const [k, v] of Object.entries(CORS)) r.headers.set(k, v);
   return r;
 }

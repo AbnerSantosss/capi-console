@@ -62,13 +62,13 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
     >
       <Command
         label="Paleta de comandos"
-        className="w-full max-w-lg overflow-hidden rounded-dialog border border-line-strong bg-surface-3 shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-dialog border border-line-control bg-surface-3 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <Command.Input
           autoFocus
           placeholder="Buscar um comando…"
-          className="w-full border-b border-line bg-transparent px-4 py-3.5 text-body text-fg-body outline-none placeholder:text-fg-disabled"
+          className="w-full border-b border-line-control bg-transparent px-4 py-3.5 text-body text-fg-body outline-none placeholder:text-fg-muted"
         />
 
         <Command.List className="max-h-80 overflow-y-auto p-2">
@@ -168,7 +168,10 @@ function Item({
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex cursor-pointer items-center gap-2.5 rounded-control px-3 py-2.5 text-body text-fg-body data-[selected=true]:bg-surface-2 data-[selected=true]:text-fg-strong"
+      // A linha ativa era `bg-surface-2`: 1.13:1 e MAIS escura que o fundo da
+      // paleta — descendo com as setas não dava para ver onde se estava. Quem
+      // cumpre os 3:1 de §1.4.11 é a barra azul; o fill translúcido só ajuda.
+      className="flex cursor-pointer items-center gap-2.5 rounded-control border-l-2 border-transparent px-3 py-2.5 text-body text-fg-body data-[selected=true]:border-accent-text data-[selected=true]:bg-accent-text/15 data-[selected=true]:text-fg-strong"
     >
       <Icone className="size-4 text-fg-muted" aria-hidden />
       {children}

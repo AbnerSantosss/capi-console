@@ -17,6 +17,7 @@ import { Field, Callout, StatusDot } from '@/components/common/primitives';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { pedir } from '@/lib/cliente-api';
+import { motivoDaRegraIgnorar, parMeta } from './eventos-legiveis';
 import {
   Accordion,
   AccordionContent,
@@ -132,10 +133,13 @@ export function RulesSection({
   const visiveis = regras
     .map((regra, indice) => ({ regra, indice }))
     .filter(({ regra }) => {
+      // Busca também pelo rótulo em português: quem opera procura por "compra",
+      // não por "Purchase".
       const correspondeBusca =
         !termo ||
         regra.eventoOrigem.toLocaleLowerCase('pt-BR').includes(termo) ||
-        regra.eventoMeta.toLocaleLowerCase('pt-BR').includes(termo);
+        regra.eventoMeta.toLocaleLowerCase('pt-BR').includes(termo) ||
+        (parMeta(regra.eventoMeta)?.pt ?? '').toLocaleLowerCase('pt-BR').includes(termo);
       const correspondeFiltro =
         filtro === 'todas'
           ? true
@@ -182,7 +186,7 @@ export function RulesSection({
             <Input
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar evento da plataforma ou da Meta"
+              placeholder="Buscar por purchase_approved, Purchase ou compra"
               className="w-full pl-9"
             />
           </label>
@@ -249,10 +253,16 @@ export function RulesSection({
             r.eventoOrigem.trim() !== '' &&
             r.eventoOrigem !== '*' &&
             !NOMES_CATALOGO.includes(r.eventoOrigem);
-          const personalizado =
-            r.modo !== 'ignorar' &&
-            r.eventoMeta !== '' &&
-            !EVENTOS_META.some((e) => e.value === r.eventoMeta);
+          const par = r.modo === 'ignorar' ? null : parMeta(r.eventoMeta);
+          const personalizado = r.modo !== 'ignorar' && r.eventoMeta !== '' && par?.padrao === false;
+          // O par só faz sentido dito por inteiro: nome do xWinner, nome técnico
+          // que aparece no Gerenciador e a tradução do que aquilo significa.
+          const explicacao =
+            r.modo === 'ignorar'
+              ? motivoDaRegraIgnorar(r.eventoOrigem)
+              : par
+                ? par.descricao
+                : 'Sem evento da Meta escolhido: nada seria enviado.';
 
           return (
             <AccordionItem
@@ -261,20 +271,36 @@ export function RulesSection({
               className="overflow-hidden rounded-xl border border-line-strong bg-surface-2/55 last:border-b"
             >
               <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
-                <span className="flex min-w-0 flex-1 flex-col gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
-                  <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
-                    {r.ativo ? 'Ativa' : 'Desativada'}
-                  </StatusDot>
-                  <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
-                    {r.eventoOrigem || 'Nova regra'}
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5 pr-3 text-left">
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
+                      {r.ativo ? 'Ativa' : 'Desativada'}
+                    </StatusDot>
+                    <span className="text-micro text-fg-muted uppercase">xWinner</span>
+                    <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
+                      {r.eventoOrigem || 'Nova regra'}
+                    </span>
+                    <span className="text-fg-disabled" aria-hidden>
+                      →
+                    </span>
+                    {par ? (
+                      <>
+                        <span className="text-micro text-fg-muted uppercase">Meta</span>
+                        <span className="text-label font-semibold text-fg-strong">{par.pt}</span>
+                        <span className="break-words font-mono text-caption text-fg-body">
+                          {par.tecnico}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-label font-semibold text-fg-muted">
+                        {r.modo === 'ignorar' ? 'Não enviar' : 'Sem evento da Meta escolhido'}
+                      </span>
+                    )}
+                    <span className="w-fit rounded-full border border-line px-2 py-0.5 text-micro font-semibold text-fg-muted uppercase">
+                      {MODOS.find((m) => m.valor === r.modo)?.rotulo}
+                    </span>
                   </span>
-                  <span className="hidden text-fg-disabled sm:inline" aria-hidden>→</span>
-                  <span className="break-words font-mono text-caption text-fg-body">
-                    {r.modo === 'ignorar' ? 'Ignorar' : r.eventoMeta || 'Sem evento Meta'}
-                  </span>
-                  <span className="w-fit rounded-full border border-line px-2 py-0.5 text-micro font-semibold text-fg-muted uppercase">
-                    {MODOS.find((m) => m.valor === r.modo)?.rotulo}
-                  </span>
+                  <span className="text-caption font-normal text-fg-muted">{explicacao}</span>
                 </span>
               </AccordionTrigger>
               <AccordionContent className="border-t border-line px-4 pt-4 pb-4">
@@ -303,11 +329,11 @@ export function RulesSection({
                 <div className="grid gap-4 lg:grid-cols-3">
                   <Field
                     id={`origem-${r.id}`}
-                    label="Evento da plataforma"
+                    label="Nome do evento no xWinner"
                     helper={
                       foraDoCatalogo
                         ? 'Nome fora do catálogo conhecido do xWinner.'
-                        : 'Nome técnico exato. Use * para qualquer evento sem regra própria.'
+                        : 'Nome técnico exato, como a plataforma manda. Use * para qualquer evento sem regra própria.'
                     }
                   >
                     <Input
@@ -322,13 +348,15 @@ export function RulesSection({
 
                   <Field
                     id={`meta-${r.id}`}
-                    label="Evento da Meta"
+                    label="Vira qual evento padrão da Meta"
                     helper={
                       r.modo === 'ignorar'
-                        ? 'Não se aplica: esta regra ignora o evento.'
+                        ? 'Não se aplica: esta regra não envia nada à Meta.'
                         : personalizado
-                          ? 'Evento personalizado (fora dos padrões da Meta).'
-                          : undefined
+                          ? 'Fora dos padrões da Meta: vira evento personalizado e não otimiza campanha.'
+                          : par
+                            ? `No Gerenciador de Eventos aparece como ${par.tecnico}.`
+                            : undefined
                     }
                   >
                     <Select
@@ -336,22 +364,42 @@ export function RulesSection({
                       onValueChange={(v) => v && trocar(i, { eventoMeta: String(v) })}
                     >
                       <SelectTrigger id={`meta-${r.id}`} className="w-full">
-                        <span className="font-mono text-fg-strong">
-                          {r.modo === 'ignorar' ? '—' : r.eventoMeta || 'escolher'}
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          {r.modo === 'ignorar' ? (
+                            <span className="text-fg-muted">— não envia</span>
+                          ) : par ? (
+                            <>
+                              <span className="truncate text-fg-strong">{par.pt}</span>
+                              <span className="font-mono text-caption text-fg-muted">
+                                {par.tecnico}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-fg-muted">escolher</span>
+                          )}
                         </span>
                       </SelectTrigger>
                       <SelectContent className="max-h-80">
                         {EVENTOS_META.filter((e) => e.value !== 'Custom').map((e) => (
                           <SelectItem key={e.value} value={e.value}>
-                            <span className="flex items-center gap-2">
-                              <e.icon className="size-4 text-fg-muted" aria-hidden />
-                              <span className="font-mono">{e.label}</span>
+                            <span className="flex min-w-0 items-start gap-2">
+                              <e.icon className="mt-0.5 size-4 shrink-0 text-fg-muted" aria-hidden />
+                              <span className="flex min-w-0 flex-col">
+                                <span className="text-label font-medium text-fg-body">
+                                  {e.rotuloPt}{' '}
+                                  <span className="font-mono text-caption text-fg-muted">
+                                    {e.value}
+                                  </span>
+                                </span>
+                                <span className="text-caption text-fg-muted">
+                                  {'somenteManual' in e && e.somenteManual
+                                    ? 'O xWinner não manda este evento hoje — só para uso manual.'
+                                    : e.descricao}
+                                </span>
+                              </span>
                             </span>
                           </SelectItem>
                         ))}
-                        <SelectItem value="Subscribe">
-                          <span className="font-mono">Subscribe</span>
-                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>

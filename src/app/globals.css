@@ -23,20 +23,36 @@
   --surface-0: #0a0e14; /* fundo do app                                    */
   --surface-1: #11161f; /* painel / card                                   */
   --surface-2: #171e29; /* input, cabeçalho de accordion, elemento elevado */
-  --surface-3: #1f2836; /* popover / dialog / tooltip                      */
 
-  /* --- Bordas ----------------------------------------------------------- */
-  --border-subtle: #232c3b; /* divisórias internas            1.29 s/ s1   */
-  --border-default: #3a4859; /* contorno de painel             1.94 s/ s1   */
-  --border-control: #5c6d85; /* input/select/botão outline  3.44 ✅ WCAG   */
-  --border-focus: #4da6ff; /* anel de foco                   7.09          */
+  /* Superfície ÚNICA de tudo que flutua por cima da página: dialog, popover,
+     select, tooltip, paleta de comandos, toast. É mais clara que o painel de
+     propósito, mas o fill sozinho quase não separa — 1.22 s/ surface-1 e
+     1.30 s/ surface-0. Quem separa é a borda: `border-line-control` dá
+     3.18 s/ esta superfície e 3.85 contra a página escurecida pelo overlay
+     preto a 60% (#040608). Por isso NÃO existe e não deve voltar a existir
+     paleta local de modal: quem flutua usa --surface-3 + --border-control.   */
+  --surface-3: #1f2836; /* popover / dialog / tooltip / paleta             */
 
-  /* --- Texto ------------------------------------------------------------ */
-  --fg-strong: #f4f7fb; /* títulos, valores           16.87 s/ s1         */
-  --fg-body: #c9d4e3; /* corpo, rótulos             12.09 s/ s1         */
-  --fg-muted: #93a1b5; /* helper, legendas            6.91 s/ s1         */
-  --fg-disabled: #6b7a90; /* SÓ desabilitado/ornamento   4.15 — não use
-                              para conteúdo                                */
+  /* --- Bordas -----------------------------------------------------------
+     Regra: todo LIMITE que o operador precisa enxergar (contorno de controle,
+     borda de camada flutuante, régua de rodapé de modal, cartão clicável) usa
+     --border-control, o único que cruza 3:1 em todas as superfícies (WCAG 2.2
+     §1.4.11). --border-subtle e --border-default são ornamento dentro de uma
+     superfície já delimitada — nunca limite de componente.                   */
+  --border-subtle: #232c3b; /* ornamento          1.29 s0 · 1.13 s3        */
+  --border-default: #4a5a70; /* divisória visível  2.58 s1 · 2.11 s3        */
+  --border-control: #647592; /* limite de componente
+                                4.15 s0 · 3.89 s1 · 3.59 s2 · 3.18 s3 ✅    */
+  --border-focus: #4da6ff; /* anel de foco       7.09 s1 · 5.80 s3 ✅      */
+
+  /* --- Texto (razões medidas sobre painel s1 e sobre a camada flutuante s3) */
+  --fg-strong: #f4f7fb; /* títulos, valores      16.87 s1 · 13.81 s3      */
+  --fg-body: #c9d4e3; /* corpo, rótulos        12.09 s1 ·  9.90 s3      */
+  --fg-muted: #93a1b5; /* helper, legendas, placeholder
+                               6.91 s1 ·  5.66 s3 ✅                      */
+  --fg-disabled: #6b7a90; /* SÓ desabilitado/ornamento   4.15 s1 · 3.40 s3
+                              — reprova como conteúdo em QUALQUER
+                              superfície; placeholder usa --fg-muted       */
 
   /* --- Acento (azul oficial da Meta) ------------------------------------ */
   --accent-fill: #0064e0; /* fundo do botão primário — branco = 5.39 ✅   */

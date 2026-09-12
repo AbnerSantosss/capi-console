@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+import type { ClassificacaoEvento, MotivoIgnorar } from './parser';
+
 /**
  * Caixa de entrada de webhooks.
  *
@@ -52,6 +54,23 @@ export interface ItemInbox {
   modo?: 'auto' | 'fila' | 'ignorar';
   /** false quando o nome do evento nao esta no catalogo conhecido. */
   conhecido?: boolean;
+  /* --- campos de leitura: explicam a decisao, nao mudam roteamento nenhum --- */
+  /** Como o parser classificou o nome do evento. */
+  classificacao?: ClassificacaoEvento;
+  /** Por que nada foi enviado. Separa 'regra' de 'sem equivalente' e de 'teste'. */
+  motivoIgnorar?: MotivoIgnorar;
+  /** true para o botao "Testar" da plataforma (ping): entrega OK, nada a enviar. */
+  testePlataforma?: boolean;
+  /** true quando o payload e de teste da equipe (cupom de R$ 0,01, @example.com). */
+  testeInterno?: boolean;
+  /** Formato do payload reconhecido: A (xWinner), B (gateway) ou outro. */
+  formato?: 'A' | 'B' | 'outro';
+  /** Apelido que veio na URL. null = chegou pela URL antiga, de um segmento so. */
+  rotuloRecebido?: string | null;
+  /** true quando o apelido da URL difere do configurado. Nunca recusa a entrega. */
+  rotuloDivergente?: boolean;
+  /** Palpite da heuristica para nome novo. Texto de tela: nao e disparavel. */
+  eventoMetaSugerido?: string;
   /** Um resultado por pixel, preenchido depois do disparo. */
   resultados?: unknown[];
 }
@@ -67,6 +86,12 @@ export function assinar(fn: Ouvinte): () => void {
   return () => ouvintes.delete(fn);
 }
 
+/**
+ * Avisa TODOS os ouvintes do SSE, sem filtro nenhum: item ignorado, teste da
+ * plataforma e nome desconhecido tambem sobem para a tela. O operador pediu
+ * para ver tudo o que chega — esconder o ignorado e o que faz parecer que o
+ * canal morreu.
+ */
 function avisar(item: ItemInbox, tipo: 'novo' | 'atualizado') {
   for (const fn of ouvintes) {
     try {
@@ -137,11 +162,14 @@ export async function registrarEntrada(
 ): Promise<ItemInbox> {
   await carregarDoDisco();
 
+  // Espalha primeiro e deriva depois: com `...entrada` no fim, um chamador que
+  // passe `status: undefined` explicitamente apagava o padrao e gravava item sem
+  // status — que a tela nao sabe pintar.
   const item: ItemInbox = {
+    ...entrada,
     id: crypto.randomUUID(),
     recebidoEm: new Date().toISOString(),
     status: entrada.status ?? 'novo',
-    ...entrada,
   };
 
   memoria.push(item);

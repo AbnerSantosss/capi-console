@@ -35,6 +35,9 @@ const LIVRES = [
   /^\/api\/sessao\/dev-admin$/, // atalho de dev — remover antes de subir para produção
 ];
 
+/** Stream SSE da caixa de entrada: precisa de sessão, mas não pode ser comprimido. */
+const SSE = /^\/api\/webhook\/stream$/;
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (LIVRES.some((r) => r.test(pathname))) return NextResponse.next();
@@ -49,7 +52,15 @@ export async function proxy(req: NextRequest) {
   const token = req.cookies.get(COOKIE_SESSAO)?.value;
   if (verificarSessao(token)) {
     const resposta = NextResponse.next();
-    resposta.headers.set('Cache-Control', 'private, no-store');
+    // `no-transform` é obrigatório no SSE: sem ele o middleware `compression` do
+    // Next volta a comprimir o stream, o gzip junta bytes até encher o buffer e
+    // o "tempo real" chega em blocos. A rota já manda o cabeçalho certo, mas
+    // este set aqui sobrescreve a resposta inteira — então ele precisa manter o
+    // no-transform de pé em vez de apagá-lo.
+    resposta.headers.set(
+      'Cache-Control',
+      SSE.test(pathname) ? 'private, no-store, no-transform' : 'private, no-store'
+    );
     return resposta;
   }
 

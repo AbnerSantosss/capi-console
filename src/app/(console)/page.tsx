@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, Send } from 'lucide-react';
+import { BookOpen, Send, Target } from 'lucide-react';
 
 import { SourceSection } from '@/components/event/SourceSection';
 import { TransactionSection } from '@/components/event/TransactionSection';
@@ -16,6 +16,7 @@ import {
 import { ResultPanel } from '@/components/dispatch/ResultPanel';
 import { ErrorSummary } from '@/components/common/ErrorSummary';
 import { Stepper } from '@/components/common/Stepper';
+import { Section } from '@/components/common/primitives';
 import { BrandDialog } from '@/components/brand/BrandDialog';
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EntraESai, Entrada } from '@/components/common/motion';
@@ -50,7 +51,7 @@ export default function Home() {
     <>
       <main className={consoleStyles.page}>
         <ConsolePageHeader
-          eyebrow="Operação assistida"
+          eyebrow="Você monta e envia"
           title="Disparo manual"
           description="Prepare os dados, confira o pixel e envie o evento à Meta."
           icon={Send}
@@ -86,47 +87,33 @@ export default function Home() {
           </div>
 
           {/* ---- Etapa 4: conferir e disparar ---- */}
-          <aside
-            id="secao-disparo"
-            aria-labelledby="secao-disparo-titulo"
-            className={consoleStyles.reviewColumn}
-          >
-            {/* Cabecalho igual ao das secoes da esquerda: sem ele, a coluna
-                parecia enfeite e o botao principal ficava solto no ar. */}
-            <div className="flex items-center gap-3 rounded-xl border border-line-strong bg-surface-1/95 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.14)] sm:p-6">
-              <span
-                aria-hidden
-                className="flex size-6 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-mono text-caption font-semibold text-fg-muted"
-              >
-                4
-              </span>
-              <div className="min-w-0">
-                <h2
-                  id="secao-disparo-titulo"
-                  className="text-title font-semibold text-fg-strong"
-                >
-                  Conferir e disparar
-                </h2>
-                <p className="mt-0.5 text-caption text-fg-muted">
-                  Para onde vai e o que a Meta vai receber.
-                </p>
+          <div className={consoleStyles.reviewColumn}>
+            {/* Mesmo cabecalho das secoes da esquerda, agora pelo proprio
+                Section: o titulo escrito a mao duplicava a peca e saia do
+                passo a passo. O id fica aqui porque e o alvo do Stepper. */}
+            <Section
+              id="secao-disparo"
+              step={4}
+              icon={Target}
+              variant="card"
+              title="Conferir e disparar"
+              description="Para onde vai e o que a Meta vai receber."
+            >
+              <Entrada atraso={0.06}>
+                <QualityPanel />
+              </Entrada>
+              <div className="min-[1200px]:hidden">
+                <DestinationSummary onAbrirMarcas={() => setMarcasAbertas(true)} />
               </div>
-            </div>
-
-            <Entrada atraso={0.06}>
-              <QualityPanel />
-            </Entrada>
-            <div className="min-[1200px]:hidden">
-              <DestinationSummary onAbrirMarcas={() => setMarcasAbertas(true)} />
-            </div>
-            {/* Abaixo de xl a ação vive na barra fixa, não aqui. */}
-            <div className="hidden flex-col gap-4 min-[1200px]:flex">
-              <DispatchPanel
-                onResult={aoReceberResultado}
-                onAbrirMarcas={() => setMarcasAbertas(true)}
-              />
-            </div>
-          </aside>
+              {/* Abaixo de xl a ação vive na barra fixa, não aqui. */}
+              <div className="hidden flex-col gap-4 min-[1200px]:flex">
+                <DispatchPanel
+                  onResult={aoReceberResultado}
+                  onAbrirMarcas={() => setMarcasAbertas(true)}
+                />
+              </div>
+            </Section>
+          </div>
         </div>
       </main>
 

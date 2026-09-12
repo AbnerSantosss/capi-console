@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listarMarcas } from '@/lib/config-store';
+import { tentativasComSegredoInvalido } from '@/lib/webhook-handler';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,10 @@ export async function GET() {
     servico: 'capi-console',
     versao: process.env.APP_VERSION || 'dev',
     uptimeS: Math.floor((Date.now() - inicio) / 1000),
+    // Quantas vezes alguem bateu na porta do webhook com o segredo errado.
+    // Numero, nunca o segredo tentado. Zero e o normal; subindo, alguem esta
+    // varrendo a URL — e a contagem zera a cada restart do container.
+    segredosRecusados: tentativasComSegredoInvalido(),
     marcas: marcas.map((m) => ({
       id: m.id,
       pixelId: m.pixelId,

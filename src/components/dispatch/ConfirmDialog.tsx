@@ -54,19 +54,19 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
+          <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="size-5 text-warning" aria-hidden />
             Confirmar envio real
           </DialogTitle>
-          <DialogDescription className="text-caption text-fg-muted">
+          <DialogDescription>
             Não há código de teste ativo nesta marca.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <dl className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-2 p-3 text-caption">
+          <dl className="flex flex-col gap-2 rounded-control border border-line-control bg-surface-2 p-3 text-caption">
             <div className="flex justify-between gap-3">
               <dt className="text-fg-muted">Evento</dt>
               <dd className="font-mono font-semibold text-fg-strong">
@@ -118,7 +118,7 @@ export function ConfirmDialog({
         </div>
 
         <DialogFooter className="flex-row justify-end gap-2">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button onClick={onConfirmar}>

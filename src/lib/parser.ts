@@ -1,15 +1,47 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// Import de TIPO apenas: some na compilacao, entao parser.ts continua rodando
+// no Node puro (scripts/parser-eventos.test.mjs) sem carregar lucide-react.
+// O ganho e o `tsc --noEmit` quebrar se alguem escrever aqui um nome de evento
+// que nao existe em EVENTOS_META.
+import type { NomeEventoMetaPadrao } from './meta-events';
+
+/**
+ * Tres estados, sem ambiguidade:
+ *   'mapeado'          — nome do catalogo COM evento padrao da Meta.
+ *   'sem-equivalente'  — nome do catalogo que a Meta nao tem como representar
+ *                        (abandono, estorno, chargeback, financeiro interno).
+ *   'teste-plataforma' — ping/test do proprio xWinner. Entrega OK, nada a enviar.
+ *   'desconhecido'     — nome novo, fora do catalogo. Nunca vira conversao sozinho.
+ *   'sem-evento'       — o payload nem trouxe nome de evento.
+ */
+export type ClassificacaoEvento =
+  | 'mapeado'
+  | 'sem-equivalente'
+  | 'teste-plataforma'
+  | 'desconhecido'
+  | 'sem-evento';
+
+/** Por que este item nao vai para a Meta. 'regra' e decidido fora do parser. */
+export type MotivoIgnorar = 'regra' | 'sem-equivalente-meta' | 'teste-plataforma' | 'sem-regra' | 'nao-lido';
+
 interface ParseResult {
   fields: Record<string, string | boolean>;
   preenchidos: string[];
-  eventName?: string;
+  /** SO e preenchido quando o nome esta na tabela e tem equivalente padrao. */
+  eventName?: NomeEventoMetaPadrao;
+  /** Palpite da heuristica para nome novo. Nunca e disparavel: e texto de tela. */
+  eventoMetaSugerido?: NomeEventoMetaPadrao;
   /** Nome original do evento na plataforma (ex.: purchase_approved). */
   eventoOrigem?: string;
   /** true quando eventoOrigem esta na tabela MAPA_EVENTOS_ORIGEM. */
   eventoConhecido: boolean;
-  /** true quando a tabela manda ignorar (abandono, estorno, etc.). */
+  /** true quando nada deve ser enviado a Meta por causa deste nome. */
   ignorar: boolean;
+  classificacao: ClassificacaoEvento;
+  motivoIgnorar?: MotivoIgnorar;
+  /** true para o botao "Testar" da plataforma (ping) e afins. */
+  testePlataforma: boolean;
 }
 
 /**
@@ -18,7 +50,7 @@ interface ParseResult {
  * Fonte: catalogo de 24 eventos do backoffice xWinner (03/09/2026) + eventos do
  * gateway (Checkout Platform) vistos em /backoffice/webhooks.
  */
-export const MAPA_EVENTOS_ORIGEM: Record<string, string | null> = {
+export const MAPA_EVENTOS_ORIGEM: Record<string, NomeEventoMetaPadrao | null> = {
   // --- xWinner, webhook de saida (formato A, version 1.0) ---
   user_registered: 'CompleteRegistration',
   onboarding_completed: null,
@@ -59,28 +91,89 @@ export const MAPA_EVENTOS_ORIGEM: Record<string, string | null> = {
   begin_checkout: 'InitiateCheckout',
   pre_checkout_opened: 'Lead',
   pre_checkout_abandoned: null,
+  // --- testes da propria plataforma: entrega OK, NUNCA vao para a Meta ---
+  // O botao "Testar" do backoffice do xWinner manda `ping` (entrega comprovada
+  // em 12/09/2026). Estar aqui e o que separa "teste de conexao, tudo certo" de
+  // "nome fora do catalogo", que assustava o operador sem motivo.
+  ping: null,
+  test: null,
+  'webhook.test': null,
+  'endpoint.test': null,
 };
 
-const PALAVRAS_NEGATIVAS = ['abandon', 'expired', 'expir', 'refund', 'estorn', 'chargeback', 'cancel', 'reversed', 'withdraw', 'commission', 'affiliate'];
+/** Nomes que sao teste da plataforma, nao evento de negocio. */
+export const EVENTOS_TESTE_PLATAFORMA: ReadonlySet<string> = new Set([
+  'ping',
+  'test',
+  'webhook.test',
+  'endpoint.test',
+]);
 
 /**
- * Devolve { eventoMeta, conhecido }. conhecido=false significa que o nome nao
- * esta na tabela e caiu na heuristica — a UI deve destacar isso.
+ * Palavras que proibem qualquer palpite de conversao. Ampliada depois da
+ * auditoria: sem 'renew'/'partial'/'pending', um `subscription_renewed_paid`
+ * casava com 'paid' e virava Purchase de uma venda que nunca existiu.
  */
-export function mapearEventoOrigem(nome: string): { eventoMeta: string | null; conhecido: boolean } {
+const PALAVRAS_NEGATIVAS = [
+  'abandon', 'expired', 'expir', 'refund', 'estorn', 'chargeback', 'cancel', 'reversed',
+  'withdraw', 'commission', 'affiliate', 'renew', 'renov', 'declin', 'denied', 'fail',
+  'pending', 'dispute', 'partial', 'reembols', 'recus',
+];
+
+/** Palavras que indicam teste/simulacao mesmo em nome novo, fora da tabela. */
+const PALAVRAS_TESTE = ['ping', 'test', 'teste', 'sandbox', 'simul', 'dry-run', 'dryrun'];
+
+export interface ResultadoMapeamento {
+  /** Evento padrao da Meta. So sai da TABELA — a heuristica nunca preenche. */
+  eventoMeta: NomeEventoMetaPadrao | null;
+  /** true quando o nome esta em MAPA_EVENTOS_ORIGEM. */
+  conhecido: boolean;
+  classificacao: ClassificacaoEvento;
+  testePlataforma: boolean;
+  /** Palpite para nome novo. Vai para a tela, nunca para a Meta. */
+  sugestao?: NomeEventoMetaPadrao;
+}
+
+/**
+ * Classifica o nome do evento de origem.
+ *
+ * Regra de ouro: nome que nao esta na TABELA nao produz evento da Meta. A
+ * heuristica so escreve `sugestao`, que a tela mostra como "parece um X — crie
+ * a regra". Antes ela preenchia o proprio evento e um clique humano podia
+ * mandar para a Meta uma compra que nunca aconteceu.
+ */
+export function mapearEventoOrigem(nome: string): ResultadoMapeamento {
   const n = String(nome || '').trim();
-  if (!n) return { eventoMeta: null, conhecido: false };
+  if (!n) return { eventoMeta: null, conhecido: false, classificacao: 'sem-evento', testePlataforma: false };
+
   if (Object.prototype.hasOwnProperty.call(MAPA_EVENTOS_ORIGEM, n)) {
-    return { eventoMeta: MAPA_EVENTOS_ORIGEM[n], conhecido: true };
+    const alvo = MAPA_EVENTOS_ORIGEM[n];
+    const teste = EVENTOS_TESTE_PLATAFORMA.has(n);
+    return {
+      eventoMeta: alvo,
+      conhecido: true,
+      testePlataforma: teste,
+      classificacao: teste ? 'teste-plataforma' : alvo ? 'mapeado' : 'sem-equivalente',
+    };
   }
+
   const l = n.toLowerCase();
-  if (PALAVRAS_NEGATIVAS.some((p) => l.includes(p))) return { eventoMeta: null, conhecido: false };
-  if (l.includes('completed') || l.includes('approved') || l.includes('paid') || l === 'purchase') return { eventoMeta: 'Purchase', conhecido: false };
-  if (l.includes('pre.checkout') || l.includes('pre_checkout') || l.includes('precheckout') || l.includes('lead')) return { eventoMeta: 'Lead', conhecido: false };
-  if (l.includes('pix') || l.includes('payment_generated') || l.includes('card')) return { eventoMeta: 'AddPaymentInfo', conhecido: false };
-  if (l.includes('checkout')) return { eventoMeta: 'InitiateCheckout', conhecido: false };
-  if (l.includes('regist')) return { eventoMeta: 'CompleteRegistration', conhecido: false };
-  return { eventoMeta: null, conhecido: false };
+  const base = { eventoMeta: null, conhecido: false } as const;
+
+  if (PALAVRAS_TESTE.some((p) => l.includes(p))) {
+    return { ...base, classificacao: 'teste-plataforma', testePlataforma: true };
+  }
+  if (PALAVRAS_NEGATIVAS.some((p) => l.includes(p))) {
+    return { ...base, classificacao: 'desconhecido', testePlataforma: false };
+  }
+
+  const desconhecido = { ...base, classificacao: 'desconhecido', testePlataforma: false } as const;
+  if (l.includes('completed') || l.includes('approved') || l.includes('paid') || l === 'purchase') return { ...desconhecido, sugestao: 'Purchase' };
+  if (l.includes('pre.checkout') || l.includes('pre_checkout') || l.includes('precheckout') || l.includes('lead')) return { ...desconhecido, sugestao: 'Lead' };
+  if (l.includes('pix') || l.includes('payment_generated') || l.includes('card')) return { ...desconhecido, sugestao: 'AddPaymentInfo' };
+  if (l.includes('checkout')) return { ...desconhecido, sugestao: 'InitiateCheckout' };
+  if (l.includes('regist')) return { ...desconhecido, sugestao: 'CompleteRegistration' };
+  return desconhecido;
 }
 
 /** Regra 1 e 4 do CLAUDE.md + payload de teste do xWinner: nunca vai para a Meta. */
@@ -154,7 +247,7 @@ export function parseWebhook(bruto: string): ParseResult {
   const raiz = encontrarRaiz(j);
   const fields: Record<string, string | boolean> = {};
   const preenchidos: string[] = [];
-  let eventName: string | undefined;
+  let eventName: NomeEventoMetaPadrao | undefined;
 
   // A classificacao vem da tabela MAPA_EVENTOS_ORIGEM (fonte unica); a heuristica
   // e so fallback para nomes que a plataforma criar depois. Sem a tabela,
@@ -165,12 +258,32 @@ export function parseWebhook(bruto: string): ParseResult {
   const mapa = mapearEventoOrigem(evName);
   const eventoOrigem = evName || undefined;
   const eventoConhecido = mapa.conhecido;
+  const classificacao = mapa.classificacao;
+  const testePlataforma = mapa.testePlataforma;
+  const eventoMetaSugerido = mapa.sugestao;
+  // 'desconhecido' tambem entra como ignorar: nome novo nao tem caminho
+  // automatico para a Meta, so ganha um depois que o operador criar a regra.
   const ignorar = Boolean(evName) && mapa.eventoMeta === null;
+  const motivoIgnorar: MotivoIgnorar | undefined =
+    classificacao === 'teste-plataforma'
+      ? 'teste-plataforma'
+      : classificacao === 'sem-equivalente'
+        ? 'sem-equivalente-meta'
+        : classificacao === 'desconhecido'
+          ? 'sem-regra'
+          : undefined;
+
   if (mapa.eventoMeta) {
     eventName = mapa.eventoMeta;
-    preenchidos.push(`Evento: ${eventName}${mapa.conhecido ? '' : ' (heurística)'}`);
+    preenchidos.push(`Evento: ${eventName}`);
+  } else if (testePlataforma) {
+    preenchidos.push(`Evento ${evName}: teste da plataforma — entrega OK, nada a enviar`);
+  } else if (classificacao === 'sem-equivalente') {
+    preenchidos.push(`Evento ${evName}: ignorar (a Meta não tem evento padrão equivalente)`);
   } else if (evName) {
-    preenchidos.push(`Evento ${evName}: ignorar (sem equivalente na Meta)`);
+    preenchidos.push(
+      `Evento ${evName}: nome novo, sem regra${eventoMetaSugerido ? ` — parece ${eventoMetaSugerido}` : ''}`
+    );
   }
 
   const lead = (raiz.lead || {}) as any;
@@ -286,5 +399,16 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push('URL de origem');
   }
 
-  return { fields, preenchidos, eventName, eventoOrigem, eventoConhecido, ignorar };
+  return {
+    fields,
+    preenchidos,
+    eventName,
+    eventoMetaSugerido,
+    eventoOrigem,
+    eventoConhecido,
+    ignorar,
+    classificacao,
+    motivoIgnorar,
+    testePlataforma,
+  };
 }

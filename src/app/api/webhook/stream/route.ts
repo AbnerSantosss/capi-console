@@ -1,64 +1,112 @@
-import { assinar, listarEntradas } from '@/lib/inbox';
+import { assinar, listarEntradas, type ItemInbox } from '@/lib/inbox';
 
 export const dynamic = 'force-dynamic';
+/** Resposta longa e viva: nada aqui pode ser guardado nem reaproveitado. */
+export const fetchCache = 'force-no-store';
+
+/**
+ * Preambulo de 2 KB em comentario SSE (linha iniciada por ':' e ignorada pelo
+ * EventSource). Buffer de proxy costuma segurar a resposta ate encher alguns
+ * KB; com o preambulo, o primeiro byte util chega na hora e a tela deixa de
+ * parecer morta na abertura. E cinto e suspensorio junto com o
+ * X-Accel-Buffering: no — o caminho ate aqui passa por tunel e proxy que este
+ * arquivo nao controla.
+ */
+const PREAMBULO = `:${' '.repeat(2048)}\n\n`;
 
 /** SSE: a caixa de entrada se atualiza sem refresh. */
 export async function GET(request: Request) {
   const encoder = new TextEncoder();
-  let cancelarAssinatura: (() => void) | undefined;
-  let bater: ReturnType<typeof setInterval> | undefined;
+  let encerrar = () => {};
 
   const stream = new ReadableStream({
     async start(controller) {
       let fechado = false;
+      // Inicializados aqui e reatribuidos abaixo: encerrar() precisa ve-los.
+      let bater: ReturnType<typeof setInterval> | undefined = undefined;
+      let cancelarAssinatura: (() => void) | undefined = undefined;
 
-      const envia = (evento: string, dados: unknown) => {
+      // Uma so porta de saida, chamada pelo abort, pelo cancel e por falha de
+      // escrita. Antes o intervalo podia continuar batendo numa conexao morta.
+      encerrar = () => {
         if (fechado) return;
-        try {
-          controller.enqueue(
-            encoder.encode(`event: ${evento}\ndata: ${JSON.stringify(dados)}\n\n`)
-          );
-        } catch {
-          fechado = true;
-        }
-      };
-
-      envia('inicial', await listarEntradas(50));
-      // 'entrada' = item novo; 'atualizado' = status/resultado do disparo mudou.
-      cancelarAssinatura = assinar((item, tipo) => envia(tipo === 'novo' ? 'entrada' : 'atualizado', item));
-
-      // heartbeat: mantem a conexao viva atras de proxy
-      bater = setInterval(() => {
-        if (fechado) return;
-        try {
-          controller.enqueue(encoder.encode(': ping\n\n'));
-        } catch {
-          fechado = true;
-        }
-      }, 20000);
-
-      request.signal.addEventListener('abort', () => {
         fechado = true;
         if (bater) clearInterval(bater);
         cancelarAssinatura?.();
         try {
           controller.close();
         } catch {
-          /* ja fechado */
+          /* ja fechado do outro lado */
         }
+      };
+
+      const envia = (evento: string, dados: unknown) => {
+        if (fechado) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${evento}\ndata: ${JSON.stringify(dados)}\n\n`));
+        } catch {
+          encerrar();
+        }
+      };
+
+      try {
+        controller.enqueue(encoder.encode(PREAMBULO));
+      } catch {
+        encerrar();
+        return;
+      }
+
+      // Assina ANTES de ler a lista: item que chega no meio da leitura do disco
+      // cai na fila `pendentes` em vez de sumir — janela curta, mas quem se
+      // perdia nela era justamente a entrega recem-chegada.
+      const pendentes: Array<{ item: ItemInbox; tipo: 'novo' | 'atualizado' }> = [];
+      let inicialEnviada = false;
+      cancelarAssinatura = assinar((item, tipo) => {
+        if (!inicialEnviada) {
+          pendentes.push({ item, tipo });
+          return;
+        }
+        envia(tipo === 'novo' ? 'entrada' : 'atualizado', item);
       });
+
+      let inicial: ItemInbox[] = [];
+      try {
+        inicial = await listarEntradas(50);
+      } catch {
+        /* sem historico legivel: a conexao continua valendo para o que vier */
+      }
+      envia('inicial', inicial);
+      inicialEnviada = true;
+
+      // TODO item sobe para a tela, inclusive ignorado, teste da plataforma e
+      // nome desconhecido: filtrar exibicao e trabalho da interface, nao daqui.
+      const jaNaInicial = new Set(inicial.map((i) => i.id));
+      for (const p of pendentes) {
+        if (p.tipo === 'novo' && jaNaInicial.has(p.item.id)) continue;
+        envia(p.tipo === 'novo' ? 'entrada' : 'atualizado', p.item);
+      }
+      pendentes.length = 0;
+
+      // Pulso nomeado, e nao comentario: o cliente consegue ouvir 'pulso' e
+      // saber que o canal esta vivo, em vez de so supor.
+      bater = setInterval(() => envia('pulso', { em: new Date().toISOString() }), 20_000);
+
+      request.signal.addEventListener('abort', () => encerrar());
     },
     cancel() {
-      if (bater) clearInterval(bater);
-      cancelarAssinatura?.();
+      encerrar();
     },
   });
 
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform faz o Next pular a compressao (o gzip junta bytes e segura
+      // o evento); X-Accel-Buffering desliga o buffer do nginx/tunel na frente.
+      // 'Connection: keep-alive' saiu: e header hop-by-hop, ignorado em HTTP/2
+      // e que a aplicacao nao deve definir.
       'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
   });
 }

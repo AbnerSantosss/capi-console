@@ -101,12 +101,10 @@ export function BrandDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent variant="console" className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="text-heading font-semibold text-fg-strong">
-            Pixels de destino
-          </DialogTitle>
-          <DialogDescription className="text-caption text-fg-muted">
+          <DialogTitle>Pixels de destino</DialogTitle>
+          <DialogDescription>
             Cada marca guarda um Pixel, o token de acesso e o código de teste.
             É para onde o evento vai quando você dispara.
           </DialogDescription>
@@ -124,8 +122,8 @@ export function BrandDialog({ open, onOpenChange }: Props) {
                       className={cn(
                         'flex items-center gap-3 rounded-control border p-3 transition-colors',
                         ativa
-                          ? 'border-accent-text/50 bg-accent-text/8'
-                          : 'border-line-strong bg-surface-2'
+                          ? 'border-accent-text bg-accent-text/10'
+                          : 'border-line-control bg-surface-2'
                       )}
                     >
                       <MetaMark size={18} />
@@ -186,7 +184,7 @@ export function BrandDialog({ open, onOpenChange }: Props) {
                 <Plus className="size-4" aria-hidden />
                 Nova marca
               </Button>
-              <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Fechar
               </Button>
             </DialogFooter>
@@ -308,7 +306,7 @@ export function BrandDialog({ open, onOpenChange }: Props) {
             </div>
 
             <DialogFooter className="flex-row justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditando(null)}>
+              <Button variant="outline" onClick={() => setEditando(null)}>
                 Cancelar
               </Button>
               <Button onClick={salvar} disabled={salvando}>
