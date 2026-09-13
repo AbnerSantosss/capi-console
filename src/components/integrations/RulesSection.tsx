@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from 'lucide-react';
 
@@ -15,10 +15,11 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { Field, Callout, StatusDot } from '@/components/common/primitives';
+import { SeletorDePixel } from '@/components/pixels/SeletorDePixel';
+import { useBrandStore } from '@/stores/useBrandStore';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
-import { pedir } from '@/lib/cliente-api';
 import { motivoDaRegraIgnorar, parMeta } from './eventos-legiveis';
 import {
   Accordion,
@@ -33,14 +34,6 @@ import { cn } from '@/lib/utils';
 // `import type` e apagado na compilacao, entao o `server-only` do modulo nao
 // atravessa para o pacote do cliente.
 import type { ModoRegra, RegraRoteamento } from '@/lib/config-store';
-
-interface MarcaPublica {
-  id: string;
-  nome: string;
-  pixelId: string;
-  temToken: boolean;
-  testCode: string;
-}
 
 const MODOS: { valor: ModoRegra; rotulo: string; ajuda: string }[] = [
   { valor: 'auto', rotulo: 'Automático', ajuda: 'Dispara sozinho, sem revisão humana.' },
@@ -61,16 +54,13 @@ export function RulesSection({
   onSalvar: (regras: RegraRoteamento[]) => Promise<void>;
   salvando: boolean;
 }) {
-  const [marcas, setMarcas] = useState<MarcaPublica[]>([]);
+  // A lista vem do store, nunca de uma leitura propria desta tela (IA-R8):
+  // esta secao e a Caixa de entrada liam a mesma coisa em dois lugares, e duas
+  // copias da lista de Pixel podem divergir dentro da mesma sessao.
+  const marcas = useBrandStore((s) => s.marcas);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<'todas' | ModoRegra | 'desativadas'>('todas');
   const [abertas, setAbertas] = useState<string[]>([]);
-
-  useEffect(() => {
-    pedir<{ marcas: MarcaPublica[] }>('/api/marcas', { cache: 'no-store' })
-      .then((d) => setMarcas(d.marcas ?? []))
-      .catch(() => setMarcas([]));
-  }, []);
 
   const trocar = (i: number, mudanca: Partial<RegraRoteamento>) => {
     const novas = [...regras];
@@ -449,45 +439,12 @@ export function RulesSection({
                 </div>
 
                 {r.modo !== 'ignorar' && (
-                  <fieldset>
-                    <legend className="mb-2 text-label font-medium text-fg-body">
-                      Enviar para os pixels
-                    </legend>
-                    <div className="flex flex-wrap gap-x-5 gap-y-2">
-                      {marcas.length === 0 && (
-                        <span className="text-caption text-fg-muted">
-                          Carregando marcas…
-                        </span>
-                      )}
-                      {marcas.map((m) => (
-                        <label
-                          key={m.id}
-                          className="flex cursor-pointer items-center gap-2 text-caption text-fg-body"
-                        >
-                          <Checkbox
-                            checked={r.marcas.includes(m.id)}
-                            onCheckedChange={(v) =>
-                              trocar(i, {
-                                marcas: v
-                                  ? [...r.marcas, m.id]
-                                  : r.marcas.filter((x) => x !== m.id),
-                              })
-                            }
-                          />
-                          <span>{m.nome}</span>
-                          <span className="font-mono text-caption text-fg-muted">
-                            {m.pixelId || 'sem pixel'}
-                          </span>
-                          {m.testCode?.trim() ? (
-                            <Badge variant="aviso">teste</Badge>
-                          ) : null}
-                          {!m.temToken && (
-                            <Badge variant="perigo">sem token</Badge>
-                          )}
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
+                  <SeletorDePixel
+                    modo="varios"
+                    rotulo="Enviar para os pixels"
+                    valor={r.marcas}
+                    onChange={(ids) => trocar(i, { marcas: ids })}
+                  />
                 )}
               </div>
               </AccordionContent>

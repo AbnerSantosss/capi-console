@@ -5,8 +5,13 @@ import { toast } from 'sonner';
 import { Plus, Target } from 'lucide-react';
 
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
+import { useRegrasDeRoteamento } from '@/hooks/useEstadoAutomatico';
 import { BrandDialog } from '@/components/brand/BrandDialog';
-import { PixelCard } from '@/components/pixels/PixelCard';
+import { CardDePixel } from '@/components/pixels/CardDePixel';
+import {
+  contarRegrasAuto,
+  contarRegrasQueEnviam,
+} from '@/components/pixels/estado-pixel';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import {
   Esqueleto,
@@ -33,10 +38,21 @@ import {
  * mudanca de enfeite: enquanto estava la, nao havia URL para um Pixel, nem
  * como ver o estado de um Pixel sem abrir o modal (IA-1).
  *
- * O dado vem TODO do `useBrandStore` — nao ha um `fetch('/api/marcas')` nesta
- * pagina de proposito (IA-R8). E a mesma lista que o cabecalho e o disparo
- * manual leem, entao trocar o ativo aqui aparece la no mesmo quadro.
+ * O dado de Pixel vem TODO do `useBrandStore` — nao ha um `fetch('/api/marcas')`
+ * nesta pagina de proposito (IA-R8). E a mesma lista que o cabecalho e o
+ * disparo manual leem, entao trocar o ativo aqui aparece la no mesmo quadro.
+ *
+ * As REGRAS sao a segunda leitura desta tela, e ela e obrigatoria por dois
+ * motivos que nao tem outra fonte:
+ *   - o estado 🟡 de 8.2.3 depende de quantas regras em `auto` apontam para o
+ *     Pixel;
+ *   - PX-11 exige que a confirmacao de apagar CONTE as regras afetadas, em vez
+ *     de dizer "pode afetar regras".
+ * Nenhuma rota nova (8.4, 8.A) e nenhuma leitura nova: e LITERALMENTE o mesmo
+ * GET /api/integracoes que o cabecalho ja faz em toda pagina do console, agora
+ * lido inteiro em vez de reduzido a um numero — `useRegrasDeRoteamento()`.
  */
+
 export function PixelsPanel() {
   const marcas = useBrandStore((s) => s.marcas);
   const marcaAtivaId = useBrandStore((s) => s.marcaAtivaId);
@@ -53,6 +69,14 @@ export function PixelsPanel() {
   const [emEdicao, setEmEdicao] = React.useState<MarcaPublica | null>(null);
   const [aApagar, setAApagar] = React.useState<MarcaPublica | null>(null);
   const [apagando, setApagando] = React.useState(false);
+
+  /**
+   * As regras de roteamento, do store compartilhado. `null` enquanto nao se
+   * sabe — e `null` NAO vira zero: PX-11 pede a contagem de verdade, e
+   * "0 regras enviam para ele" quando a leitura falhou seria um numero falso
+   * na hora de apagar.
+   */
+  const regras = useRegrasDeRoteamento();
 
   const fase = useEscadaDeEspera(carregando && !carregado);
 
@@ -74,6 +98,12 @@ export function PixelsPanel() {
       block: 'start',
     });
   }, [carregado]);
+
+  // PX-12 — o foco inicial da confirmacao vai para "Cancelar", nunca para o
+  // botao destrutivo. A ordem do rodape ja poe Cancelar primeiro, mas ordem e
+  // acidente de layout: trocar os dois de lugar amanha nao pode transformar
+  // "Enter sem ler" em um Pixel apagado.
+  const refCancelar = React.useRef<HTMLButtonElement | null>(null);
 
   const abrirNovo = () => {
     setEmEdicao(null);
@@ -132,7 +162,7 @@ export function PixelsPanel() {
           // cartoes da mesma altura dos de verdade.
           <div className="flex flex-col gap-3">
             {[0, 1, 2].map((i) => (
-              <Esqueleto key={i} className="h-[116px] rounded-panel" />
+              <Esqueleto key={i} className="h-[248px] rounded-panel" />
             ))}
           </div>
         )}
@@ -164,20 +194,51 @@ export function PixelsPanel() {
     conteudo = (
       <ul className="flex flex-col gap-3">
         {marcas.map((marca) => (
-          <PixelCard
+          <CardDePixel
             key={marca.id}
             marca={marca}
             ativo={marca.id === marcaAtivaId}
+            // Regras ainda nao lidas contam como zero SO para o estado: o 🟡
+            // ("ligado e nada acontece") e o 🟢 dependem disto, e enquanto o
+            // campo `autoDisparo` nao existir (FASE 6) nenhum dos dois pode
+            // aparecer de qualquer forma — o card para em ⚪ antes de chegar
+            // aqui. Na confirmacao de apagar, onde o numero vira frase, `null`
+            // continua sendo `null`.
+            regrasAuto={regras ? contarRegrasAuto(regras, marca.id) : 0}
             onUsar={() => usar(marca)}
             onEditar={() => abrirEdicao(marca)}
-            // A trava do `default` e de config-store.ts: sem o botao aqui, o
-            // servidor recusaria de todo jeito — e o operador nao levaria um
-            // erro por ter clicado no que a tela ofereceu.
+            // A trava do `default` e de config-store.ts: sem o item de menu
+            // aqui, o servidor recusaria de todo jeito — e o operador nao
+            // levaria um erro por ter clicado no que a tela ofereceu.
             onApagar={marca.id === 'default' ? undefined : () => setAApagar(marca)}
           />
         ))}
       </ul>
     );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* PX-11 — a confirmacao nomeia o Pixel e CONTA as regras afetadas   */
+  /* ---------------------------------------------------------------- */
+
+  const afetadas =
+    aApagar && regras ? contarRegrasQueEnviam(regras, aApagar.id) : null;
+
+  let consequencia: React.ReactNode;
+  if (afetadas === null) {
+    // Sem a lista de regras, a tela diz que nao sabe. Inventar "0 regras" aqui
+    // seria o pior dos mundos: a frase mais tranquilizadora no momento em que
+    // menos se pode garantir.
+    consequencia =
+      'Não foi possível conferir quantas regras enviam para ele — a lista de regras não carregou. As regras que apontarem para este Pixel continuarão existindo, mas ficarão sem destino.';
+  } else if (afetadas === 0) {
+    consequencia =
+      'Nenhuma regra envia para ele. Eventos já enviados não são afetados.';
+  } else if (afetadas === 1) {
+    consequencia =
+      '1 regra envia para ele. Ela continuará existindo, mas ficará sem destino. Eventos já enviados não são afetados.';
+  } else {
+    consequencia = `${afetadas} regras enviam para ele. Elas continuarão existindo, mas ficarão sem destino. Eventos já enviados não são afetados.`;
   }
 
   return (
@@ -207,23 +268,24 @@ export function PixelsPanel() {
           if (!v) setAApagar(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent initialFocus={refCancelar}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Apagar {aApagar?.nome}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Apagar o Pixel &ldquo;{aApagar?.nome}&rdquo;?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              O token de acesso guardado para este Pixel é apagado junto e não
-              volta. Regras e retornos que apontem para ele param de encontrar
-              destino.
+              {consequencia} O token de acesso guardado para este Pixel é
+              apagado junto e não volta.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={apagando} />
+            <AlertDialogCancel ref={refCancelar} disabled={apagando} />
             <AlertDialogAction
               variant="destructive"
               disabled={apagando}
               onClick={() => void confirmarApagar()}
             >
-              {apagando ? 'Apagando…' : 'Apagar'}
+              {apagando ? 'Apagando…' : 'Apagar Pixel'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -15,9 +15,16 @@ import { create } from 'zustand';
 
 import { pedir } from '@/lib/cliente-api';
 import { useBrandStore } from '@/stores/useBrandStore';
-import type { Integracoes } from '@/lib/config-store';
+import type { Integracoes, RegraRoteamento } from '@/lib/config-store';
 
 interface EstadoAuto {
+  /**
+   * As regras de roteamento inteiras. `null` significa NAO SEI — leitura ainda
+   * nao feita, ou feita e falhada. `null` nunca deve virar `[]`: quem conta
+   * regras para dizer um numero ao usuario (PX-11, estado 🟡 de 8.2.3) precisa
+   * saber a diferenca entre "zero regras" e "nao consegui ler".
+   */
+  regras: RegraRoteamento[] | null;
   regrasAuto: number;
   carregado: boolean;
   carregando: boolean;
@@ -25,6 +32,7 @@ interface EstadoAuto {
 }
 
 const useStore = create<EstadoAuto>()((set, get) => ({
+  regras: null,
   regrasAuto: 0,
   carregado: false,
   carregando: false,
@@ -37,17 +45,41 @@ const useStore = create<EstadoAuto>()((set, get) => ({
       });
       const regras = dados.integracoes?.regras ?? [];
       set({
+        regras,
         regrasAuto: regras.filter((r) => r.ativo && r.modo === 'auto').length,
         carregado: true,
       });
     } catch {
       // 401 ja redireciona no cliente-api; outro erro nao pode derrubar o menu.
+      // `regras` fica em null de proposito: quem conta prefere nao dizer numero.
       set({ carregado: true });
     } finally {
       set({ carregando: false });
     }
   },
 }));
+
+/**
+ * As regras de roteamento, lidas UMA vez por sessao de navegacao.
+ *
+ * 🔴 Existe porque a premissa de `08` §8.4 estava errada: o blueprint dizia que
+ * a contagem de regras `auto` por Pixel "ja esta disponivel no cliente". Nao
+ * estava — este store reduzia tudo a um unico numero GLOBAL (`regrasAuto`) e o
+ * array nunca saia daqui. Sem isto, /pixels precisava fazer um SEGUNDO
+ * GET /api/integracoes, alem do que o cabecalho ja faz em toda pagina.
+ *
+ * So LE. Quem salva regra e a aba Regras, por outro caminho.
+ */
+export function useRegrasDeRoteamento(): RegraRoteamento[] | null {
+  const regras = useStore((s) => s.regras);
+  const carregar = useStore((s) => s.carregar);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  return regras;
+}
 
 export type SituacaoAuto = 'carregando' | 'desligado' | 'teste' | 'producao';
 

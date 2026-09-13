@@ -387,7 +387,11 @@ export async function dispararFila(params: {
           eventSourceUrl: ev.eventSourceUrl,
           atribuicao: ev.atribuicao,
           pixelId,
-          marcaId: marca?.id,
+          // P-12: `acharMarca` cai no primeiro cadastro quando o id nao existe, e a
+          // lista sempre tem o 'default' vindo do .env — o `??` e a mesma coisa dita no
+          // tipo: o log NAO aceita disparo sem dono. Gravar `undefined` aqui deixaria o
+          // historico com uma linha que nao se liga a Pixel nenhum.
+          marcaId: marca?.id ?? 'default',
         });
       } catch (logErr) {
         console.error('Erro ao gravar log do disparo:', logErr);

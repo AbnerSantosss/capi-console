@@ -30,6 +30,33 @@ const LIMITE_MEMORIA = 100;
 
 export type StatusEntrada = 'novo' | 'carregado' | 'disparado' | 'ignorado';
 
+/**
+ * O resultado de um disparo, por pixel (P-12).
+ *
+ * `marcaId` diz QUAL cadastro deste app foi usado; `pixelId` diz PARA ONDE a
+ * conversao foi. Sao coisas diferentes, e so a segunda sobrevive ao cadastro
+ * ser apagado: `marca_lx8k2p` nao existe fora daqui, o ID do Pixel existe no
+ * Gerenciador de Eventos da Meta.
+ *
+ * `pixelId` e OPCIONAL porque este tipo tambem descreve o que ja esta gravado
+ * em `logs/inbox-resultados.jsonl`, escrito antes de o campo existir. Nenhuma
+ * linha antiga e reescrita: a tela le a ausencia e mostra "Pixel removido" sem
+ * numero. Ausencia = comportamento de hoje.
+ */
+export interface ResultadoPorPixel {
+  marcaId: string;
+  /** Ausente em registro antigo. Presente em tudo que for gravado agora. */
+  pixelId?: string;
+  status: string;
+  httpStatus?: number;
+  eventsReceived?: number;
+  fbtraceId?: string;
+  erro?: string;
+  modoTeste?: boolean;
+  herdados?: string[];
+  emq?: number;
+}
+
 export interface ItemInbox {
   id: string;
   recebidoEm: string;
@@ -137,7 +164,7 @@ async function carregarDoDisco() {
     for (const l of txt.split('\n')) {
       if (!l) continue;
       try {
-        const e = JSON.parse(l) as { tipo: string; id: string; status?: StatusEntrada; resultados?: unknown[] };
+        const e = JSON.parse(l) as { tipo: string; id: string; status?: StatusEntrada; resultados?: ResultadoPorPixel[] };
         const item = porId.get(e.id);
         if (!item) continue;
         if (e.tipo === 'status' && e.status) item.status = e.status;
@@ -204,7 +231,7 @@ export async function marcarStatus(id: string, status: StatusEntrada) {
 }
 
 /** Guarda o resultado por pixel do disparo e avisa a tela pelo SSE. */
-export async function anotarResultado(id: string, resultados: unknown[]) {
+export async function anotarResultado(id: string, resultados: ResultadoPorPixel[]) {
   await carregarDoDisco();
   const item = memoria.find((i) => i.id === id);
   if (!item) return undefined;

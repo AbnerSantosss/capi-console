@@ -24,7 +24,6 @@ import { useEventStore } from '@/stores/useEventStore';
 import { parseWebhook, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { StatusDot, Callout } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
@@ -44,11 +43,17 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { ItemDeLista, AnimatePresence } from '@/components/common/motion';
+import { SeletorDePixel, nomeDoPixel } from '@/components/pixels/SeletorDePixel';
+import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis';
 
 interface ResultadoDisparo {
   marcaId: string;
-  pixelId: string;
+  /**
+   * Ausente em registro gravado antes de o ID do Pixel ser guardado junto.
+   * A leitura tolera a falta: vira "Pixel removido" sem numero, e nao quebra.
+   */
+  pixelId?: string;
   status: 'enviado' | 'duplicado' | 'invalido' | 'erro' | 'teste-ignorado' | 'sem-token';
   httpStatus?: number;
   eventsReceived?: number;
@@ -88,14 +93,6 @@ interface ItemInbox {
   rotuloRecebido?: string | null;
   rotuloDivergente?: boolean;
   eventoMetaSugerido?: string;
-}
-
-interface MarcaPublica {
-  id: string;
-  nome: string;
-  pixelId: string;
-  temToken: boolean;
-  testCode: string;
 }
 
 /** Estado REAL do canal ao vivo. O selo da tela lê daqui, nunca de um enfeite. */
@@ -176,12 +173,17 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   const [conexao, setConexao] = useState<EstadoConexao>('conectando');
   const [ultimoSinalEm, setUltimoSinalEm] = useState<number | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [marcas, setMarcas] = useState<MarcaPublica[]>([]);
   const [alvo, setAlvo] = useState<ItemInbox | null>(null);
   const [marcasEscolhidas, setMarcasEscolhidas] = useState<string[]>([]);
   const [disparando, setDisparando] = useState(false);
   /** Incrementar força o efeito do SSE a refazer a conexão do zero. */
   const [tentativa, setTentativa] = useState(0);
+
+  // Uma lista de Pixel so no produto inteiro (IA-R8). A leitura propria que
+  // existia aqui foi eliminada: duas copias da mesma lista podem divergir na
+  // mesma sessao, e destino errado num disparo real e venda no pixel errado.
+  const marcas = useBrandStore((s) => s.marcas);
+  const carregarMarcas = useBrandStore((s) => s.carregar);
 
   const carregarDoParser = useEventStore((s) => s.carregarDoParser);
   /**
@@ -388,10 +390,8 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   }, [buscar, jaVisto, tentativa]);
 
   useEffect(() => {
-    pedir<{ marcas: MarcaPublica[] }>('/api/marcas', { cache: 'no-store' })
-      .then((d) => setMarcas(d.marcas ?? []))
-      .catch(() => setMarcas([]));
-  }, []);
+    void carregarMarcas();
+  }, [carregarMarcas]);
 
   const carregarNoFormulario = async (item: ItemInbox) => {
     try {
@@ -446,7 +446,13 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       if (enviados.length) {
         toast.success(`Aceito pela Meta em ${enviados.length} pixel(s)`, {
           description: enviados
-            .map((x) => `${x.marcaId}: ${x.httpStatus} · EMQ ${x.emq.toFixed(1)}`)
+            .map(
+              (x) =>
+                `${nomeDoPixel(
+                  marcas.find((m) => m.id === x.marcaId),
+                  x.pixelId
+                )}: ${x.httpStatus} · EMQ ${x.emq.toFixed(1)}`
+            )
             .join(' · '),
         });
       } else {
@@ -643,27 +649,12 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
             {parDoAlvo?.descricao}
           </p>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-label font-medium text-fg-body">Pixels de destino</legend>
-            {marcas.map((m) => (
-              <label
-                key={m.id}
-                className="flex cursor-pointer items-center gap-2.5 rounded-control border border-line-strong bg-surface-2 p-2.5 text-caption text-fg-body"
-              >
-                <Checkbox
-                  checked={marcasEscolhidas.includes(m.id)}
-                  onCheckedChange={(v) =>
-                    setMarcasEscolhidas((a) => (v ? [...a, m.id] : a.filter((x) => x !== m.id)))
-                  }
-                />
-                <span className="flex-1">{m.nome}</span>
-                <span className="font-mono text-caption text-fg-muted">{m.pixelId}</span>
-                {m.testCode?.trim() ? (
-                  <Badge variant="aviso">teste</Badge>
-                ) : null}
-              </label>
-            ))}
-          </fieldset>
+          <SeletorDePixel
+            modo="varios"
+            rotulo="Pixels de destino"
+            valor={marcasEscolhidas}
+            onChange={setMarcasEscolhidas}
+          />
 
           {alvo?.testeInterno && (
             <Callout tone="warning" icon={FlaskConical} title="Isto parece teste da equipe">
@@ -891,7 +882,8 @@ function LinhaEntrada({
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption"
               >
                 <StatusDot tone={TOM_RESULTADO[r.status]}>
-                  {marcas.find((m) => m.id === r.marcaId)?.nome ?? r.marcaId} · {r.status}
+                  {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
+                  {r.status}
                 </StatusDot>
                 {r.httpStatus ? (
                   <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>

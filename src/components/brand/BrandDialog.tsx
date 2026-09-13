@@ -104,8 +104,8 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
             {novo ? 'Novo Pixel' : `Editar ${marca.nome}`}
           </DialogTitle>
           <DialogDescription>
-            Cada marca guarda um Pixel, o token de acesso e o código de teste.
-            É para onde o evento vai quando você dispara.
+            Um Pixel guarda o número do Pixel, o token de acesso e o código de
+            teste. É para onde o evento vai quando você dispara.
           </DialogDescription>
         </DialogHeader>
 
@@ -224,7 +224,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
             Cancelar
           </Button>
           <Button onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando…' : 'Salvar marca'}
+            {salvando ? 'Salvando…' : 'Salvar Pixel'}
           </Button>
         </DialogFooter>
       </DialogContent>

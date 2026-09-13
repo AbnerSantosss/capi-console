@@ -56,14 +56,19 @@ export async function dispararItem(params: {
   // 1. Teste interno nunca vai para a Meta.
   if (ehTesteInterno(params.campos, texto('eventId'))) {
     await marcarStatus(item.id, 'ignorado');
-    const ignorados = alvos.map<ResultadoDisparoAuto>((m) => ({
-      marcaId: m,
-      pixelId: '',
-      status: 'teste-ignorado',
-      modoTeste: false,
-      herdados: [],
-      emq: 0,
-    }));
+    // P-12: mesmo sem enviar nada, o registro guarda PARA ONDE teria ido. Sem o
+    // ID do Pixel aqui a tela so teria o id interno da marca, que vira um
+    // codigo sem dono no dia em que o cadastro for apagado.
+    const ignorados = await Promise.all(
+      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => ({
+        marcaId: m,
+        pixelId: ((await acharMarca(m))?.pixelId || '').trim(),
+        status: 'teste-ignorado',
+        modoTeste: false,
+        herdados: [],
+        emq: 0,
+      }))
+    );
     await anotarResultado(item.id, ignorados);
     console.log(`[auto-dispatch] ${eventoMeta} inbox=${item.id} -> teste interno, nada enviado`);
     return ignorados;

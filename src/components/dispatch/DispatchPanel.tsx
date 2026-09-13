@@ -58,14 +58,19 @@ export function DestinationSummary() {
       }
     >
       <dl className="grid gap-3 text-caption sm:grid-cols-3">
-        <div>
-          <dt className="text-fg-muted">Marca</dt>
-          <dd className="mt-1 font-medium text-fg-body">{ativa?.nome ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-fg-muted">Pixel</dt>
-          <dd className="mt-1 wrap-token font-mono text-fg-body tabular">
-            {ativa?.pixelId || '—'}
+        {/* 8.B: o nome E a identidade do Pixel, e o ID do Pixel e o dado
+            tecnico logo abaixo. Ate aqui eram dois rotulos — "Marca" e
+            "Pixel" — para um unico registro, o que sugeria duas entidades
+            onde ha uma. */}
+        <div className="sm:col-span-2">
+          <dt className="text-fg-muted">Pixel de destino</dt>
+          <dd className="mt-1 flex min-w-0 flex-col">
+            <span className="truncate text-title font-medium text-fg-strong">
+              {ativa?.nome ?? '—'}
+            </span>
+            <span className="wrap-token font-mono text-caption text-fg-muted tabular">
+              {ativa?.pixelId || '—'}
+            </span>
           </dd>
         </div>
         <div>
@@ -113,17 +118,19 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
         }
       >
         <dl className="flex flex-col gap-2 text-caption">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-fg-muted">Marca</dt>
-            <dd className="flex min-w-0 items-center gap-1.5 font-medium text-fg-body">
-              <MetaMark size={14} />
-              <span className="truncate">{d.ativa?.nome ?? '—'}</span>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-fg-muted">Pixel</dt>
-            <dd className="font-mono text-fg-body tabular">
-              {d.ativa?.pixelId || '—'}
+          {/* 8.B: um bloco de identidade, nao dois rotulos. */}
+          <div className="flex flex-col gap-0.5">
+            <dt className="sr-only">Pixel de destino</dt>
+            <dd className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <MetaMark size={14} />
+                <span className="truncate text-title font-medium text-fg-strong">
+                  {d.ativa?.nome ?? '—'}
+                </span>
+              </span>
+              <span className="wrap-token font-mono text-caption text-fg-muted tabular">
+                {d.ativa?.pixelId || '—'}
+              </span>
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">

@@ -108,7 +108,11 @@ export async function POST(request: NextRequest) {
         eventSourceUrl: evento.event_source_url,
         atribuicao,
         pixelId,
-        marcaId: marca?.id,
+        // P-12: `acharMarca` cai no primeiro cadastro quando o id nao existe, e a
+        // lista sempre tem o 'default' vindo do .env — o `??` e a mesma coisa dita no
+        // tipo: o log NAO aceita disparo sem dono. Gravar `undefined` aqui deixaria o
+        // historico com uma linha que nao se liga a Pixel nenhum.
+        marcaId: marca?.id ?? 'default',
       });
       if (atribuicao.links.anuncio) {
         console.log(`  criativo que converteu -> ${atribuicao.links.anuncio}`);

@@ -122,13 +122,35 @@ export interface EntradaLog {
   temFbp: boolean;
   eventSourceUrl?: string;
   atribuicao: Atribuicao;
-  /** Sem o pixel no log, a deduplicacao nao consegue distinguir dois pixels. */
+  /**
+   * Sem o pixel no log, a deduplicacao nao consegue distinguir dois pixels.
+   *
+   * OPCIONAL AQUI DE PROPOSITO (P-12): `EntradaLog` tambem e o formato das
+   * linhas que ja estao gravadas em `logs/disparos.jsonl`, e as antigas foram
+   * escritas antes deste campo existir. Quem LE precisa aceitar a ausencia.
+   * Quem ESCREVE nao: `registrarDisparo` exige os dois (ver `EntradaLogNova`).
+   */
   pixelId?: string;
+  /** Idem: opcional para o leitor de registro antigo, obrigatorio para gravar. */
   marcaId?: string;
 }
 
+/**
+ * O que e exigido de um disparo NOVO (P-12).
+ *
+ * O par (`pixelId`, `marcaId`) passa a ser obrigatorio na gravacao. Sem ele o
+ * historico guarda so o id interno da marca, e quando a marca e apagada a tela
+ * fica com `marca_lx8k2p` — um codigo que nao existe em lugar nenhum fora deste
+ * app. Com o ID do Pixel junto, o registro continua rastreavel no Gerenciador
+ * de Eventos da Meta mesmo depois de a marca sumir daqui.
+ *
+ * Isto NAO e migracao: nenhuma linha ja gravada e reescrita, nenhum arquivo e
+ * convertido. Vale so para o que for gravado daqui para a frente.
+ */
+export type EntradaLogNova = EntradaLog & Required<Pick<EntradaLog, 'pixelId' | 'marcaId'>>;
+
 /** Grava uma linha JSON (maquina) + um bloco legivel com os links (humano). */
-export async function registrarDisparo(e: EntradaLog): Promise<{ jsonl: string; md: string }> {
+export async function registrarDisparo(e: EntradaLogNova): Promise<{ jsonl: string; md: string }> {
   await fs.mkdir(DIR_LOG, { recursive: true });
   const agora = new Date();
   const a = e.atribuicao;
