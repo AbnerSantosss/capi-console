@@ -33,20 +33,37 @@ import {
 /** `'todos'` é sentinela, nunca nome de evento: o Select do DS não lida bem com valor vazio. */
 export const TODOS = 'todos';
 
-export type FiltroAtribuicao = 'todos' | 'fbc' | 'fbclid' | 'gclid' | 'sem';
+export type FiltroAtribuicao =
+  | 'todos'
+  | 'fbc'
+  | 'fbclid'
+  | 'gclid'
+  | 'ttclid'
+  | 'msclkid'
+  | 'sem';
 export type FiltroOrigem = 'todos' | 'webhook' | 'tag';
+
+/** Em que ponto do caminho o evento está. `'novo'` cobre também o já lido ('carregado'). */
+export type FiltroStatus = 'todos' | 'novo' | 'disparado' | 'ignorado';
+
+/** 'reais' esconde teste da equipe/plataforma; o padrão continua sendo mostrar tudo. */
+export type FiltroEquipe = 'todos' | 'reais' | 'so-testes';
 
 export interface FiltrosInboxValor {
   /** Nome do evento como a plataforma mandou, ou `TODOS`. */
   evento: string;
   atribuicao: FiltroAtribuicao;
   origem: FiltroOrigem;
+  status: FiltroStatus;
+  equipe: FiltroEquipe;
 }
 
 export const FILTROS_VAZIOS: FiltrosInboxValor = {
   evento: TODOS,
   atribuicao: 'todos',
   origem: 'todos',
+  status: 'todos',
+  equipe: 'todos',
 };
 
 /**
@@ -59,9 +76,17 @@ export interface ItemFiltravel {
   evento?: string;
   eventoOrigem?: string;
   origem: string;
+  /** 'novo' | 'carregado' | 'disparado' | 'ignorado' — string para não amarrar o tipo da lista. */
+  status: string;
   temFbc: boolean;
   temFbclid?: boolean;
   temGclid?: boolean;
+  temTtclid?: boolean;
+  temMsclkid?: boolean;
+  /** Acesso de teste da equipe (regra 4 do CLAUDE.md). */
+  testeInterno?: boolean;
+  /** Evento de teste marcado pela própria plataforma de pagamento. */
+  testePlataforma?: boolean;
 }
 
 /** Nome do evento usado pelo filtro e pela lista de opções — sempre o mesmo. */
@@ -75,7 +100,13 @@ export function origemDoItem(item: ItemFiltravel): 'webhook' | 'tag' {
 }
 
 export function haFiltroAtivo(f: FiltrosInboxValor): boolean {
-  return f.evento !== TODOS || f.atribuicao !== 'todos' || f.origem !== 'todos';
+  return (
+    f.evento !== TODOS ||
+    f.atribuicao !== 'todos' ||
+    f.origem !== 'todos' ||
+    f.status !== 'todos' ||
+    f.equipe !== 'todos'
+  );
 }
 
 /**
@@ -87,20 +118,53 @@ export function passaFiltros(item: ItemFiltravel, f: FiltrosInboxValor): boolean
   if (f.evento !== TODOS && nomeDoEvento(item) !== f.evento) return false;
   if (f.origem !== 'todos' && origemDoItem(item) !== f.origem) return false;
 
+  // O `switch` nunca devolve `true` direto: as regras de situação e de teste
+  // vêm DEPOIS dele e também precisam ser aplicadas.
   switch (f.atribuicao) {
     case 'fbc':
-      return item.temFbc === true;
+      if (item.temFbc !== true) return false;
+      break;
     case 'fbclid':
-      return item.temFbclid === true;
+      if (item.temFbclid !== true) return false;
+      break;
     case 'gclid':
-      return item.temGclid === true;
-    // "Sem atribuição" é a ausência dos TRÊS sinais. Não é o mesmo que "sem
+      if (item.temGclid !== true) return false;
+      break;
+    case 'ttclid':
+      if (item.temTtclid !== true) return false;
+      break;
+    case 'msclkid':
+      if (item.temMsclkid !== true) return false;
+      break;
+    // "Sem atribuição" é a ausência dos CINCO sinais. Não é o mesmo que "sem
     // fbc": um item pode ter chegado com fbclid na URL e nenhum cookie _fbc.
     case 'sem':
-      return item.temFbc !== true && item.temFbclid !== true && item.temGclid !== true;
+      if (
+        item.temFbc === true ||
+        item.temFbclid === true ||
+        item.temGclid === true ||
+        item.temTtclid === true ||
+        item.temMsclkid === true
+      ) {
+        return false;
+      }
+      break;
     default:
-      return true;
+      break;
   }
+
+  // Situação: "na fila" junta o que ainda não foi lido ('novo') com o que já
+  // foi aberto ('carregado') — para o operador os dois continuam esperando.
+  if (f.status === 'novo' && !(item.status === 'novo' || item.status === 'carregado')) return false;
+  if (f.status === 'disparado' && item.status !== 'disparado') return false;
+  if (f.status === 'ignorado' && item.status !== 'ignorado') return false;
+
+  // Regra 4 do CLAUDE.md: teste da equipe nunca se mistura com venda real.
+  const ehTeste = item.testeInterno === true || item.testePlataforma === true;
+  if (f.equipe === 'reais' && ehTeste) return false;
+  if (f.equipe === 'so-testes' && !ehTeste) return false;
+
+  return true;
 }
 
 const TEXTO_ATRIBUICAO: Record<FiltroAtribuicao, string> = {
@@ -108,6 +172,8 @@ const TEXTO_ATRIBUICAO: Record<FiltroAtribuicao, string> = {
   fbc: 'com fbc',
   fbclid: 'com fbclid',
   gclid: 'com gclid (Google)',
+  ttclid: 'com ttclid (TikTok Ads)',
+  msclkid: 'com msclkid (Microsoft Ads)',
   sem: 'sem atribuição nenhuma',
 };
 
@@ -117,12 +183,25 @@ const TEXTO_ORIGEM: Record<FiltroOrigem, string> = {
   tag: 'tag do site',
 };
 
+const TEXTO_STATUS: Record<FiltroStatus, string> = {
+  todos: 'qualquer situação',
+  novo: 'na fila',
+  disparado: 'enviados à Meta',
+  ignorado: 'ignorados',
+};
+
+const TEXTO_EQUIPE: Record<FiltroEquipe, string> = {
+  todos: 'reais e testes juntos',
+  reais: 'só eventos reais',
+  'so-testes': 'só testes da equipe',
+};
+
 /**
  * O filtro ativo EM PALAVRAS, para o diálogo de confirmação do lote.
  *
  * Existe porque "Disparar os 12 filtrados" não diz quais 12. Quem confirma um
  * disparo real precisa ler, em português, o recorte que produziu aquele número
- * — sem voltar para a tela de trás para conferir os três seletores.
+ * — sem voltar para a tela de trás para conferir os cinco seletores.
  */
 export function descreverFiltros(f: FiltrosInboxValor): string {
   if (!haFiltroAtivo(f)) return 'Sem filtro: todos os eventos da lista.';
@@ -130,6 +209,8 @@ export function descreverFiltros(f: FiltrosInboxValor): string {
   if (f.evento !== TODOS) partes.push(`Evento: ${f.evento}`);
   if (f.atribuicao !== 'todos') partes.push(`Atribuição: ${TEXTO_ATRIBUICAO[f.atribuicao]}`);
   if (f.origem !== 'todos') partes.push(`Origem: ${TEXTO_ORIGEM[f.origem]}`);
+  if (f.status !== 'todos') partes.push(`Situação: ${TEXTO_STATUS[f.status]}`);
+  if (f.equipe !== 'todos') partes.push(`Testes: ${TEXTO_EQUIPE[f.equipe]}`);
   return partes.join(' · ');
 }
 
@@ -183,8 +264,8 @@ export function FiltrosInbox({
 
   return (
     <div className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-1 p-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <span className="inline-flex h-control-sm items-center gap-1.5 text-caption font-medium text-fg-muted">
+      <div className="flex min-w-0 flex-wrap items-end gap-2">
+        <span className="inline-flex h-control-sm shrink-0 items-center gap-1.5 text-caption font-medium text-fg-muted">
           <ListFilter className="size-3.5" aria-hidden />
           Filtrar
         </span>
@@ -194,7 +275,7 @@ export function FiltrosInbox({
             value={valor.evento}
             onValueChange={(v) => v && onValor({ ...valor, evento: String(v) })}
           >
-            <SelectTrigger id="filtro-evento" className="w-full min-w-40">
+            <SelectTrigger id="filtro-evento" className="w-full min-w-0">
               <span className="truncate text-fg-strong">
                 {valor.evento === TODOS ? 'Todos os eventos' : valor.evento}
               </span>
@@ -220,7 +301,7 @@ export function FiltrosInbox({
             value={valor.atribuicao}
             onValueChange={(v) => v && onValor({ ...valor, atribuicao: v as FiltroAtribuicao })}
           >
-            <SelectTrigger id="filtro-atribuicao" className="w-full min-w-40">
+            <SelectTrigger id="filtro-atribuicao" className="w-full min-w-0">
               <span className="truncate text-fg-strong">
                 {valor.atribuicao === 'todos' ? 'Todas' : TEXTO_ATRIBUICAO[valor.atribuicao]}
               </span>
@@ -243,9 +324,19 @@ export function FiltrosInbox({
                 ajuda="Atribuição do Google Ads no payload."
               />
               <OpcaoSimples
+                valor="ttclid"
+                rotulo="TikTok Ads (ttclid)"
+                ajuda="O parâmetro de clique do TikTok apareceu no payload."
+              />
+              <OpcaoSimples
+                valor="msclkid"
+                rotulo="Microsoft Ads (msclkid)"
+                ajuda="O parâmetro de clique do Bing/Microsoft apareceu no payload."
+              />
+              <OpcaoSimples
                 valor="sem"
                 rotulo="Sem atribuição"
-                ajuda="Nenhum dos três sinais: fbc, fbclid ou gclid."
+                ajuda="Nenhum dos cinco sinais: fbc, fbclid, gclid, ttclid ou msclkid."
               />
             </SelectContent>
           </Select>
@@ -256,7 +347,7 @@ export function FiltrosInbox({
             value={valor.origem}
             onValueChange={(v) => v && onValor({ ...valor, origem: v as FiltroOrigem })}
           >
-            <SelectTrigger id="filtro-origem" className="w-full min-w-36">
+            <SelectTrigger id="filtro-origem" className="w-full min-w-0">
               <span className="truncate text-fg-strong">
                 {valor.origem === 'todos' ? 'Todas' : TEXTO_ORIGEM[valor.origem]}
               </span>
@@ -272,6 +363,67 @@ export function FiltrosInbox({
                 valor="tag"
                 rotulo="Tag do site"
                 ajuda="Chegou do navegador, pelo coletor da tag."
+              />
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
+
+        <CampoFiltro id="filtro-status" rotulo="Situação">
+          <Select
+            value={valor.status}
+            onValueChange={(v) => v && onValor({ ...valor, status: v as FiltroStatus })}
+          >
+            <SelectTrigger id="filtro-status" className="w-full min-w-0">
+              <span className="truncate text-fg-strong">
+                {valor.status === 'todos' ? 'Todas' : TEXTO_STATUS[valor.status]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <OpcaoSimples valor="todos" rotulo="Todas" ajuda="Não filtra por situação." />
+              <OpcaoSimples
+                valor="novo"
+                rotulo="Na fila"
+                ajuda="Ainda não foi para a Meta — inclui os já abertos."
+              />
+              <OpcaoSimples
+                valor="disparado"
+                rotulo="Enviados à Meta"
+                ajuda="A API de Conversões já aceitou este evento."
+              />
+              <OpcaoSimples
+                valor="ignorado"
+                rotulo="Ignorados"
+                ajuda="Uma regra ou um motivo mandou não enviar."
+              />
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
+
+        <CampoFiltro id="filtro-equipe" rotulo="Testes">
+          <Select
+            value={valor.equipe}
+            onValueChange={(v) => v && onValor({ ...valor, equipe: v as FiltroEquipe })}
+          >
+            <SelectTrigger id="filtro-equipe" className="w-full min-w-0">
+              <span className="truncate text-fg-strong">
+                {valor.equipe === 'todos' ? 'Tudo junto' : TEXTO_EQUIPE[valor.equipe]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <OpcaoSimples
+                valor="todos"
+                rotulo="Tudo junto"
+                ajuda="Eventos reais e testes na mesma lista."
+              />
+              <OpcaoSimples
+                valor="reais"
+                rotulo="Só eventos reais"
+                ajuda="Esconde teste da equipe e teste da plataforma."
+              />
+              <OpcaoSimples
+                valor="so-testes"
+                rotulo="Só testes da equipe"
+                ajuda="Mostra apenas o que foi marcado como teste."
               />
             </SelectContent>
           </Select>
@@ -355,8 +507,10 @@ function CampoFiltro({
   rotulo: string;
   children: React.ReactNode;
 }) {
+  // `min-w-40 flex-1`: com CINCO campos, a barra quebra sozinha em duas ou três
+  // linhas a 360 px e ocupa uma só linha no desktop — sem grade de breakpoint.
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-40 flex-1 flex-col gap-1">
       <label htmlFor={id} className="text-caption font-medium text-fg-muted">
         {rotulo}
       </label>

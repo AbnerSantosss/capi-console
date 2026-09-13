@@ -127,6 +127,8 @@ export interface ItemInbox {
    */
   temFbclid?: boolean;
   temGclid?: boolean;
+  temTtclid?: boolean;
+  temMsclkid?: boolean;
   emq?: number;
   status: 'novo' | 'carregado' | 'disparado' | 'ignorado';
   payload: unknown;
@@ -225,17 +227,33 @@ function podeDisparar(item: ItemInbox): boolean {
  * O GET de montagem e o `inicial` do SSE correm juntos; se um sobrescrevesse o
  * outro, um webhook que chegou no meio sumiria da lista até o próximo refresh.
  */
-function mesclar(atuais: ItemInbox[], novos: ItemInbox[]): ItemInbox[] {
+function mesclar(atuais: ItemInbox[], novos: ItemInbox[], limite = 50): ItemInbox[] {
   const porId = new Map<string, ItemInbox>();
   for (const i of atuais) porId.set(i.id, i);
   // O que vem do servidor é mais recente que a cópia local do mesmo id.
   for (const i of novos) porId.set(i.id, { ...porId.get(i.id), ...i });
   return [...porId.values()]
     .sort((a, b) => (a.recebidoEm < b.recebidoEm ? 1 : a.recebidoEm > b.recebidoEm ? -1 : 0))
-    .slice(0, 50);
+    // O teto vem de quem chamou: um `50` fixo aqui jogaria fora, em silêncio,
+    // exatamente os itens que a lista acabou de pedir com `limite` maior.
+    .slice(0, limite);
 }
 
-export function InboxList({ compacto = false }: { compacto?: boolean }) {
+export function InboxList({
+  compacto = false,
+  filtrosIniciais,
+  limite = 50,
+}: {
+  compacto?: boolean;
+  /**
+   * Filtro com que a lista NASCE (clique num card do Painel). Daí em diante o
+   * recorte continua em estado local e NUNCA vai para a URL (IA-R5): link
+   * colado com `?evento=…` levaria outra pessoa a uma contagem diferente.
+   */
+  filtrosIniciais?: FiltrosInboxValor;
+  /** Quantos itens pedir a /api/inbox (1..1000). O Painel pede mais para a lista bater com o card. */
+  limite?: number;
+}) {
   const [itens, setItens] = useState<ItemInbox[]>([]);
   const [conexao, setConexao] = useState<EstadoConexao>('conectando');
   const [ultimoSinalEm, setUltimoSinalEm] = useState<number | null>(null);
@@ -252,8 +270,11 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
    * Filtro em estado LOCAL, nunca na URL (IA-R5 / D-10 do plano). Recorte de
    * tela não é endereço: um link colado com `?evento=purchase` levaria outra
    * pessoa a um lote com contagem diferente da que quem mandou o link viu.
+   *
+   * `filtrosIniciais` só decide com que recorte a lista NASCE — quem clicou num
+   * card do Painel já chega com ele aplicado. Depois disso o estado é daqui.
    */
-  const [filtros, setFiltros] = useState<FiltrosInboxValor>(FILTROS_VAZIOS);
+  const [filtros, setFiltros] = useState<FiltrosInboxValor>(filtrosIniciais ?? FILTROS_VAZIOS);
   const [payloadAberto, setPayloadAberto] = useState<ItemInbox | null>(null);
   const [loteAberto, setLoteAberto] = useState(false);
   const [marcasDoLote, setMarcasDoLote] = useState<string[]>(['default']);
@@ -292,9 +313,11 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
 
   const buscar = useCallback(async () => {
     try {
-      const d = await pedir<{ itens: ItemInbox[] }>('/api/inbox', { cache: 'no-store' });
+      const d = await pedir<{ itens: ItemInbox[] }>(`/api/inbox?limite=${limite}`, {
+        cache: 'no-store',
+      });
       jaVisto(d.itens ?? []);
-      setItens((atuais) => mesclar(atuais, d.itens ?? []));
+      setItens((atuais) => mesclar(atuais, d.itens ?? [], limite));
     } catch (e) {
       if (e instanceof SessaoExpirada) {
         setConexao('sessao-expirada');
@@ -303,7 +326,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
     } finally {
       setCarregando(false);
     }
-  }, [jaVisto]);
+  }, [jaVisto, limite]);
 
   // Conexão SSE resiliente: sonda de sessão, backoff, watchdog de pulso e
   // religação quando a aba volta ou a rede volta.
@@ -388,7 +411,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
         try {
           const lista = JSON.parse((e as MessageEvent).data) as ItemInbox[];
           jaVisto(lista);
-          setItens((atuais) => mesclar(atuais, lista));
+          setItens((atuais) => mesclar(atuais, lista, limite));
         } catch {
           /* payload malformado */
         }
@@ -402,7 +425,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
         try {
           const novo = JSON.parse((e as MessageEvent).data) as ItemInbox;
           const inedito = jaVisto([novo]).length > 0;
-          setItens((atuais) => mesclar(atuais, [novo]));
+          setItens((atuais) => mesclar(atuais, [novo], limite));
           setCarregando(false);
           if (inedito) avisarChegada(novo);
         } catch {
@@ -419,7 +442,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
           setItens((atuais) =>
             atuais.some((i) => i.id === mudou.id)
               ? atuais.map((i) => (i.id === mudou.id ? mudou : i))
-              : mesclar(atuais, [mudou])
+              : mesclar(atuais, [mudou], limite)
           );
         } catch {
           /* payload malformado */
@@ -480,7 +503,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       fechar();
     };
     // `tentativa` existe para o botão "Reconectar agora" refazer tudo do zero.
-  }, [buscar, jaVisto, tentativa]);
+  }, [buscar, jaVisto, limite, tentativa]);
 
   useEffect(() => {
     void carregarMarcas();
@@ -873,6 +896,15 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
         </p>
       )}
 
+      {/* E-12: o número da tela não pode parecer mágico. Quando alguém pediu um
+          recorte maior que o padrão (o clique num card do Painel pede), a tela
+          diz de onde vem a contagem em vez de deixar o operador adivinhar. */}
+      {limite > 50 && itens.length > 0 && (
+        <p className="text-caption text-fg-muted">
+          Mostrando os últimos {itens.length} recebidos desta empresa.
+        </p>
+      )}
+
       {/* B.3.21: no modo compacto não há barra de filtros nem lote. Aquela é a
           prévia da tela inicial — quem vai disparar em série abre a caixa
           inteira, onde a confirmação e o relatório cabem na tela. */}
@@ -966,7 +998,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       ) : (
         <ul className="flex flex-col gap-2">
           <AnimatePresence initial={false}>
-            {visiveis.slice(0, compacto ? 5 : 50).map((item, i) => (
+            {visiveis.slice(0, compacto ? 5 : limite).map((item, i) => (
               <ItemDeLista key={item.id} indice={i}>
                 <LinhaEntrada
                   item={item}
@@ -1180,7 +1212,10 @@ function LinhaEntrada({
           <span className="text-caption text-fg-muted">
             {item.origem === 'tag' ? 'Tag' : rotuloWebhook}
           </span>
-          <span className="font-mono text-label text-fg-body">
+          {/* Nome vindo de fora, sem espaço nenhum e às vezes com 60+ chars
+              ("checkout.session.completed.with.algo"): sem `wrap-token` ele
+              estoura a coluna em 360px em vez de quebrar. */}
+          <span className="wrap-token min-w-0 font-mono text-label text-fg-body">
             {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
           </span>
           <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
@@ -1261,9 +1296,15 @@ function LinhaEntrada({
           <span className="tabular">{hora(item.recebidoEm)}</span>
           {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono. Dá
               para reconhecer o cliente sem o endereço completo aberto na tela. */}
-          {item.nomeCliente && <span className="text-fg-strong">{item.nomeCliente}</span>}
-          {item.emailMascarado && <span>{item.emailMascarado}</span>}
-          {item.orderId && <span className="font-mono">pedido {item.orderId}</span>}
+          {item.nomeCliente && (
+            <span className="min-w-0 break-words text-fg-strong">{item.nomeCliente}</span>
+          )}
+          {item.emailMascarado && (
+            <span className="wrap-token min-w-0">{item.emailMascarado}</span>
+          )}
+          {item.orderId && (
+            <span className="wrap-token min-w-0 font-mono">pedido {item.orderId}</span>
+          )}
           {!naoLido && (
             <StatusDot tone={item.temFbc ? 'success' : 'danger'}>
               {item.temFbc ? 'com fbc' : 'sem fbc'}
@@ -1311,7 +1352,9 @@ function LinhaEntrada({
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      {/* `flex-wrap` sem largura fixa: em 360px os botões caem para a linha de
+          baixo em vez de empurrar a coluna do texto e vazar da tela. */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* Sempre presente, inclusive no item que não pôde ser lido — é
             justamente nele que ver o corpo cru resolve o problema. */}
         <Button size="sm" variant="ghost" onClick={aoVerPayload}>
