@@ -4,7 +4,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 
 import {
   lerIntegracoes,
-  salvarIntegracoes,
+  atualizarIntegracoes,
   acharRegra,
   segredoConfere,
 } from '@/lib/config-store';
@@ -313,13 +313,27 @@ async function contabilizarHit(idDominio: string): Promise<void> {
   const soma = reg.pendentes;
   reg.pendentes = 0;
 
-  const cfg = await lerIntegracoes();
-  const d = cfg.tag.dominios.find((x) => x.id === idDominio);
-  if (!d) return; // dominio removido enquanto o hit esperava
-  d.hits = (Number(d.hits) || 0) + soma;
-  d.ultimoHit = reg.ultimoHit;
-  await salvarIntegracoes(cfg);
+  // B2-c: o contador de hits e o escritor MAIS FREQUENTE de integracoes.json e
+  // o unico que ninguem ve. Ler fora e gravar depois deixava a janela em que um
+  // save de regra feito pelo operador no mesmo instante era apagado por um hit
+  // de navegador. `atualizarIntegracoes` le e grava dentro da MESMA fila.
+  try {
+    await atualizarIntegracoes((cfg) => {
+      const d = cfg.tag.dominios.find((x) => x.id === idDominio);
+      if (!d) throw new DominioSumiu(); // dominio removido enquanto o hit esperava
+      d.hits = (Number(d.hits) || 0) + soma;
+      d.ultimoHit = reg.ultimoHit;
+    });
+  } catch (e) {
+    if (e instanceof DominioSumiu) return;
+    // Config indisponivel ou disco cheio: o contador e telemetria, nao venda.
+    // Perder a contagem de um minuto nao pode derrubar a coleta do hit.
+    return;
+  }
 }
+
+/** Aborta o save sem gravar nada: o dominio sumiu entre o hit e a gravacao. */
+class DominioSumiu extends Error {}
 
 /* ------------------------------------------------------------------ */
 /* Leitura do corpo                                                    */

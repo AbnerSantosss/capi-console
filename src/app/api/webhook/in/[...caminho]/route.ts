@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processarWebhook } from '@/lib/webhook-handler';
+import { erroDeRota } from '@/lib/erro-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,14 @@ export async function POST(
   const segredo = partes[partes.length - 1];
   const rotulo = partes.length === 2 ? partes[0] : undefined;
 
-  const r = await processarWebhook(request, segredo, rotulo);
+  let r: Response;
+  try {
+    r = await processarWebhook(request, segredo, rotulo);
+  } catch (e) {
+    // B10-b. O CORS vale para TUDO, inclusive erro: sem os cabecalhos o
+    // navegador esconde ate o status e a falha chega como "erro de rede".
+    r = erroDeRota(e, 'Não foi possível processar o evento agora. Tente novamente.');
+  }
   for (const [k, v] of Object.entries(CORS)) r.headers.set(k, v);
   return r;
 }

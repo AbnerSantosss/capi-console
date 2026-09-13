@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { processarWebhook } from '@/lib/webhook-handler';
+import { erroDeRota } from '@/lib/erro-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,5 +16,12 @@ export const dynamic = 'force-dynamic';
  * catch-all ao lado. As tres formas convivem; nenhuma e depreciada.
  */
 export async function POST(request: NextRequest) {
-  return processarWebhook(request);
+  try {
+    return await processarWebhook(request);
+  } catch (e) {
+    // B10-b: um 500 cru do Next sai em HTML. O xWinner registra a entrega como
+    // falha sem corpo legivel, e o operador nao descobre por que a venda sumiu.
+    // 500 aqui, nunca 401: 401 e "segredo errado" e faz o remetente desistir.
+    return erroDeRota(e, 'Não foi possível processar o evento agora. Tente novamente.');
+  }
 }

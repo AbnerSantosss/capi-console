@@ -462,7 +462,13 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
 
   const limpar = async () => {
     try {
-      await pedir('/api/inbox', { method: 'DELETE' });
+      // B11-b: apagar a caixa de entrada e irreversivel, entao a rota exige a
+      // confirmacao explicita no corpo. Sem ela a resposta e 400, de proposito.
+      await pedir('/api/inbox', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmar: true }),
+      });
       setItens([]);
       toast.success('Caixa de entrada limpa.');
     } catch (e) {

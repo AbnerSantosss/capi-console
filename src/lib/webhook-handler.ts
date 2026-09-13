@@ -7,7 +7,10 @@ import {
   acharRegra,
   rotuloDaConfig,
   listarMarcas,
+  ErroConfiguracaoIndisponivel,
+  type Integracoes,
 } from '@/lib/config-store';
+import { respostaConfigIndisponivel } from '@/lib/erro-api';
 import { registrarEntrada, mascararEmail } from '@/lib/inbox';
 import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
 import { calcularEmq } from '@/lib/emq';
@@ -114,7 +117,22 @@ export async function processarWebhook(
   segredoDaUrl?: string,
   rotuloDaUrl?: string
 ) {
-  const cfg = await lerIntegracoes();
+  // 🔴 B1-e / portão D33. Se `config/integracoes.json` existir mas nem ele nem o
+  // `.bak` puderem ser lidos, esta entrega responde **503**, NUNCA 401.
+  //
+  // A diferença é o que o xWinner faz depois: 401 ele lê como "o segredo está
+  // errado" e para de tentar — e aí a venda se perde de vez, porque ninguém no
+  // servidor sabe que ela existiu. 503 é "tente de novo mais tarde" e a fila de
+  // entrega dele retoma sozinha quando a configuração voltar.
+  //
+  // Nada é regenerado aqui: o segredo continua o mesmo quando o arquivo voltar.
+  let cfg: Integracoes;
+  try {
+    cfg = await lerIntegracoes();
+  } catch (e) {
+    if (e instanceof ErroConfiguracaoIndisponivel) return respostaConfigIndisponivel(e);
+    throw e;
+  }
 
   // 1. O segredo decide sozinho, antes de qualquer olhar no rótulo.
   const enviado = segredoDaUrl ?? request.headers.get('x-capi-secret') ?? '';

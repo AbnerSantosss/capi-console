@@ -7,11 +7,23 @@ import {
   acharMarca,
 } from '@/lib/config-store';
 import { exigirSessao } from '@/lib/sessao';
+import { erroDeRota } from '@/lib/erro-api';
 
-/** Lista as marcas SEM o token de acesso. */
-export async function GET() {
-  const marcas = await listarMarcas();
-  return NextResponse.json({ marcas: marcas.map(publicarMarca) });
+/**
+ * Lista as marcas SEM o token de acesso.
+ *
+ * B-11 — este GET era o unico handler do arquivo sem guarda: o PUT e o DELETE
+ * ja chamavam `exigirSessao()`. `MarcaPublica` nao leva o token, mas leva o
+ * `pixelId` de todas as marcas, e a assinatura mudou para receber `request`.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    exigirSessao(request);
+    const marcas = await listarMarcas();
+    return NextResponse.json({ marcas: marcas.map(publicarMarca) });
+  } catch (e) {
+    return erroDeRota(e, 'Não foi possível listar os Pixels.');
+  }
 }
 
 /** Cria ou atualiza uma marca. O token so trafega nesta direcao. */

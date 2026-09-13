@@ -16,6 +16,18 @@ import type { NomeEventoMetaPadrao } from './meta-events';
 import type { ConfigTag } from './tag-dominios';
 import { regrasSementeTag } from './tag-eventos';
 
+// Escrita atômica com backup (B-1) e fila de escrita por arquivo (B-2).
+// Nenhum `fs.writeFile` direto pode voltar para este arquivo: o teste C15
+// (`scripts/persistencia-atomica.test.mjs`) reprova o build se voltar.
+import {
+  ErroConfiguracaoIndisponivel,
+  caminhoBak,
+  gravarAtomico,
+  naFila,
+} from './arquivo-atomico';
+
+export { ErroConfiguracaoIndisponivel } from './arquivo-atomico';
+
 /**
  * Configuracao local do console, guardada em disco no servidor.
  *
@@ -76,18 +88,98 @@ async function garantirDir() {
   await fs.mkdir(DIR, { recursive: true });
 }
 
-async function lerJson<T>(arquivo: string, padrao: T): Promise<T> {
+/* ------------------------------------------------------------------ */
+/* Leitura e gravação dos arquivos de configuração (B-1)               */
+/* ------------------------------------------------------------------ */
+
+/** O que uma tentativa de leitura encontrou. `ausente` ≠ `ilegivel` (B1-f). */
+type Tentativa<T> =
+  | { estado: 'ok'; dados: T }
+  | { estado: 'ausente' }
+  | { estado: 'ilegivel'; motivo: string };
+
+/**
+ * Lê um arquivo e diz o que encontrou, SEM engolir a diferença entre "não
+ * existe" e "existe e está quebrado".
+ *
+ * Essa distinção é a alteração mais importante desta fase. O código antigo
+ * tratava as duas iguais (`lerJson` devolvia o padrão nos dois casos), e é
+ * exatamente por isso que um `integracoes.json` truncado virava um segredo de
+ * entrada novo — e as vendas paravam de entrar (B1-f).
+ *
+ * `valido` existe porque um arquivo pode fazer `JSON.parse` e ainda assim não
+ * servir (ex.: `{}`, ou um objeto sem `entrada.segredo`).
+ */
+async function tentarLer<T>(arquivo: string, valido?: (d: T) => boolean): Promise<Tentativa<T>> {
+  let txt: string;
   try {
-    const txt = await fs.readFile(arquivo, 'utf8');
-    return JSON.parse(txt) as T;
-  } catch {
-    return padrao;
+    txt = await fs.readFile(arquivo, 'utf8');
+  } catch (e) {
+    // ENOENT é a ÚNICA forma de "não existe". EACCES, EISDIR e afins são
+    // arquivo existente e ilegível — e ali nada pode ser regenerado.
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return { estado: 'ausente' };
+    return { estado: 'ilegivel', motivo: (e as NodeJS.ErrnoException)?.code ?? 'erro de leitura' };
   }
+
+  let dados: T;
+  try {
+    dados = JSON.parse(txt) as T;
+  } catch {
+    return { estado: 'ilegivel', motivo: 'JSON inválido' };
+  }
+
+  if (valido && !valido(dados)) return { estado: 'ilegivel', motivo: 'conteúdo incompleto' };
+  return { estado: 'ok', dados };
 }
 
-async function gravarJson(arquivo: string, dados: unknown) {
+/** O que sobrou depois de tentar o arquivo e, se preciso, o `.bak`. */
+type Leitura<T> =
+  | { estado: 'ok'; dados: T }
+  /** O arquivo não servia e o `.bak` serviu — restaurar e registrar (B1-e). */
+  | { estado: 'restaurado'; dados: T }
+  /** Nem o arquivo nem o `.bak` existem: primeira subida, volume novo (B1-f). */
+  | { estado: 'ausente' }
+  /** Existe e está quebrado, e o `.bak` também. Modo degradado (B1-e). */
+  | { estado: 'indisponivel'; motivo: string };
+
+async function lerComBackup<T>(arquivo: string, valido?: (d: T) => boolean): Promise<Leitura<T>> {
+  const principal = await tentarLer<T>(arquivo, valido);
+  if (principal.estado === 'ok') return { estado: 'ok', dados: principal.dados };
+
+  const bak = await tentarLer<T>(caminhoBak(arquivo), valido);
+  if (bak.estado === 'ok') return { estado: 'restaurado', dados: bak.dados };
+
+  // "Não existe" só vale quando NENHUMA das duas cópias existe. Se há um `.bak`
+  // (mesmo ilegível), o arquivo já existiu um dia — e regenerar em cima disso é
+  // justamente o defeito B1.
+  if (principal.estado === 'ausente' && bak.estado === 'ausente') return { estado: 'ausente' };
+
+  return {
+    estado: 'indisponivel',
+    motivo: principal.estado === 'ilegivel' ? principal.motivo : 'arquivo ausente e backup ilegível',
+  };
+}
+
+/**
+ * Leitura tolerante, para quem pode seguir com o padrão.
+ *
+ * Mantém a assinatura antiga de propósito (`marcas.json` continua caindo para
+ * `[]` quando não há nada legível), mas agora tenta o `.bak` antes de desistir:
+ * um `marcas.json` corrompido não apaga mais os Pixels no primeiro save.
+ */
+async function lerJson<T>(arquivo: string, padrao: T): Promise<T> {
+  const r = await lerComBackup<T>(arquivo);
+  return r.estado === 'ok' || r.estado === 'restaurado' ? r.dados : padrao;
+}
+
+/**
+ * ÚNICA porta de escrita em `config/*.json`.
+ *
+ * `backup: false` só na restauração — ver `gravarAtomico`.
+ */
+async function gravarJson(arquivo: string, dados: unknown, opcoes?: { backup?: boolean }) {
   await garantirDir();
-  await fs.writeFile(arquivo, JSON.stringify(dados, null, 2), 'utf8');
+  await gravarAtomico(arquivo, JSON.stringify(dados, null, 2), opcoes);
 }
 
 /** Marca implicita vinda do .env. Sempre existe, sempre com id "default". */
@@ -126,46 +218,57 @@ export async function acharMarca(id: string): Promise<Marca | undefined> {
   return todas.find((m) => m.id === id) ?? todas[0];
 }
 
+/**
+ * Cria ou atualiza uma marca.
+ *
+ * B2-a/B2-b: a LEITURA acontece dentro da fila. Ler fora e gravar dentro
+ * deixaria a janela aberta — dois saves simultâneos e o segundo apagaria o
+ * primeiro, que é o defeito B2 inteiro.
+ */
 export async function salvarMarca(entrada: Partial<Marca> & { id: string }) {
-  const salvas = await lerJson<Marca[]>(ARQ_MARCAS, []);
-  const i = salvas.findIndex((m) => m.id === entrada.id);
+  return naFila(ARQ_MARCAS, async () => {
+    const salvas = await lerJson<Marca[]>(ARQ_MARCAS, []);
+    const i = salvas.findIndex((m) => m.id === entrada.id);
 
-  const base: Marca = i >= 0
-    ? salvas[i]
-    : {
-        id: entrada.id,
-        nome: '',
-        pixelId: '',
-        accessToken: '',
-        testCode: '',
-      };
+    const base: Marca = i >= 0
+      ? salvas[i]
+      : {
+          id: entrada.id,
+          nome: '',
+          pixelId: '',
+          accessToken: '',
+          testCode: '',
+        };
 
-  const atualizada: Marca = {
-    ...base,
-    ...entrada,
-    // string vazia significa "nao mexer no token"; para limpar, envie null.
-    accessToken:
-      entrada.accessToken === null
-        ? ''
-        : entrada.accessToken?.trim()
-          ? entrada.accessToken.trim()
-          : base.accessToken,
-  };
+    const atualizada: Marca = {
+      ...base,
+      ...entrada,
+      // string vazia significa "nao mexer no token"; para limpar, envie null.
+      accessToken:
+        entrada.accessToken === null
+          ? ''
+          : entrada.accessToken?.trim()
+            ? entrada.accessToken.trim()
+            : base.accessToken,
+    };
 
-  if (i >= 0) salvas[i] = atualizada;
-  else salvas.push(atualizada);
+    if (i >= 0) salvas[i] = atualizada;
+    else salvas.push(atualizada);
 
-  await gravarJson(ARQ_MARCAS, salvas);
-  return atualizada;
+    await gravarJson(ARQ_MARCAS, salvas);
+    return atualizada;
+  });
 }
 
 export async function removerMarca(id: string) {
   if (id === 'default') throw new Error('A marca padrão não pode ser removida.');
-  const salvas = await lerJson<Marca[]>(ARQ_MARCAS, []);
-  await gravarJson(
-    ARQ_MARCAS,
-    salvas.filter((m) => m.id !== id)
-  );
+  return naFila(ARQ_MARCAS, async () => {
+    const salvas = await lerJson<Marca[]>(ARQ_MARCAS, []);
+    await gravarJson(
+      ARQ_MARCAS,
+      salvas.filter((m) => m.id !== id)
+    );
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,10 +504,50 @@ const INTEGRACOES_PADRAO = (): Integracoes => ({
   tag: { chave: gerarChaveTag(), dominios: [] },
 });
 
-export async function lerIntegracoes(): Promise<Integracoes> {
-  const atual = await lerJson<Integracoes | null>(ARQ_INTEGRACOES, null);
-  if (atual?.entrada?.segredo) {
-    let mudou = false;
+/** Um arquivo de integrações só serve se tiver o segredo de entrada dentro. */
+function integracoesUtil(d: Integracoes | null): boolean {
+  return Boolean(d && typeof d === 'object' && typeof d.entrada?.segredo === 'string' && d.entrada.segredo.trim());
+}
+
+/**
+ * O núcleo de `lerIntegracoes`, SEM fila — para poder ser chamado de dentro da
+ * fila por `atualizarIntegracoes` sem travar (`naFila` não é reentrante).
+ *
+ * 🔴 Este é o ramo que o portão D32 vigia. As três situações são diferentes e
+ * o código antigo tratava as três igual:
+ *
+ * | situação                               | o que acontece                    |
+ * |----------------------------------------|-----------------------------------|
+ * | arquivo íntegro                        | migra o que falta e devolve       |
+ * | arquivo quebrado, `.bak` bom           | restaura do `.bak` — MESMO segredo|
+ * | arquivo quebrado e `.bak` quebrado     | lança → modo degradado, 503       |
+ * | arquivo e `.bak` inexistentes          | `INTEGRACOES_PADRAO()` (1ª subida)|
+ *
+ * `INTEGRACOES_PADRAO()` gera segredo novo. Ele roda SÓ na última linha dessa
+ * tabela (B1-f). O segredo de entrada nunca é regenerado por falha de leitura;
+ * só por clique humano, em `novoSegredoEntrada()` (B1-g).
+ */
+async function resolverIntegracoes(): Promise<Integracoes> {
+  const leitura = await lerComBackup<Integracoes>(ARQ_INTEGRACOES, integracoesUtil);
+
+  if (leitura.estado === 'indisponivel') {
+    // NADA é gravado aqui. Regenerar seria trocar o segredo do xWinner em
+    // silêncio e derrubar a entrada de vendas (defeito B1).
+    throw new ErroConfiguracaoIndisponivel(ARQ_INTEGRACOES, leitura.motivo);
+  }
+
+  if (leitura.estado === 'ausente') {
+    const nova = INTEGRACOES_PADRAO();
+    await gravarJson(ARQ_INTEGRACOES, nova);
+    return nova;
+  }
+
+  const atual = leitura.dados;
+  // Restaurado do `.bak`: precisa voltar ao arquivo principal, e SEM sobrescrever
+  // o `.bak` com o arquivo corrompido que acabamos de recusar.
+  const restaurado = leitura.estado === 'restaurado';
+  {
+    let mudou = restaurado;
 
     // Migracao: arquivo criado antes das regras existirem.
     if (!Array.isArray(atual.regras)) {
@@ -447,12 +590,46 @@ export async function lerIntegracoes(): Promise<Integracoes> {
     }
 
     if (!Array.isArray(atual.saida)) atual.saida = [];
-    if (mudou) await gravarJson(ARQ_INTEGRACOES, atual);
+    if (mudou) await gravarJson(ARQ_INTEGRACOES, atual, { backup: !restaurado });
     return atual;
   }
-  const nova = INTEGRACOES_PADRAO();
-  await gravarJson(ARQ_INTEGRACOES, nova);
-  return nova;
+}
+
+/**
+ * Configuração de integrações, já migrada. Passa pela fila do arquivo (B2-a)
+ * porque ela PODE gravar (migração de regras, do rótulo e do bloco da tag).
+ *
+ * Lança `ErroConfiguracaoIndisponivel` quando o arquivo existe e nem ele nem o
+ * `.bak` puderam ser lidos. Quem chama de uma rota deve devolver **503** (via
+ * `erroDeRota`), nunca 401 — 401 faz o xWinner desistir da entrega.
+ */
+export async function lerIntegracoes(): Promise<Integracoes> {
+  return naFila(ARQ_INTEGRACOES, resolverIntegracoes);
+}
+
+/**
+ * Read-modify-write serializado de `config/integracoes.json` (B2-a, B2-b).
+ *
+ * É a forma CORRETA de mexer neste arquivo. `lerIntegracoes()` seguido de
+ * `salvarIntegracoes()` são duas entradas separadas na fila — entre elas cabe
+ * outro escritor, e foi assim que o contador de hits da Tag passou a poder
+ * apagar um save de regra feito no mesmo instante (defeito B2).
+ *
+ * O mutador recebe a configuração já migrada e pode:
+ *  - alterá-la no lugar e não devolver nada;
+ *  - devolver um objeto novo, que substitui o anterior;
+ *  - LANÇAR — e aí nada é gravado. É como a validação da rota aborta um save.
+ */
+export async function atualizarIntegracoes(
+  mutador: (atual: Integracoes) => Integracoes | void | Promise<Integracoes | void>
+): Promise<Integracoes> {
+  return naFila(ARQ_INTEGRACOES, async () => {
+    const atual = await resolverIntegracoes();
+    const proposta = await mutador(atual);
+    const nova = proposta ?? atual;
+    await gravarJson(ARQ_INTEGRACOES, nova);
+    return nova;
+  });
 }
 
 /**
@@ -464,16 +641,30 @@ export function acharRegra(cfg: Integracoes, eventoOrigem: string): RegraRoteame
   return ativas.find((r) => r.eventoOrigem === eventoOrigem) ?? ativas.find((r) => r.eventoOrigem === '*');
 }
 
+/**
+ * Sobrescreve o arquivo inteiro com o que veio.
+ *
+ * ⚠️ É gravação CEGA: não lê o disco antes. Serve para quem já montou o objeto
+ * final a partir de uma leitura feita na MESMA fila. Para qualquer
+ * read-modify-write use `atualizarIntegracoes` — senão o defeito B2 volta.
+ */
 export async function salvarIntegracoes(dados: Integracoes) {
-  await gravarJson(ARQ_INTEGRACOES, dados);
+  await naFila(ARQ_INTEGRACOES, () => gravarJson(ARQ_INTEGRACOES, dados));
   return dados;
 }
 
+/**
+ * O ÚNICO lugar que troca o segredo de entrada (B1-g).
+ *
+ * Chamado só pelo `POST /api/integracoes`, ou seja, por um clique humano no
+ * botão do console. Nenhum caminho de leitura, de falha ou de restauração
+ * chega aqui.
+ */
 export async function novoSegredoEntrada(): Promise<string> {
-  const atual = await lerIntegracoes();
-  atual.entrada.segredo = crypto.randomUUID();
-  await salvarIntegracoes(atual);
-  return atual.entrada.segredo;
+  const salva = await atualizarIntegracoes((atual) => {
+    atual.entrada.segredo = crypto.randomUUID();
+  });
+  return salva.entrada.segredo;
 }
 
 /**
@@ -485,10 +676,10 @@ export async function novoSegredoEntrada(): Promise<string> {
  * tag dele para de coletar navegacao, mas nenhum Purchase se perde.
  */
 export async function novaChaveTag(): Promise<string> {
-  const atual = await lerIntegracoes();
-  atual.tag.chave = gerarChaveTag();
-  await salvarIntegracoes(atual);
-  return atual.tag.chave;
+  const salva = await atualizarIntegracoes((atual) => {
+    atual.tag.chave = gerarChaveTag();
+  });
+  return salva.tag.chave;
 }
 
 /** Comparacao em tempo constante — evita vazar o segredo por timing. */

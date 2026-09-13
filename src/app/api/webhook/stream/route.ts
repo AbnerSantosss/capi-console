@@ -1,4 +1,6 @@
 import { assinar, listarEntradas, type ItemInbox } from '@/lib/inbox';
+import { exigirSessao } from '@/lib/sessao';
+import { erroDeRota } from '@/lib/erro-api';
 
 export const dynamic = 'force-dynamic';
 /** Resposta longa e viva: nada aqui pode ser guardado nem reaproveitado. */
@@ -14,8 +16,23 @@ export const fetchCache = 'force-no-store';
  */
 const PREAMBULO = `:${' '.repeat(2048)}\n\n`;
 
-/** SSE: a caixa de entrada se atualiza sem refresh. */
+/**
+ * SSE: a caixa de entrada se atualiza sem refresh.
+ *
+ * B-11 — o stream carrega TODO item da caixa de entrada, `payload` cru
+ * incluido: e a mesma PII do `GET /api/inbox`, so que ao vivo. Dependia do
+ * matcher do proxy e mais nada.
+ *
+ * A guarda fica ANTES de montar o ReadableStream: uma conexao sem sessao tem de
+ * morrer no 401, nunca ficar aberta batendo pulso a cada 20 s.
+ */
 export async function GET(request: Request) {
+  try {
+    exigirSessao(request);
+  } catch (e) {
+    return erroDeRota(e, 'Não foi possível abrir o canal de eventos ao vivo.', 401);
+  }
+
   const encoder = new TextEncoder();
   let encerrar = () => {};
 
