@@ -12,8 +12,8 @@ import { AlertTriangle } from 'lucide-react';
  *     segredo do webhook só muda por clique humano (B1-g);
  *  2. **onde olhar** — o caminho RELATIVO do arquivo, que é o que aparece
  *     dentro do container e no volume `capi_config`;
- *  3. **o que já está acontecendo sozinho** — os webhooks respondem 503, e o
- *     xWinner reentrega. Ninguém precisa correr.
+ *  3. **o que já está acontecendo sozinho** — os webhooks respondem 503, e a
+ *     plataforma reentrega. Ninguém precisa correr.
  *
  * O conteúdo do arquivo NUNCA entra aqui: lá moram o segredo do webhook e o
  * token da Meta (regra 2 do CLAUDE.md).
@@ -36,7 +36,7 @@ export function AvisoConfigIndisponivel({ arquivo }: { arquivo: string }) {
         </p>
         <p className="text-caption text-fg-muted">
           Enquanto isso, os webhooks respondem &ldquo;tente de novo mais tarde&rdquo; (503) em vez de
-          recusar a entrega, então o xWinner continua reenviando os eventos. Restaure o arquivo no
+          recusar a entrega, então a plataforma continua reenviando os eventos. Restaure o arquivo no
           volume <code className="font-mono">capi_config</code> e recarregue esta página.
         </p>
       </div>

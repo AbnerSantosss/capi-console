@@ -19,7 +19,7 @@ import { resolverModoPorMarca } from '@/lib/modo-por-marca';
 /**
  * Coletor da tag de navegador — o unico endpoint PUBLICO deste console.
  *
- * O webhook do xWinner nao manda PageView nenhum: sem esta rota a Meta nao ve
+ * O webhook da plataforma nao manda PageView nenhum: sem esta rota a Meta nao ve
  * visita alguma no site e o algoritmo otimiza no escuro. Alem do sinal de topo,
  * o hit e o que captura fbc/fbp/fbclid na pagina de vendas — onde o visitante
  * ainda e ANONIMO (o e-mail so nasce depois, no backoffice). A juncao com a
@@ -27,8 +27,8 @@ import { resolverModoPorMarca } from '@/lib/modo-por-marca';
  *
  * QUEM PROTEGE ESTA ROTA (ela nao tem senha, e nao pode ter):
  *   1. A lista branca de Origin (dominios cadastrados) — a tranca principal.
- *   2. A chave publica `tag.chave`, que NAO e `entrada.segredo`. O segredo do
- *      xWinner jamais pode ir para dentro de uma tag de GTM: qualquer visitante
+ *   2. A chave publica `tag.chave`, que NAO e `entrada.segredo`. O segredo de
+ *      entrada jamais pode ir para dentro de uma tag de GTM: qualquer visitante
  *      leria o HTML e forjaria um Purchase.
  *   3. A lista branca de eventos (`eventoTagPermitido`), que recusa Purchase e
  *      Subscribe. Dinheiro so entra pelo webhook autenticado.
@@ -127,7 +127,7 @@ export function cabecalhosCorsTag(origem: string): Record<string, string> {
  * Primeiro limitador de taxa do projeto, e ele nasce aqui por um motivo
  * especifico: /api/tag/coletar e a UNICA rota que qualquer navegador do mundo
  * pode chamar. Todas as outras exigem sessao (proxy.ts) ou o segredo de entrada
- * do xWinner. Sem freio, uma pagina qualquer com a chave publica copiada faria
+ * da plataforma. Sem freio, uma pagina qualquer com a chave publica copiada faria
  * o container gravar jsonl sem parar ate encher o volume — e volume cheio
  * derruba o recebimento de venda, que e a coisa que este projeto existe para
  * nao perder.
@@ -409,8 +409,8 @@ export async function processarTag(
 
   const cfg = await lerIntegracoes();
 
-  // 4. Chave publica da tag, comparada em tempo constante. Nao e o segredo do
-  // xWinner: esta aqui pode ser girada a qualquer hora sem derrubar venda.
+  // 4. Chave publica da tag, comparada em tempo constante. Nao e o segredo
+  // da plataforma: esta aqui pode ser girada a qualquer hora sem derrubar venda.
   if (!segredoConfere(texto(corpo, 'k', 'chave'), cfg.tag.chave)) {
     chavesRecusadas++;
     return NextResponse.json({ erro: 'Chave da tag invalida.' }, { status: 401 });
@@ -425,7 +425,7 @@ export async function processarTag(
   // 6. Lista branca de eventos. ESTA E A TRAVA QUE IMPEDE UM VISITANTE DE
   // FORJAR UMA VENDA com a chave publica que ele leu no HTML da pagina:
   // Purchase e Subscribe caem exatamente aqui. Dinheiro so entra pelo webhook
-  // do xWinner, autenticado por um segredo que nunca sai do servidor.
+  // da plataforma, autenticado por um segredo que nunca sai do servidor.
   const eventoOrigem = texto(corpo, 'e', 'evento');
   const doCatalogo = eventoTagPermitido(eventoOrigem);
   if (!doCatalogo) {

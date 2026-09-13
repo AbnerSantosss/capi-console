@@ -9,6 +9,11 @@
 
 export const ROTULO_MIN = 3;
 export const ROTULO_MAX = 40;
+/**
+ * Rótulo da empresa default. O valor é HISTÓRICO e não muda: ele já faz parte
+ * de uma URL de webhook publicada e cadastrada em produção, entregando venda de
+ * verdade. Trocar o texto derruba a entrega. Não é um nome a manter genérico.
+ */
 export const ROTULO_PADRAO = 'xwinner-codigo-vencedor';
 
 const RE_ROTULO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

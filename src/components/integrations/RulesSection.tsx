@@ -219,7 +219,7 @@ export function RulesSection({
           <EstadoVazio
             icone={Zap}
             titulo="Nenhuma regra de roteamento"
-            motivo="Sem regra, todo webhook que chega fica parado na fila esperando um clique. Uma regra diz qual evento do xWinner vira qual evento da Meta, e se ele sai sozinho."
+            motivo="Sem regra, todo webhook que chega fica parado na fila esperando um clique. Uma regra diz qual evento da plataforma vira qual evento da Meta, e se ele sai sozinho."
             acao={
               <Button variant="outline" onClick={adicionar}>
                 <Plus className="size-4" aria-hidden />
@@ -259,7 +259,7 @@ export function RulesSection({
             !NOMES_CATALOGO.includes(r.eventoOrigem);
           const par = r.modo === 'ignorar' ? null : parMeta(r.eventoMeta);
           const personalizado = r.modo !== 'ignorar' && r.eventoMeta !== '' && par?.padrao === false;
-          // O par só faz sentido dito por inteiro: nome do xWinner, nome técnico
+          // O par só faz sentido dito por inteiro: nome da plataforma, nome técnico
           // que aparece no Gerenciador e a tradução do que aquilo significa.
           const explicacao =
             r.modo === 'ignorar'
@@ -280,7 +280,7 @@ export function RulesSection({
                     <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
                       {r.ativo ? 'Ativa' : 'Desativada'}
                     </StatusDot>
-                    <span className="text-caption text-fg-muted uppercase">xWinner</span>
+                    <span className="text-caption text-fg-muted uppercase">Plataforma</span>
                     <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
                       {r.eventoOrigem || 'Nova regra'}
                     </span>
@@ -333,10 +333,10 @@ export function RulesSection({
                 <div className="grid gap-4 lg:grid-cols-3">
                   <Field
                     id={`origem-${r.id}`}
-                    label="Nome do evento no xWinner"
+                    label="Nome do evento na plataforma"
                     helper={
                       foraDoCatalogo
-                        ? 'Nome fora do catálogo conhecido do xWinner.'
+                        ? 'Nome fora do catálogo conhecido.'
                         : 'Nome técnico exato, como a plataforma manda. Use * para qualquer evento sem regra própria.'
                     }
                   >
@@ -397,7 +397,7 @@ export function RulesSection({
                                 </span>
                                 <span className="text-caption text-fg-muted">
                                   {'somenteManual' in e && e.somenteManual
-                                    ? 'O xWinner não manda este evento hoje — só para uso manual.'
+                                    ? 'A plataforma não manda este evento hoje — só para uso manual.'
                                     : e.descricao}
                                 </span>
                               </span>

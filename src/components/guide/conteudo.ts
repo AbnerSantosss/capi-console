@@ -190,7 +190,7 @@ export const CAMINHOS: Caminho[] = [
     eyebrow: 'Caminho 2',
     titulo: 'Disparo automático',
     definicao:
-      'O xWinner manda o webhook, a regra escolhe o evento da Meta e o app envia sozinho.',
+      'A plataforma manda o webhook, a regra escolhe o evento da Meta e o app envia sozinho.',
     quandoUsar:
       'Depois de um disparo manual bem-sucedido e da conferência no Testar eventos.',
     quemAperta: 'Ninguém aperta nada. Por isso a rede de segurança importa.',
@@ -343,11 +343,11 @@ export const TOPICOS: Topico[] = [
     textura: 'fluxo',
     icone: LightningIcon,
     titulo: 'Disparo automático em 6 passos',
-    frase: 'Ligar o recebimento direto do xWinner, sem copiar e colar.',
+    frase: 'Ligar o recebimento direto da plataforma, sem copiar e colar.',
     contador: '6 passos',
     indice: 'Automático',
     paraQue:
-      'Parar de digitar: o xWinner avisa, a regra decide e o app envia sozinho.',
+      'Parar de digitar: a plataforma avisa, a regra decide e o app envia sozinho.',
     quandoUsar:
       'Depois de ao menos um disparo manual bem-sucedido e conferido no Testar eventos.',
     saiSabendo:
@@ -369,12 +369,12 @@ export const TOPICOS: Topico[] = [
       },
       {
         id: 'endpoint',
-        titulo: 'Cadastrar o endpoint no xWinner',
+        titulo: 'Cadastrar o endpoint na plataforma de vendas',
         resumo: 'Assine só os eventos que viram conversão.',
         icone: TargetIcon,
         oQue:
           'Marque só os eventos que viram conversão: `precheckout_opened`, `checkout_session_opened`, `payment_generated`, `checkout_card_attempted` e `purchase_approved`. Abandono e estorno não precisam ser assinados.',
-        onde: 'No xWinner (admin.codigovencedor.com) → Integrações → Webhooks → Novo endpoint. Este menu é da plataforma, não deste console.',
+        onde: 'Na plataforma de vendas → Integrações → Webhooks → Novo endpoint. No xWinner é em admin.codigovencedor.com. Este menu é da plataforma, não deste console.',
       },
       {
         id: 'testar',
@@ -383,7 +383,7 @@ export const TOPICOS: Topico[] = [
         icone: FlaskIcon,
         oQue:
           'A plataforma envia um payload de exemplo com `lead@example.com`. Ele tem que aparecer na caixa de entrada e, se você mandar disparar, o resultado tem que ser "teste-ignorado". Se aparecer "enviado", pare tudo.',
-        onde: 'xWinner → botão Testar do endpoint; depois Disparo automático → aba Caixa de entrada.',
+        onde: 'Na plataforma → botão "Testar" do endpoint (no xWinner ele manda um ping); depois Disparo automático → aba Caixa de entrada.',
       },
       {
         id: 'venda-real',

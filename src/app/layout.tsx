@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppChrome } from '@/components/common/AppChrome';
+import { DESCRICAO_PRODUTO, NOME_PRODUTO } from '@/lib/produto';
 import './globals.css';
 
 const sans = Plus_Jakarta_Sans({
@@ -17,10 +18,13 @@ const mono = JetBrains_Mono({
   display: 'swap',
 });
 
+// O título e a descrição saem de `produto.ts`: eles aparecem na aba do
+// navegador e na prévia de link, e prender o nome de UMA empresa ("do Código
+// Vencedor") aí era a mesma promessa quebrada que o resto da FASE C desfaz —
+// o console passou a ser de quem instalar, não de um cliente só.
 export const metadata: Metadata = {
-  title: 'Meta CAPI Console',
-  description:
-    'Console de disparo manual de conversões para a Meta Conversions API do Código Vencedor.',
+  title: NOME_PRODUTO,
+  description: DESCRICAO_PRODUTO,
 };
 
 export const viewport: Viewport = {

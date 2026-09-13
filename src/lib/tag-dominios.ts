@@ -48,7 +48,7 @@ export interface DominioTag {
  * Bloco de configuracao da tag do navegador.
  *
  * `chave` e PUBLICA de proposito: ela viaja dentro do GTM, onde qualquer
- * visitante le. Ela NAO e o segredo de entrada do xWinner — se os dois se
+ * visitante le. Ela NAO e o segredo de entrada do webhook — se os dois se
  * misturarem, qualquer um forja um Purchase. Ver Integracoes.tag.
  */
 export interface ConfigTag {

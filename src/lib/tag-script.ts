@@ -6,7 +6,7 @@
  * coletores no navegador significa, um dia, corrigir um e esquecer o outro —
  * e a diferenca so aparece meses depois, num relatorio que nao bate.
  *
- * POR QUE ESTA TAG EXISTE: o webhook do Codigo Vencedor nao manda PageView
+ * POR QUE ESTA TAG EXISTE: o webhook da plataforma de vendas nao manda PageView
  * nenhum, entao ela e a UNICA fonte de sinal de topo. Pior: e a unica fonte de
  * fbc, fbp, UTM e IP real do visitante. A venda por PIX chega horas depois,
  * pelo webhook, sem nada disso — o comprador pagou no aplicativo do banco e
@@ -27,6 +27,7 @@
  */
 import type { EventoTag } from './tag-eventos';
 import { EVENTOS_TAG, eventoTagPermitido } from './tag-eventos';
+import { NOME_PRODUTO } from './produto';
 
 /**
  * Versao do nucleo embutido no script.
@@ -203,7 +204,12 @@ function cabecalho(o: OpcoesTag, evento: EventoTag): string {
   const host = paraComentario(o.host || hostDoEndpoint(o.endpoint) || '(não informado)');
   const acionador = ACIONADOR_GTM[evento.origem] || evento.quando;
   const linhas = [
-    'Código Vencedor — medição de campanha',
+    // Quem assina o bloco é o PRODUTO, não uma empresa. Este texto vai para
+    // dentro do site de um cliente qualquer: um site de Hotmart recebendo um
+    // comentário assinado "Código Vencedor" parece código colado por engano, e
+    // é o tipo de coisa que faz um desenvolvedor apagar a tag. A FASE D pode
+    // passar o nome da empresa ativa por `OpcoesTag`, se o dono quiser assinar.
+    `${NOME_PRODUTO} — medição de campanha`,
     '',
     `Evento .........: ${evento.evento} (${evento.rotuloPt})`,
     `Domínio ........: ${host}`,
@@ -751,7 +757,7 @@ export function gerarTagGtm(o: OpcoesTag): string {
         '}'
       : '';
   return [
-    `<!-- Código Vencedor — ${evento.evento} (${paraComentario(evento.rotuloPt)})`,
+    `<!-- ${NOME_PRODUTO} — ${evento.evento} (${paraComentario(evento.rotuloPt)})`,
     '     Tipo de tag: HTML personalizado.',
     `     Acionador: ${acionador} -->`,
     '<script>',
@@ -786,7 +792,7 @@ export function gerarTagSite(o: OpcoesTag): string {
         ]
       : [];
   return [
-    `<!-- Código Vencedor — ${evento.evento} (${paraComentario(evento.rotuloPt)})`,
+    `<!-- ${NOME_PRODUTO} — ${evento.evento} (${paraComentario(evento.rotuloPt)})`,
     '     Cole este bloco inteiro imediatamente ANTES de </head>, em todas as',
     '     páginas do site.',
     ...instrucoes,

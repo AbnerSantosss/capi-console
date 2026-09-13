@@ -16,7 +16,7 @@
  *
  * REGRA DE OURO deste arquivo: nunca lança e nunca registra nada. Ele roda no
  * caminho de recebimento do webhook, onde uma exceção custa uma venda PIX real
- * (o xWinner lê erro como "não entregue" e a reentrega dele não é garantida), e
+ * (a plataforma lê erro como "não entregue" e a reentrega dela não é garantida), e
  * um `console.log` de payload despejaria e-mail e telefone de comprador no log
  * do container.
  */

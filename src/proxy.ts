@@ -22,7 +22,7 @@ import {
  * - Todas as respostas protegidas recebem `Cache-Control: private, no-store`.
  *
  * Livres de senha:
- * - Webhooks do xWinner (`/api/webhook/in*`), protegidos por segredo no path.
+ * - Webhooks da plataforma (`/api/webhook/in*`), protegidos por segredo no path.
  * - Coletor da tag do navegador (`/api/tag/coletar`), protegido pela chave
  *   pública da tag e pela lista branca de domínios cadastrados — o visitante
  *   nunca tem sessão, então exigir cookie aqui desligaria a coleta inteira.

@@ -27,6 +27,7 @@ import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { NOME_PRODUTO } from '@/lib/produto';
 
 /**
  * Os dois caminhos ate a Meta precisam estar ditos aqui, com todas as letras:
@@ -160,7 +161,10 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface-0/90 backdrop-blur-md">
       <div className="mx-auto flex min-h-16 w-full max-w-[1280px] items-center gap-2 px-4 py-2 sm:px-6 lg:gap-4 lg:px-8">
-        {/* Marca do produto — o unico lugar com o laco colorido em caixa */}
+        {/* Marca do produto — o unico lugar com o laco colorido em caixa.
+            A segunda linha e o nome da EMPRESA, nao do produto: a FASE D troca
+            este literal pelo nome e pela logo da empresa ativa, que e onde o
+            "Codigo Vencedor" passa a ser uma empresa entre outras. */}
         <Link
           href="/"
           className="flex h-control-sm shrink-0 items-center gap-2.5 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
@@ -168,7 +172,7 @@ export function Header() {
           <MetaGlyph size={28} decorative={false} />
           <span className="hidden flex-col leading-none sm:flex">
             <span className="text-label font-semibold text-fg-strong">
-              Meta CAPI Console
+              {NOME_PRODUTO}
             </span>
             <span className="mt-0.5 text-caption text-fg-muted">
               Código Vencedor

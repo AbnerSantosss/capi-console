@@ -14,7 +14,7 @@ import { listarMarcas, type Marca } from '@/lib/config-store';
  * Este arquivo e o "UM lugar" exigido pela regra 2 de §9.5.1. Ele existe como
  * modulo proprio — e nao inline no `webhook-handler.ts` como o rascunho do
  * blueprint sugere — porque ha DOIS caminhos que decidem disparo automatico:
- * o webhook do xWinner (`webhook-handler.ts`) e a tag do site
+ * o webhook da plataforma (`webhook-handler.ts`) e a tag do site
  * (`tag-handler.ts`). Espalhar a mesma decisao por dois arquivos e exatamente
  * a "segunda fonte de verdade" que a regra 2 proibe; uma funcao compartilhada
  * e o oposto disso.

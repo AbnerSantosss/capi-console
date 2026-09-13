@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  *   POST /api/tag/coletar   corpo JSON (ou text/plain, vindo de sendBeacon)
  *
  * Rota fina de proposito: toda a decisao esta em src/lib/tag-handler.ts, igual
- * ao par rota/handler do webhook do xWinner.
+ * ao par rota/handler do webhook da plataforma.
  *
  * DIFERENCA IMPORTANTE PARA O CORS DO WEBHOOK: la a origem e '*', porque quem
  * protege aquele endpoint e o segredo no caminho, que nenhum navegador conhece.

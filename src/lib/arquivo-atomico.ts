@@ -10,7 +10,7 @@ import path from 'node:path';
  * backup e sem lock. Um processo morto no meio da escrita deixava
  * `config/integracoes.json` pela metade; na leitura seguinte o arquivo
  * ilegível caía no ramo que gera `INTEGRACOES_PADRAO()` — SEGREDO DE ENTRADA
- * NOVO — e o xWinner passava a receber 401. As vendas paravam de entrar em
+ * NOVO — e a plataforma passava a receber 401. As vendas paravam de entrar em
  * silêncio (defeito B1, PARTE 14 §14.0.1).
  *
  * A técnica já existia no projeto (`perfil-atribuicao.ts:150-156`); só não
@@ -32,7 +32,7 @@ export function caminhoTmp(arquivo: string): string {
  * não serviu. Quem recebe isto entra em modo degradado (B1-e):
  *
  *  - webhooks respondem **503** ("tente de novo mais tarde"), NUNCA 401
- *    ("segredo errado", que faz o xWinner desistir da entrega);
+ *    ("segredo errado", que faz a plataforma desistir da entrega);
  *  - nada é regenerado: o segredo de entrada só muda por clique humano (B1-g).
  *
  * A mensagem carrega o caminho RELATIVO do arquivo, para o operador saber onde

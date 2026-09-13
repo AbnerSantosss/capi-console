@@ -210,7 +210,7 @@ export async function PUT(request: NextRequest) {
       }
 
       // O rotulo e cosmetico, mas some do arquivo se nao for reescrito aqui — e
-      // sem ele a URL divulgada ao xWinner deixa de bater com a configurada.
+      // sem ele a URL divulgada à plataforma deixa de bater com a configurada.
       let rotulo = rotuloDaConfig(atual);
       if (body.entrada?.rotulo !== undefined) {
         const limpo = normalizarRotulo(body.entrada.rotulo);
@@ -283,7 +283,7 @@ export async function PUT(request: NextRequest) {
  * Gera uma credencial nova. Invalida a anterior imediatamente.
  *
  * `alvo: 'entrada'` (o padrao, para nao quebrar quem ja chamava esta rota sem
- * corpo) gira o segredo do xWinner — e ai a entrega de vendas para ate o
+ * corpo) gira o segredo de entrada — e ai a entrega de vendas para ate o
  * segredo novo ser colado la. `alvo: 'tag'` gira so a chave publica da tag, que
  * nao autentica venda nenhuma: o custo e o cliente recolar o codigo no site.
  * Confundir os dois e caro nos dois sentidos, por isso o discriminador e

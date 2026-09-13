@@ -3,6 +3,7 @@ import { lerIntegracoes } from '@/lib/config-store';
 import { enviarRelay, listarEntregas } from '@/lib/relay';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
+import { NOME_PRODUTO } from '@/lib/produto';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     const entrega = await enviarRelay(destino, 'teste', {
       teste: true,
-      mensagem: 'Ping do Meta CAPI Console.',
+      mensagem: `Ping do ${NOME_PRODUTO}.`,
     });
 
     return NextResponse.json({ entrega });

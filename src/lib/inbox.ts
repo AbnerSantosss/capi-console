@@ -139,7 +139,7 @@ export interface ItemInbox {
   testePlataforma?: boolean;
   /** true quando o payload e de teste da equipe (cupom de R$ 0,01, @example.com). */
   testeInterno?: boolean;
-  /** Formato do payload reconhecido: A (xWinner), B (gateway) ou outro. */
+  /** Formato do payload reconhecido: A (plataforma, ex. xWinner), B (gateway) ou outro. */
   formato?: 'A' | 'B' | 'outro';
   /** Apelido que veio na URL. null = chegou pela URL antiga, de um segmento so. */
   rotuloRecebido?: string | null;

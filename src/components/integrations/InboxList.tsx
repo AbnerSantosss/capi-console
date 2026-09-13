@@ -195,7 +195,7 @@ const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
 };
 
 const FORMATO_TEXTO: Record<'A' | 'B' | 'outro', string> = {
-  A: 'formato xWinner',
+  A: 'formato da plataforma (A)',
   B: 'formato gateway',
   outro: 'formato não reconhecido',
 };
@@ -924,7 +924,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
           titulo="Nenhum webhook recebido"
           motivo={
             <>
-              O xWinner ainda não apontou para este console, ou nenhuma venda entrou
+              A plataforma ainda não apontou para este console, ou nenhuma venda entrou
               desde então. Enquanto isso, use a aba <strong>Colar JSON</strong> ou
               preencha os campos abaixo.
             </>
@@ -1342,7 +1342,7 @@ function avisarChegada(item: ItemInbox) {
   }
 
   if (item.testePlataforma || item.classificacao === 'teste-plataforma') {
-    toast('Teste de conexão do xWinner', {
+    toast('Teste de conexão da plataforma', {
       description: `${nome} · a entrega chegou certa. Não é venda, nada vai para a Meta.`,
     });
     return;

@@ -3,8 +3,8 @@
 /**
  * Aba "Tag do site" — cadastro de domínios, DNS do cliente e tags prontas.
  *
- * O webhook do Código Vencedor não manda PageView nenhum. Sem esta tag a Meta
- * não vê visita alguma no site e o algoritmo otimiza sem sinal de topo; pior,
+ * O webhook da plataforma de vendas não manda PageView nenhum. Sem esta tag a
+ * Meta não vê visita alguma no site e o algoritmo otimiza sem sinal de topo; pior,
  * ninguém captura fbc/fbp na página de vendas e o Purchase que chega horas
  * depois, pelo PIX, é um evento sem dono — dinheiro de tráfego gasto sem
  * atribuição. Esta tela é o lugar onde isso se liga.
@@ -365,7 +365,7 @@ export function TagDoSite({
     <div className="flex min-w-0 flex-col gap-6">
       {/* 1 — por que esta tag existe -------------------------------- */}
       <p className="max-w-3xl text-body text-fg-body">
-        O webhook do Código Vencedor não manda <ParamChip>PageView</ParamChip>{' '}
+        O webhook da plataforma não manda <ParamChip>PageView</ParamChip>{' '}
         nenhum, então a Meta não vê visita alguma no site e o algoritmo otimiza
         sem sinal de topo. A tag do navegador cobre esse buraco e ainda captura,
         na hora da visita, os cookies <ParamChip>fbc</ParamChip> e{' '}
@@ -807,7 +807,7 @@ export function TagDoSite({
           title="Esta chave é pública de propósito"
         >
           Ela viaja dentro do HTML do cliente e qualquer visitante consegue lê-la
-          no código-fonte. Ela <strong>não é</strong> o segredo do xWinner: o
+          no código-fonte. Ela <strong>não é</strong> o segredo do webhook: o
           segredo autentica a venda e nunca sai do servidor. Se os dois se
           encostarem, qualquer pessoa forja um <ParamChip>Purchase</ParamChip> e
           a Meta passa a aprender com venda que não existiu.

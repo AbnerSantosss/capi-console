@@ -358,7 +358,7 @@ export interface Integracoes {
    * `tag.chave` NAO e `entrada.segredo` e os dois nunca podem se encostar. A
    * chave viaja dentro do HTML do cliente (GTM ou script colado na pagina), ou
    * seja, qualquer visitante le no codigo-fonte; o segredo de entrada autentica
-   * o xWinner e nunca sai do servidor. Se o segredo fosse parar na tag,
+   * a plataforma e nunca sai do servidor. Se o segredo fosse parar na tag,
    * qualquer pessoa forjaria um Purchase e a Meta aprenderia com venda que nao
    * existiu (regra 1 do CLAUDE.md).
    *
@@ -375,6 +375,12 @@ export interface Integracoes {
 /* Rotulo do endpoint de entrada (apelido publico, nao credencial)     */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Rotulo da empresa `default`, e NAO um nome a manter generico: este valor ja
+ * faz parte de uma URL de webhook publicada e cadastrada na plataforma agora,
+ * entregando venda de verdade. Mudar a string derruba aquele endpoint — e
+ * historico, nao vocabulario de tela.
+ */
 export const ROTULO_PADRAO = 'xwinner-codigo-vencedor';
 export const ROTULO_MIN = 3;
 export const ROTULO_MAX = 40;
@@ -567,7 +573,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
   const leitura = await lerComBackup<Integracoes>(ARQ_INTEGRACOES, integracoesUtil);
 
   if (leitura.estado === 'indisponivel') {
-    // NADA é gravado aqui. Regenerar seria trocar o segredo do xWinner em
+    // NADA é gravado aqui. Regenerar seria trocar o segredo de entrada em
     // silêncio e derrubar a entrada de vendas (defeito B1).
     throw new ErroConfiguracaoIndisponivel(ARQ_INTEGRACOES, leitura.motivo);
   }
@@ -603,7 +609,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
     }
 
     // Migracao do apelido do endpoint. Nao toca no segredo: a URL de um
-    // segmento ja cadastrada no xWinner continua entregando igual.
+    // segmento ja cadastrada na plataforma continua entregando igual.
     if (!atual.entrada.rotulo) {
       atual.entrada.rotulo = ROTULO_PADRAO;
       mudou = true;
@@ -637,7 +643,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
  *
  * Lança `ErroConfiguracaoIndisponivel` quando o arquivo existe e nem ele nem o
  * `.bak` puderam ser lidos. Quem chama de uma rota deve devolver **503** (via
- * `erroDeRota`), nunca 401 — 401 faz o xWinner desistir da entrega.
+ * `erroDeRota`), nunca 401 — 401 faz a plataforma desistir da entrega.
  */
 export async function lerIntegracoes(): Promise<Integracoes> {
   return naFila(ARQ_INTEGRACOES, resolverIntegracoes);
@@ -707,7 +713,7 @@ export async function novoSegredoEntrada(): Promise<string> {
  * Gira a chave publica da tag. Invalida a anterior na hora.
  *
  * Diferente de `novoSegredoEntrada`, isto NAO derruba a entrega de vendas: o
- * webhook do xWinner autentica pelo segredo de entrada, que nao e tocado aqui.
+ * webhook da plataforma autentica pelo segredo de entrada, que nao e tocado aqui.
  * O custo de girar e o cliente precisar colar o codigo novo no site — ate la a
  * tag dele para de coletar navegacao, mas nenhum Purchase se perde.
  */

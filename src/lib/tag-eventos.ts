@@ -12,7 +12,7 @@ export interface EventoTag {
    * Nome de origem que a tag envia ao coletor, sempre no prefixo 'tag.'.
    * E o que casa com RegraRoteamento.eventoOrigem — o prefixo existe para o
    * operador nunca confundir, na tela de regras, um evento do navegador com um
-   * evento do webhook do xWinner, que tem autenticacao e peso diferentes.
+   * evento do webhook da plataforma, que tem autenticacao e peso diferentes.
    */
   origem: string;
   /** Rotulo em portugues, exibido AO LADO do nome tecnico, nunca no lugar dele. */
@@ -28,7 +28,7 @@ export interface EventoTag {
 /**
  * Catalogo do que a tag do navegador PODE disparar.
  *
- * Os dois primeiros vem ligados porque o webhook do Codigo Vencedor nao manda
+ * Os dois primeiros vem ligados porque o webhook da plataforma nao manda
  * PageView nenhum: sem a tag, a Meta nao ve visita alguma no site e o algoritmo
  * otimiza as de audiencia sem sinal de topo. O resto fica disponivel mas
  * desligado — cada evento a mais e um evento que o operador precisa conferir
@@ -123,7 +123,7 @@ export const EVENTOS_TAG = [
  * publico que nao compra e o trafego iria para quem nunca converteria — alem
  * de violar a regra 1 do CLAUDE.md (somente eventos reais).
  *
- * Purchase e Subscribe vem SO do webhook do xWinner, autenticado por segredo
+ * Purchase e Subscribe vem SO do webhook da plataforma, autenticado por segredo
  * que nunca sai do servidor.
  */
 export const EVENTOS_TAG_PROIBIDOS: ReadonlySet<string> = new Set([

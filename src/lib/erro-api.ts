@@ -30,8 +30,8 @@ export function respostaErro(erro: string, status: number, erros?: string[]): Ne
 }
 
 /**
- * Frase única do modo degradado (B1-e). O xWinner precisa ver **503** aqui, não
- * 401: 401 ele lê como "segredo errado" e para de tentar; 503 é "tente de novo
+ * Frase única do modo degradado (B1-e). A plataforma precisa ver **503** aqui, não
+ * 401: 401 ela lê como "segredo errado" e para de tentar; 503 é "tente de novo
  * mais tarde" e a entrega volta sozinha quando a configuração voltar.
  */
 export function respostaConfigIndisponivel(e: ErroConfiguracaoIndisponivel): NextResponse<CorpoErro> {

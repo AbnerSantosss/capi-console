@@ -34,7 +34,7 @@ export interface EventoMeta {
   /** Se a Meta exige value + currency. */
   exigeValor?: boolean;
   /**
-   * true quando NENHUM evento de origem do xWinner/gateway produz este nome.
+   * true quando NENHUM evento de origem da plataforma/gateway produz este nome.
    * Serve so para a tela de regras nao oferecer o que a plataforma nunca manda.
    */
   somenteManual?: boolean;

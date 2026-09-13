@@ -36,8 +36,8 @@ import { resolverModoPorMarca, decisaoDaSonda, SEM_DECISAO } from '@/lib/modo-po
  * uma venda PIX real se perderia — exatamente o que este projeto existe para
  * impedir.
  *
- * A forma com segredo no caminho existe porque o backoffice do xWinner só
- * oferece o campo "URL (https)" ao cadastrar um endpoint de saída — não há onde
+ * A forma com segredo no caminho existe porque plataformas como o xWinner só
+ * oferecem o campo "URL (https)" ao cadastrar um endpoint de saída — não há onde
  * colocar um header customizado. É o mesmo padrão de Slack e Discord.
  *
  * O segredo NÃO vai em query string de propósito: query string vaza em
@@ -122,10 +122,10 @@ export async function processarWebhook(
   // 🔴 B1-e / portão D33. Se `config/integracoes.json` existir mas nem ele nem o
   // `.bak` puderem ser lidos, esta entrega responde **503**, NUNCA 401.
   //
-  // A diferença é o que o xWinner faz depois: 401 ele lê como "o segredo está
+  // A diferença é o que a plataforma faz depois: 401 ela lê como "o segredo está
   // errado" e para de tentar — e aí a venda se perde de vez, porque ninguém no
   // servidor sabe que ela existiu. 503 é "tente de novo mais tarde" e a fila de
-  // entrega dele retoma sozinha quando a configuração voltar.
+  // entrega dela retoma sozinha quando a configuração voltar.
   //
   // Nada é regenerado aqui: o segredo continua o mesmo quando o arquivo voltar.
   let cfg: Integracoes;
@@ -160,7 +160,7 @@ export async function processarWebhook(
 
   // Um corpo gigante não pode consumir a memória do container. Mesmo recusado,
   // a tentativa vira item na caixa: sem isso, a entrega "não existiu" na tela e
-  // o xWinner reentrega em silêncio.
+  // a plataforma reentrega em silêncio.
   const tamanho = Number(request.headers.get('content-length') || 0);
   if (tamanho > LIMITE_CORPO) {
     await registrarNaoLido({

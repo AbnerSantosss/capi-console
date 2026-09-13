@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
  * E uma rota catch-all, e nao um `[segredo]` fixo, porque duas rotas dinamicas
  * no mesmo nivel (`[segredo]` e `[...caminho]`) nao coexistem no App Router.
  *
- * Existe porque o backoffice do xWinner so oferece o campo "URL (https)" ao
+ * Existe porque plataformas como o xWinner so oferecem o campo "URL (https)" ao
  * cadastrar um endpoint de saida: nao ha onde colocar um header.
  *
  * Sobre o CORS liberado abaixo: CORS protege o NAVEGADOR de um usuario, nao o

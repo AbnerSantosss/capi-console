@@ -69,7 +69,7 @@ export interface TextoClassificacao {
 export const TEXTO_CLASSIFICACAO: Record<ClassificacaoEvento, TextoClassificacao> = {
   mapeado: {
     rotulo: 'Tem evento padrão na Meta',
-    explicacao: 'Este nome do xWinner tem um evento padrão equivalente na Meta.',
+    explicacao: 'Este nome da plataforma tem um evento padrão equivalente na Meta.',
     tom: 'success',
   },
   'sem-equivalente': {
@@ -79,7 +79,7 @@ export const TEXTO_CLASSIFICACAO: Record<ClassificacaoEvento, TextoClassificacao
     tom: 'neutral',
   },
   'teste-plataforma': {
-    rotulo: 'Teste de conexão do xWinner — chegou certo, nada a enviar',
+    rotulo: 'Teste de conexão da plataforma — chegou certo, nada a enviar',
     explicacao:
       'É o botão "Testar" do backoffice. Prova que a entrega funciona; não existe venda por trás dele.',
     tom: 'accent',
@@ -155,7 +155,7 @@ export function motivoLegivel(dados: DadosDoMotivo): string {
   }
 
   if (dados.testePlataforma || dados.classificacao === 'teste-plataforma') {
-    return 'Teste da plataforma: o xWinner mandou um "ping" para conferir o endereço. A entrega chegou certa e não há venda para enviar.';
+    return 'Teste da plataforma: ela mandou um "ping" para conferir o endereço. A entrega chegou certa e não há venda para enviar.';
   }
 
   if (dados.classificacao === 'sem-equivalente') {
