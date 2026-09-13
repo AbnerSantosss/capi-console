@@ -8,7 +8,7 @@
  *   G2  Borda de controle e de foco   WCAG 2.2 SC 1.4.11  >= 3:1
  *   G3  Borda de SUPERFICIE           DS-2.1 / DS-0.3     >= 3:1
  *   G4  Token de cor fora do :root    DS-0.1              zero
- *   G5  Classe da ponte shadcn em camada flutuante        zero
+ *   G5  Classe da ponte shadcn em componente vigiado       zero
  *   G6  font-size fora do @theme      DS-0.4              zero
  *   G7  Hexadecimal literal fora da lista de excecoes     zero
  *
@@ -177,30 +177,63 @@ const CSS_DO_PRODUTO = arquivosCss();
 const linhasDe = (rel) => ler(rel).split('\n');
 
 /* -------------------------------------------------------------------------
-   G5 — quem flutua nao usa a ponte shadcn
+   G5 — a ponte shadcn nao entra em componente de produto
    -------------------------------------------------------------------------
    Os tokens-ponte (--muted, --popover, --accent, --border, --input,
    --foreground) sao declarados uma unica vez no :root e chegam ja resolvidos
-   por heranca. Dentro de uma camada flutuante eles ignoram a superficie em que
-   estao e reintroduzem exatamente os pares que este script mede.
+   por heranca. Dentro de um componente eles ignoram a superficie em que estao
+   e reintroduzem exatamente os pares que este script mede.
 
-   A lista continua sendo uma ENUMERACAO, nao uma exclusao. Inverte-la para
-   "todo src/components/** menos os decorativos" e o item de maior alavancagem
-   do blueprint — e cabe a FASE 3, na mesma alteracao que converte os quatro
-   primitivos stock (tabs, checkbox, accordion, label) que a inversao reprova
-   de imediato. Inverter antes deles deixaria a guarda vermelha de proposito,
-   e fase vermelha nao entra em commit.                                        */
+   A lista e uma EXCLUSAO, nao uma enumeracao. Ate a FASE 2 ela se chamava
+   ARQUIVOS_FLUTUANTES e nomeava oito arquivos "que flutuam": o efeito pratico
+   era que todo componente NOVO nascia fora da guarda, e foi por esse furo que
+   passaram os quatro primitivos stock (tabs, checkbox, accordion, label) e as
+   classes que button, input, textarea e separator ainda carregavam apesar de
+   §13.7 os dar por curados. A FASE 3 inverteu: todo `src/components/**` e
+   vigiado, e sair da guarda exige entrar na lista de excecoes abaixo — o que
+   e uma decisao visivel, e nao um esquecimento (DS-6.1).
 
-const ARQUIVOS_FLUTUANTES = [
-  'src/components/ui/dialog.tsx',
-  'src/components/ui/tooltip.tsx',
-  'src/components/ui/select.tsx',
-  'src/components/ui/badge.tsx',
-  'src/components/common/CommandPalette.tsx',
-  'src/components/brand/BrandDialog.tsx',
-  'src/components/settings/SettingsDialog.tsx',
-  'src/components/dispatch/ConfirmDialog.tsx',
+   Sao duas excecoes, e so duas.                                            */
+
+// 1. Os DECORATIVOS. Malhas e feixes de luz: nao carregam texto nem estado,
+//    entao nao ha par de contraste a medir neles.
+const DECORATIVOS = [
+  'src/components/ui/dot-pattern.tsx',
+  'src/components/ui/grid-pattern.tsx',
+  'src/components/ui/animated-grid-pattern.tsx',
+  'src/components/ui/border-beam.tsx',
 ];
+
+/* 2. `src/components/auth/**`. A tela de login esta fora do escopo de
+      qualquer redesenho desta temporada: e a DECISAO DE PRODUTO IRREVERSIVEL
+      #13, nao uma divida pendente. Ela tem paleta propria e 14 hexadecimais
+      proprios — e por isso que parece de outro sistema —, e o papel da guarda
+      aqui e impedir que esse vocabulario VAZE para o resto do produto, nao
+      consertar a tela. Nao tire esta linha daqui achando que e esquecimento:
+      tirar a excecao sem redesenhar a tela deixa o gate vermelho de proposito,
+      e reprovar o que ninguem tem autorizacao para mudar nao e guarda, e
+      ruido.                                                                */
+const FORA_DA_GUARDA = [...DECORATIVOS, 'src/components/auth/'];
+
+/** Todo componente de produto — `.tsx` e tambem `.ts`, porque string de
+ *  classe e hexadecimal literal aparecem em arquivo de apoio (rotulo.ts,
+ *  hue.ts, useDisparo.ts) tanto quanto em JSX. */
+function arquivosDeComponente(dir = 'src/components') {
+  const achados = [];
+  const anda = (d) => {
+    for (const nome of readdirSync(join(RAIZ, d))) {
+      const rel = `${d}/${nome}`;
+      if (statSync(join(RAIZ, rel)).isDirectory()) anda(rel);
+      else if (/\.tsx?$/.test(nome)) achados.push(rel);
+    }
+  };
+  anda(dir);
+  return achados
+    .filter((rel) => !FORA_DA_GUARDA.some((prefixo) => rel.startsWith(prefixo)))
+    .sort();
+}
+
+const ARQUIVOS_VIGIADOS = arquivosDeComponente();
 
 const CLASSES_PROIBIDAS = [
   ['bg-muted', /\bbg-muted\b/, 'bg-surface-2'],
@@ -295,7 +328,7 @@ function verificarFontSize() {
     });
   }
 
-  for (const rel of ARQUIVOS_FLUTUANTES) {
+  for (const rel of ARQUIVOS_VIGIADOS) {
     let linhas;
     try {
       linhas = linhasDe(rel);
@@ -345,7 +378,7 @@ const HEX_LITERAL = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/;
 
 function verificarHexLiteral() {
   const problemas = [];
-  const alvos = [...CSS_DO_PRODUTO, ...ARQUIVOS_FLUTUANTES];
+  const alvos = [...CSS_DO_PRODUTO, ...ARQUIVOS_VIGIADOS];
 
   for (const rel of alvos) {
     if (SEM_HEX.some((p) => rel.startsWith(p))) continue;
@@ -398,7 +431,7 @@ function verificarHexLiteral() {
 
 function verificarClasses() {
   const problemas = [];
-  for (const arquivo of ARQUIVOS_FLUTUANTES) {
+  for (const arquivo of ARQUIVOS_VIGIADOS) {
     let conteudo;
     try {
       conteudo = ler(arquivo);
@@ -593,9 +626,10 @@ rodarLista(
 
 rodarLista(
   'G5',
-  'Classe da ponte shadcn em camada flutuante',
+  'Classe da ponte shadcn em componente de produto',
   verificarClasses(),
-  `${ARQUIVOS_FLUTUANTES.length} arquivos vigiados limpos (${CLASSES_PROIBIDAS.length} classes proibidas)`
+  `${ARQUIVOS_VIGIADOS.length} componentes vigiados limpos (${CLASSES_PROIBIDAS.length} classes proibidas)` +
+    ` — lista por EXCLUSAO: so ${FORA_DA_GUARDA.length} excecoes`
 );
 
 rodarLista(

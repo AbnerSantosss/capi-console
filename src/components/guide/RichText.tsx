@@ -12,7 +12,7 @@ export function RichText({ children }: { children: string }) {
         parte.startsWith('`') && parte.endsWith('`') && parte.length > 2 ? (
           <code
             key={i}
-            className="rounded border border-line bg-surface-2 px-1 py-0.5 font-mono text-[0.92em] text-fg-body"
+            className="rounded-control border border-line bg-surface-2 px-1 py-0.5 font-mono text-code-inline text-fg-body"
           >
             {parte.slice(1, -1)}
           </code>

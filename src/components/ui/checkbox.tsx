@@ -5,12 +5,28 @@ import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
 import { cn } from "@/lib/utils"
 import { CheckIcon } from "lucide-react"
 
+/**
+ * O estado marcado e comunicado por TRES sinais, nunca so pelo preenchimento
+ * (SC 1.4.1): o fill de acento, o glifo de check e a borda, que sobe de
+ * `line-control` para `accent-text` — 7.16 sobre o painel e 6.54 sobre o
+ * campo, bem acima dos 3:1 de SC 1.4.11. Desmarcado, a borda de controle da
+ * 3.91 sobre o painel.
+ */
 function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors outline-none group-has-disabled/field:opacity-50 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground group-has-[:focus-visible]/field-label:data-checked:border-primary dark:data-checked:bg-primary",
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-control border border-line-control bg-surface-2 transition-colors duration-150 outline-none",
+        // Alvo de toque real de 40px, invisivel, em volta da caixa de 16px.
+        "after:absolute after:-inset-x-3 after:-inset-y-2",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text",
+        "group-has-disabled/field:opacity-50 disabled:cursor-not-allowed disabled:opacity-50",
+        "group-has-[:focus-visible]/field-label:not-data-checked:border-line-control",
+        "data-checked:border-accent-text data-checked:bg-accent-fill data-checked:text-white",
+        "group-has-[:focus-visible]/field-label:data-checked:border-accent-text",
+        "aria-invalid:border-danger aria-invalid:focus-visible:outline-danger",
+        "aria-invalid:aria-checked:border-accent-text",
         className
       )}
       {...props}

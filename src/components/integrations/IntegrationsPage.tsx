@@ -27,6 +27,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { EstadoVazio } from '@/components/common/EstadoVazio';
 import {
   Field,
   Section,
@@ -35,7 +37,8 @@ import {
   StatusDot,
 } from '@/components/common/primitives';
 import { InboxList } from './InboxList';
-import { RulesSection, type RegraRoteamento } from './RulesSection';
+import { RulesSection } from './RulesSection';
+import type { RegraRoteamento } from '@/lib/config-store';
 import { TagDoSite } from './TagDoSite';
 import type { ConfigTag, DominioTag } from '@/lib/tag-dominios';
 import { erroDoRotulo, normalizarRotulo, ROTULO_PADRAO } from './rotulo';
@@ -110,6 +113,12 @@ function abaDoHash(hash: string): IntegrationTab {
   return ABAS.some((item) => item.value === value) ? value : ABA_PADRAO;
 }
 
+/** Id de destino de retorno. Fora do componente: o relogio e impuro e o corpo
+ *  de um componente precisa ser idempotente (react-hooks/purity). */
+function novoIdDeDestino(): string {
+  return `dest_${Date.now().toString(36)}`;
+}
+
 export function IntegrationsPage({
   inicial,
   publicBaseUrl,
@@ -171,6 +180,29 @@ export function IntegrationsPage({
     setCopiado(chave);
     setTimeout(() => setCopiado(null), 2000);
     toast.success('Copiado.');
+  };
+
+  /**
+   * Acrescenta um destino de retorno. Extraido do `onClick` do cabecalho porque
+   * o EstadoVazio precisa oferecer exatamente a MESMA acao (C-11): duas copias
+   * do mesmo corpo divergiriam no primeiro ajuste.
+   */
+  const novoDestino = async () => {
+    const id = novoIdDeDestino();
+    await salvar({
+      ...cfg,
+      saida: [
+        ...cfg.saida,
+        {
+          id,
+          nome: 'n8n — Código Vencedor',
+          url: 'https://n8n.proxserverabner.site/webhook/codigo-vencedor-capi',
+          headers: {},
+          eventos: ['dispatch.success', 'dispatch.error'],
+          ativo: false,
+        },
+      ],
+    });
   };
 
   const salvar = async (novo: Integracoes) => {
@@ -425,9 +457,7 @@ export function IntegrationsPage({
                   <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
                   {item.label}
                   {count !== undefined && (
-                    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-caption text-fg-muted tabular">
-                      {count}
-                    </span>
+                    <Badge className="font-mono tabular">{count}</Badge>
                   )}
                 </TabsTrigger>
               );
@@ -716,22 +746,7 @@ export function IntegrationsPage({
           <Button
             size="sm"
             variant="outline"
-            onClick={() =>
-              salvar({
-                ...cfg,
-                saida: [
-                  ...cfg.saida,
-                  {
-                    id: `dest_${Date.now().toString(36)}`,
-                    nome: 'n8n — Código Vencedor',
-                    url: 'https://n8n.proxserverabner.site/webhook/codigo-vencedor-capi',
-                    headers: {},
-                    eventos: ['dispatch.success', 'dispatch.error'],
-                    ativo: false,
-                  },
-                ],
-              })
-            }
+            onClick={() => void novoDestino()}
           >
             <Plus className="size-4" aria-hidden />
             Novo destino
@@ -739,16 +754,23 @@ export function IntegrationsPage({
         }
       >
         {cfg.saida.length === 0 ? (
-          <div className="rounded-panel border border-dashed border-line-strong bg-surface-1 p-8 text-center">
-            <p className="text-label font-medium text-fg-body">
-              Nenhum destino configurado
-            </p>
-            <p className="mx-auto mt-1 max-w-md text-caption text-fg-muted">
-              Sem destino, o resultado do disparo fica só no arquivo{' '}
-              <code className="font-mono">logs/disparos.md</code>. Adicione um
-              para o n8n saber se a Meta aceitou.
-            </p>
-          </div>
+          <EstadoVazio
+            icone={ArrowUpRight}
+            titulo="Nenhum destino configurado"
+            motivo={
+              <>
+                Sem destino, o resultado do disparo fica só no arquivo{' '}
+                <code className="font-mono">logs/disparos.md</code> — o n8n e o
+                CRM nunca ficam sabendo se a Meta aceitou.
+              </>
+            }
+            acao={
+              <Button variant="outline" onClick={() => void novoDestino()}>
+                <Plus className="size-4" aria-hidden />
+                Novo destino
+              </Button>
+            }
+          />
         ) : (
           <ul className="flex flex-col gap-3">
             {cfg.saida.map((d, i) => (
@@ -887,9 +909,17 @@ export function IntegrationsPage({
         }
       >
         {entregas.length === 0 ? (
-          <p className="rounded-panel border border-dashed border-line-strong bg-surface-1 p-8 text-center text-caption text-fg-muted">
-            Nenhuma entrega registrada ainda.
-          </p>
+          <EstadoVazio
+            icone={History}
+            titulo="Nenhuma entrega registrada"
+            motivo="O histórico só ganha linhas depois do primeiro disparo com um destino ativo. Se já houve disparo, o destino pode estar desligado."
+            acao={
+              <Button variant="outline" onClick={carregar} disabled={salvando}>
+                <RefreshCw className="size-4" aria-hidden />
+                Atualizar
+              </Button>
+            }
+          />
         ) : (
           <div
             className="max-w-full overflow-x-auto"

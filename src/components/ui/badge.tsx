@@ -1,51 +1,70 @@
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Selo de estado — CINCO variantes, fechadas (C-7):
+ * `neutro` (padrao) · `sucesso` · `aviso` · `perigo` · `info`.
+ *
+ * Uso:  <Badge variant="sucesso">enviado</Badge>
+ *
+ * C-9 — SELO NUNCA E CLICAVEL. Por isso ele e um <span> puro, sem `render`,
+ * sem `onClick` embutido e sem estado de hover: se algo precisa de clique, e
+ * botao ou filtro, nao selo. Trocar o elemento por <a>/<button> aqui seria
+ * reabrir exatamente o que a regra fecha.
+ *
+ * C-10 — SELO SEMPRE TEM TEXTO. Nunca um ponto colorido sozinho: cor nao
+ * comunica estado por si (SC 1.4.1). O icone e opcional e acompanha o texto.
+ *
+ * Forma: `rounded-full`, borda + texto na cor do estado sobre um fill de
+ * apenas 10% — nunca fundo solido saturado, que competiria com o botao
+ * primario e quebraria DS-1.2.
+ *
+ * Tipografia: `text-caption` (12/18), o menor degrau que existe. A formula
+ * antiga usava o degrau de 11px, ELIMINADO por DS-4.9 — o piso do produto e
+ * 12px renderizados, selo incluido. Nao o reintroduza.
+ *
+ * Contrastes medidos (pior caso das tres superficies onde o selo aparece —
+ * painel s1, campo s2 e camada flutuante s3):
+ *   texto  sucesso 6.41 · aviso 7.24 · perigo 4.82 · info 4.95 · neutro 7.26
+ *   borda  sucesso 4.55 · aviso 5.07 · perigo 3.51 · info 3.63 · neutro 3.20
+ * A borda colorida fica em 80%: abaixo disso (o /40 e /50 da praxe) perigo e
+ * info caem para 1.81 e 2.86 contra o proprio fill e o limite some. O neutro
+ * usa `line-control`, e nao `line-strong`, porque `--border-default` mede
+ * 2.78 sobre a superficie flutuante — passa no painel e reprova no modal.
+ */
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-caption font-semibold whitespace-nowrap transition-all focus-visible:border-accent-text focus-visible:ring-[3px] focus-visible:ring-accent-text/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-danger aria-invalid:ring-danger/20 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-caption font-semibold uppercase tracking-wide whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-accent-fill text-white",
-        secondary: "bg-surface-2 text-fg-body",
-        destructive:
-          "bg-danger/10 text-danger focus-visible:ring-danger/20 [a]:hover:bg-danger/20",
-        // O selo `outline` só existe pela borda: por isso line-control, que é
-        // o único que cruza 3:1 também sobre a superfície de modal.
-        outline: "border-line-control text-fg-muted",
-        ghost: "hover:bg-surface-2 hover:text-fg-strong",
-        link: "text-accent-text underline-offset-4 hover:underline",
+        neutro: "border-line-control text-fg-muted",
+        sucesso: "border-success/80 bg-success/10 text-success",
+        aviso: "border-warning/80 bg-warning/10 text-warning",
+        perigo: "border-danger/80 bg-danger/10 text-danger",
+        info: "border-accent-text/80 bg-accent-text/10 text-accent-text",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "neutro",
     },
   }
 )
 
 function Badge({
   className,
-  variant = "default",
-  render,
+  variant = "neutro",
   ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return useRender({
-    defaultTagName: "span",
-    props: mergeProps<"span">(
-      {
-        className: cn(badgeVariants({ variant }), className),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: "badge",
-      variant,
-    },
-  })
+}: React.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+  return (
+    <span
+      data-slot="badge"
+      data-variant={variant}
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
+  )
 }
 
 export { Badge, badgeVariants }

@@ -233,6 +233,17 @@
      encontrável e única — não copie o literal `text-[16px]`. */
   --text-input-mobile: 16px;
 
+  /* A segunda exceção nomeada, e pelo motivo oposto: `<code>` dentro de texto
+     corrido (`RichText`) precisa ser RELATIVO ao texto que o cerca. O mesmo
+     componente aparece dentro de `text-body`, `text-label` e `text-caption`,
+     então qualquer um dos seis degraus fixos ficaria grande num lugar e
+     pequeno no outro. A escala continua sendo de seis degraus: isto não é um
+     sétimo degrau, é um modificador — e por ser `em`, nunca desce abaixo do
+     piso, porque o degrau que o cerca já respeita o piso.
+     Não copie o literal `text-[0.92em]`; ele é justamente o que o gate G6
+     existe para pegar. */
+  --text-code-inline: 0.92em;
+
   /* --- Espaço (DS-4.10) -------------------------------------------------
      Em px multiplicados por --ui-scale, não em rem: assim o espaçamento
      continua respondendo às três densidades sem ficar preso ao font-size do
@@ -261,8 +272,12 @@
 }
 
 @layer base {
+  /* A última classe-ponte do repositório, e a que o gate não alcançava: G5
+     varre `src/components/**`, e isto aqui é CSS. `border-border` e
+     `outline-ring` resolvem para os mesmos valores de `border-line` e
+     `accent-text` — a troca não muda pixel nenhum, muda quem é a fonte. */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-line outline-accent-text/50;
   }
 
   html {

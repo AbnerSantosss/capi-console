@@ -65,7 +65,7 @@ export function IntegrationFlow({
               <button
                 type="button"
                 onClick={() => onNavigate(step.tab)}
-                className="group flex min-h-14 min-w-0 items-center gap-3 rounded-lg border border-line bg-surface-2/80 px-3 text-left transition-colors hover:border-line-control hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="group flex min-h-14 min-w-0 items-center gap-3 rounded-lg border border-line bg-surface-2/80 px-3 text-left transition-colors hover:border-line-control hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-accent-text/20 bg-accent-text/8 text-accent-text">
                   <Icon className="size-5" strokeWidth={1.75} aria-hidden />
@@ -80,7 +80,7 @@ export function IntegrationFlow({
                 </span>
               </button>
               {index < STEPS.length - 1 && (
-                <span className="flex items-center justify-center text-fg-disabled" aria-hidden>
+                <span className="flex items-center justify-center text-fg-muted" aria-hidden>
                   <ArrowRight className="hidden size-4 sm:block" strokeWidth={1.75} />
                   <ArrowDown className="size-4 sm:hidden" strokeWidth={1.75} />
                 </span>

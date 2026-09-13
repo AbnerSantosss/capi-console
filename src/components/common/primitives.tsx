@@ -57,7 +57,7 @@ export function HelpTip({
       <TooltipTrigger
         type="button"
         aria-label={label}
-        className="relative inline-flex size-5 cursor-help items-center justify-center rounded text-fg-disabled transition-colors hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring after:absolute after:top-1/2 after:left-1/2 after:size-[36px] after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
+        className="relative inline-flex size-5 cursor-help items-center justify-center rounded text-fg-muted transition-colors hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text after:absolute after:top-1/2 after:left-1/2 after:size-[36px] after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
       >
         <Info className="size-3.5" aria-hidden />
       </TooltipTrigger>

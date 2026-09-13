@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
-  Inbox,
   Radio,
+  Workflow,
   RefreshCw,
   Trash2,
   ArrowDownToLine,
@@ -24,7 +25,15 @@ import { parseWebhook, type ClassificacaoEvento, type MotivoIgnorar } from '@/li
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { StatusDot, Callout } from '@/components/common/primitives';
+import { EstadoVazio } from '@/components/common/EstadoVazio';
+import {
+  Esqueleto,
+  RegiaoDeEspera,
+  Spinner,
+  useEscadaDeEspera,
+} from '@/components/common/Esqueleto';
 import {
   Dialog,
   DialogContent,
@@ -485,12 +494,46 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
 
   const aguardando = useMemo(() => itens.filter((i) => i.status === 'novo').length, [itens]);
   const parDoAlvo = alvo ? parMeta(alvo.eventoMeta) : null;
+  const fase = useEscadaDeEspera(carregando);
 
   if (carregando) {
+    // C-15: a escada decide o que aparece. Abaixo de 400ms, nada — a leitura do
+    // /api/inbox costuma voltar antes disso e um flash de "Carregando…" so
+    // comunicava lentidao inexistente. C-17: `carregando` so e verdadeiro no
+    // primeiro mount, entao o esqueleto nunca cobre lista ja visivel.
     return (
-      <div className="rounded-panel border border-line bg-surface-1 p-8 text-center text-caption text-fg-muted">
-        Carregando…
-      </div>
+      <RegiaoDeEspera
+        rotulo="Carregando a caixa de entrada"
+        className="flex flex-col gap-3"
+      >
+        {fase === 'spinner' && (
+          <div className="flex items-center justify-center gap-2 rounded-panel border border-line bg-surface-1 p-8 text-caption text-fg-muted">
+            <Spinner />
+            Carregando…
+          </div>
+        )}
+        {(fase === 'esqueleto' || fase === 'progresso') && (
+          <>
+            {/* C-16: a mesma geometria da linha real — cabecalho de contagem,
+                depois tres cartoes com a altura de `LinhaEntrada`. */}
+            <Esqueleto className="h-[18px] w-2/3" />
+            <ul className="flex flex-col gap-2">
+              {[0, 1, 2].map((i) => (
+                <li
+                  key={i}
+                  className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-2 p-3"
+                >
+                  <Esqueleto className="h-[20px] w-3/4 bg-surface-3" />
+                  <div className="flex gap-1.5">
+                    <Esqueleto className="h-[18px] w-16 rounded-full bg-surface-3" />
+                    <Esqueleto className="h-[18px] w-24 rounded-full bg-surface-3" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </RegiaoDeEspera>
     );
   }
 
@@ -535,14 +578,22 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       )}
 
       {itens.length === 0 ? (
-        <div className="rounded-panel border border-dashed border-line-strong bg-surface-1 p-8 text-center">
-          <Inbox className="mx-auto size-8 text-fg-disabled" aria-hidden />
-          <p className="mt-3 text-label font-medium text-fg-body">Nenhum webhook recebido</p>
-          <p className="mx-auto mt-1 max-w-md text-caption text-fg-muted">
-            Configure o endpoint em <strong>Integrações</strong> e aponte o xWinner para cá.
-            Enquanto isso, use a aba <strong>Colar JSON</strong> ou preencha os campos abaixo.
-          </p>
-        </div>
+        <EstadoVazio
+          titulo="Nenhum webhook recebido"
+          motivo={
+            <>
+              O xWinner ainda não apontou para este console, ou nenhuma venda entrou
+              desde então. Enquanto isso, use a aba <strong>Colar JSON</strong> ou
+              preencha os campos abaixo.
+            </>
+          }
+          acao={
+            <Button variant="outline" render={<Link href="/integracoes" />}>
+              <Workflow className="size-4" aria-hidden />
+              Configurar o endpoint
+            </Button>
+          }
+        />
       ) : (
         <ul className="flex flex-col gap-2">
           <AnimatePresence initial={false}>
@@ -608,9 +659,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
                 <span className="flex-1">{m.nome}</span>
                 <span className="font-mono text-caption text-fg-muted">{m.pixelId}</span>
                 {m.testCode?.trim() ? (
-                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
-                    teste
-                  </span>
+                  <Badge variant="aviso">teste</Badge>
                 ) : null}
               </label>
             ))}
@@ -747,7 +796,7 @@ function LinhaEntrada({
           <span className="font-mono text-label text-fg-body">
             {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
           </span>
-          <ArrowRight className="size-3.5 shrink-0 text-fg-disabled" aria-hidden />
+          <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
           {par ? (
             <>
               <span className="text-caption text-fg-muted uppercase">Meta</span>
@@ -777,24 +826,16 @@ function LinhaEntrada({
         {/* Selos de estado. */}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {item.status === 'novo' && (
-            <span className="rounded-full border border-accent-text/40 bg-accent-text/10 px-2 py-0.5 text-caption font-semibold text-accent-text uppercase">
-              novo
-            </span>
+            <Badge variant="info">novo</Badge>
           )}
           {item.status === 'carregado' && (
-            <span className="rounded-full border border-line-strong px-2 py-0.5 text-caption text-fg-muted uppercase">
-              carregado no formulário
-            </span>
+            <Badge>carregado no formulário</Badge>
           )}
           {item.status === 'disparado' && (
-            <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-caption font-semibold text-success uppercase">
-              enviado à Meta
-            </span>
+            <Badge variant="sucesso">enviado à Meta</Badge>
           )}
           {item.modo && (
-            <span className="rounded-full border border-line-strong px-2 py-0.5 text-caption text-fg-muted uppercase">
-              {ROTULO_MODO[item.modo]}
-            </span>
+            <Badge>{ROTULO_MODO[item.modo]}</Badge>
           )}
           {item.testeInterno && (
             <StatusDot tone="warning" icon={FlaskConical}>
@@ -861,9 +902,7 @@ function LinhaEntrada({
                   </span>
                 )}
                 {r.modoTeste && (
-                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
-                    teste
-                  </span>
+                  <Badge variant="aviso">teste</Badge>
                 )}
                 {r.herdados.length > 0 && (
                   <span className="text-fg-muted">

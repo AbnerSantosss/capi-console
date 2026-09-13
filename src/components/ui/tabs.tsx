@@ -23,13 +23,28 @@ function Tabs({
   )
 }
 
+/**
+ * A lista e a superficie de BAIXO (--surface-1); a aba ativa sobe para a de
+ * CIMA (--surface-2). Antes era o contrario: a lista pintava a ponte
+ * `--muted` (= --surface-2) e a aba ativa a ponte `--background`
+ * (= --surface-0), o fundo mais escuro do app — o item selecionado
+ * afundava. Ver §13.4.2.
+ *
+ * O fill sozinho quase nao separa (s1 x s2 = 1.09): quem delimita a aba ativa
+ * e a borda `line-control` (3.91 sobre a lista, 3.57 sobre a propria aba),
+ * como manda DS-0.3 — elevacao vem da borda, nao do preenchimento.
+ *
+ * Raio: 6px na aba (controle) dentro de 10px na lista (painel). Os 10 = 6 do
+ * filho + os ~4 de `p-1`, que e a geometria de canto concentrico e tambem a
+ * escada de DS-5.1 (o raio cresce com a elevacao).
+ */
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list inline-flex w-fit items-center justify-center gap-1 rounded-panel p-1 text-fg-muted group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
-        default: "bg-muted",
-        line: "gap-1 bg-transparent",
+        default: "bg-surface-1",
+        line: "bg-transparent p-0",
       },
     },
     defaultVariants: {
@@ -58,10 +73,16 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
-        "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
-        "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        // h-control-sm (36px) e o piso de alvo de DS-5.2; o `h-8` anterior
+        // rendia 28px na densidade compacta. A altura fica em px e nao escala;
+        // quem responde a densidade e o espaco (gap, px, p-1 da lista) — DS-4.10.
+        "relative inline-flex h-control-sm flex-1 items-center justify-center gap-1.5 rounded-control border border-transparent px-3 text-label font-medium whitespace-nowrap text-fg-muted transition-colors duration-150 outline-none group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:border-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent",
+        // A correcao de §13.4.2: sobe de superficie e ganha limite visivel.
+        // Sem sombra — DS-2.4 reserva sombra para camada flutuante.
+        "data-active:border-line-control data-active:bg-surface-2 data-active:text-fg-strong",
+        // Variante `line`: a aba ativa e marcada pelo risco de acento.
+        "after:absolute after:bg-accent-text after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
         className
       )}
       {...props}
@@ -73,7 +94,7 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      className={cn("flex-1 text-body outline-none", className)}
       {...props}
     />
   )

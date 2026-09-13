@@ -6,15 +6,16 @@ import { AlertTriangle, Send } from 'lucide-react';
 import { useEventStore } from '@/stores/useEventStore';
 import { useEmq } from '@/components/quality/QualityPanel';
 import { Callout } from '@/components/common/primitives';
-import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { MarcaPublica } from '@/stores/useBrandStore';
 
 /**
@@ -23,6 +24,10 @@ import type { MarcaPublica } from '@/stores/useBrandStore';
  * Não é um "tem certeza?" decorativo: mostra o Pixel de destino, a nota de
  * qualidade e o que está faltando, para que a leitura de dois segundos antes
  * do clique seja informada.
+ *
+ * É um `alertdialog` e não um `dialog` (13.4.3): o envio entra nas métricas
+ * reais da conta, então clicar fora não pode descartar a pergunta e o leitor
+ * de tela precisa ouvir o aviso junto do título.
  */
 export function ConfirmDialog({
   open,
@@ -53,17 +58,17 @@ export function ConfirmDialog({
       : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="size-5 text-warning" aria-hidden />
             Confirmar envio real
-          </DialogTitle>
-          <DialogDescription>
+          </AlertDialogTitle>
+          <AlertDialogDescription>
             Não há código de teste ativo nesta marca.
-          </DialogDescription>
-        </DialogHeader>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
         <div className="flex flex-col gap-3">
           <dl className="flex flex-col gap-2 rounded-control border border-line-control bg-surface-2 p-3 text-caption">
@@ -117,17 +122,15 @@ export function ConfirmDialog({
           )}
         </div>
 
-        <DialogFooter className="flex-row justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={onConfirmar}>
+        <AlertDialogFooter>
+          <AlertDialogCancel />
+          <AlertDialogAction onClick={onConfirmar}>
             <Send className="size-4" aria-hidden />
             Confirmar envio
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

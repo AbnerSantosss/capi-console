@@ -11,6 +11,22 @@ import { lerEventTime } from '@/lib/event-schema';
 import type { DispatchResult } from './tipos';
 
 /**
+ * As cores do confete saem dos tokens, nao de copias em hexadecimal.
+ *
+ * `canvas-confetti` pinta num <canvas> e nao entende `var()`, entao a leitura
+ * do :root ja resolvido pelo navegador e feita no clique — uma vez, e so
+ * quando ha confete para pintar. Antes daqui viviam tres hex soltos que eram
+ * copias de --accent-fill, --accent-text e --success: um retoque na paleta
+ * deixava o confete para tras em silencio (DS-0.2, G7).
+ */
+function coresDoConfete(): string[] {
+  const raiz = getComputedStyle(document.documentElement);
+  return ['--accent-fill', '--accent-text', '--success']
+    .map((t) => raiz.getPropertyValue(t).trim())
+    .filter(Boolean);
+}
+
+/**
  * Toda a lógica de disparo num lugar só.
  *
  * Existe porque o disparo aparece em dois lugares: o painel lateral (a partir
@@ -44,11 +60,12 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
     if (ok) {
       if (emTeste || !confeteSoEmTeste) {
         const { default: confetti } = await import('canvas-confetti');
+        const cores = coresDoConfete();
         confetti({
           particleCount: 90,
           spread: 70,
           origin: { y: 0.8 },
-          colors: ['#0064E0', '#4DA6FF', '#34D399'],
+          ...(cores.length ? { colors: cores } : {}),
           disableForReducedMotion: true,
         });
       }

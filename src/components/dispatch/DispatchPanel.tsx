@@ -2,10 +2,13 @@
 
 import React from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, Eraser, FlaskConical, Loader2, Target } from 'lucide-react';
+import { AlertTriangle, Eraser, FlaskConical, Target } from 'lucide-react';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { useEmq } from '@/components/quality/QualityPanel';
+// C-18: um so spinner no produto. O `Loader2` solto vivia aqui em duas
+// copias; agora as duas chamam a mesma peca de `common/Esqueleto`.
+import { Spinner } from '@/components/common/Esqueleto';
 import { janelaRestante } from '@/lib/event-schema';
 import { Panel, StatusDot, Callout } from '@/components/common/primitives';
 import { Button } from '@/components/ui/button';
@@ -158,7 +161,7 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
         >
           {d.enviando ? (
             <>
-              <Loader2 className="size-4 animate-spin" aria-hidden />
+              <Spinner />
               Enviando…
             </>
           ) : (
@@ -250,7 +253,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
           <Button size="lg" onClick={d.solicitar} disabled={d.enviando}>
             {d.enviando ? (
               <>
-                <Loader2 className="size-4 animate-spin" aria-hidden />
+                <Spinner />
                 Enviando…
               </>
             ) : (

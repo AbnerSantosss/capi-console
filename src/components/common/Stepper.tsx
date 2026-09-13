@@ -142,7 +142,7 @@ export function Stepper({ className = '' }: { className?: string }) {
                 onClick={() => ir(etapa.alvo)}
                 className={cn(
                   'group flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-control px-3 py-2 text-left transition-colors',
-                  'hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                  'hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
                 )}
               >
                 <span

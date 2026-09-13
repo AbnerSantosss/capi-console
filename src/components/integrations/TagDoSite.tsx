@@ -34,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { EstadoVazio } from '@/components/common/EstadoVazio';
 import {
   Callout,
   Field,
@@ -58,7 +59,7 @@ import {
   type DominioTag,
 } from '@/lib/tag-dominios';
 import { EVENTOS_TAG, type EventoTag } from '@/lib/tag-eventos';
-import type { RegraRoteamento } from './RulesSection';
+import type { RegraRoteamento } from '@/lib/config-store';
 
 /** Uma tag gerada pelo servidor, nos dois formatos de instalação. */
 interface TagGerada {
@@ -292,6 +293,18 @@ export function TagDoSite({
   const erroSub = erroDoSubdominio(subdominioNovo);
   const repetido = Boolean(hostLimpo) && dominios.some((d) => d.host === hostLimpo);
   const erroHostFinal = erroHost ?? (repetido ? 'Este domínio já está cadastrado.' : null);
+  /**
+   * A acao que resolve os dois estados vazios desta tela (C-11): o campo de
+   * cadastro ja existe logo abaixo, mas fica fora da vista em tela pequena.
+   * Rolar + focar e mais honesto do que a frase "cadastre um dominio acima",
+   * que manda o leitor procurar sozinho.
+   */
+  const focarCampoDeDominio = () => {
+    const campo = document.getElementById('tag-dominio-novo');
+    campo?.scrollIntoView({ block: 'center' });
+    (campo as HTMLInputElement | null)?.focus();
+  };
+
   const podeAdicionar =
     Boolean(hostLimpo) && !erroHostFinal && !erroSub && !salvando;
 
@@ -360,15 +373,18 @@ export function TagDoSite({
         </p>
 
         {dominios.length === 0 ? (
-          <div className="mt-3 rounded-panel border border-dashed border-line-strong bg-surface-1 p-6 text-center">
-            <p className="text-label font-medium text-fg-body">
-              Nenhum domínio cadastrado ainda.
-            </p>
-            <p className="mx-auto mt-1 max-w-md text-caption text-fg-muted">
-              Cadastre o domínio do site do cliente para o console gerar as tags
-              e o registro de DNS.
-            </p>
-          </div>
+          <EstadoVazio
+            className="mt-3"
+            icone={Globe}
+            titulo="Nenhum domínio cadastrado"
+            motivo="Com a lista vazia o coletor recusa tudo: nenhum site pode mandar evento. Cadastre o domínio do cliente para o console gerar as tags e o registro de DNS."
+            acao={
+              <Button variant="outline" onClick={focarCampoDeDominio}>
+                <Plus className="size-4" aria-hidden />
+                Cadastrar domínio
+              </Button>
+            }
+          />
         ) : (
           <ul className="mt-3 flex flex-col gap-3">
             {dominios.map((d) => {
@@ -612,10 +628,18 @@ export function TagDoSite({
         </p>
 
         {dominios.length === 0 ? (
-          <p className="mt-3 rounded-panel border border-dashed border-line-strong bg-surface-1 p-6 text-center text-caption text-fg-muted">
-            Cadastre um domínio acima e as {EVENTOS_TAG.length} tags aparecem
-            prontas aqui.
-          </p>
+          <EstadoVazio
+            className="mt-3"
+            icone={Code2}
+            titulo="Nenhuma tag gerada"
+            motivo={`A tag carrega o endereço do coletor e a chave do domínio dentro dela, então não existe tag antes do domínio. Cadastre um e as ${EVENTOS_TAG.length} tags aparecem prontas aqui.`}
+            acao={
+              <Button variant="outline" onClick={focarCampoDeDominio}>
+                <Plus className="size-4" aria-hidden />
+                Cadastrar domínio
+              </Button>
+            }
+          />
         ) : (
           <div className="mt-3 flex flex-col gap-3">
             {dominios.length > 1 && (

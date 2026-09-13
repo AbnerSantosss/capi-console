@@ -7,6 +7,7 @@ import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { Field, Callout, StatusDot } from '@/components/common/primitives';
+import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { pedir } from '@/lib/cliente-api';
@@ -25,17 +27,12 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
-
-export type ModoRegra = 'auto' | 'fila' | 'ignorar';
-
-export interface RegraRoteamento {
-  id: string;
-  eventoOrigem: string;
-  eventoMeta: string;
-  marcas: string[];
-  modo: ModoRegra;
-  ativo: boolean;
-}
+// Fonte unica da forma da regra (13.B). Ate aqui existia uma copia local
+// identica a de config-store, livre para divergir em silencio: o servidor
+// aceitava um campo que o formulario nao sabia escrever, e ninguem via.
+// `import type` e apagado na compilacao, entao o `server-only` do modulo nao
+// atravessa para o pacote do cliente.
+import type { ModoRegra, RegraRoteamento } from '@/lib/config-store';
 
 interface MarcaPublica {
   id: string;
@@ -225,22 +222,39 @@ export function RulesSection({
       </div>
 
       {visiveis.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line-strong bg-surface-2/40 p-8 text-center">
-          <p className="text-label font-semibold text-fg-strong">Nenhuma regra encontrada</p>
-          <p className="mt-1 text-caption text-fg-muted">
-            Ajuste a busca ou remova os filtros para ver a lista completa.
-          </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => {
-              setBusca('');
-              setFiltro('todas');
-            }}
-          >
-            Limpar filtros
-          </Button>
-        </div>
+        /* C-12: lista vazia e lista filtrada sao perguntas diferentes. Sem a
+           separacao, quem nunca criou regra recebia "remova os filtros" — um
+           conselho sobre filtros que ele nunca aplicou. */
+        regras.length === 0 ? (
+          <EstadoVazio
+            icone={Zap}
+            titulo="Nenhuma regra de roteamento"
+            motivo="Sem regra, todo webhook que chega fica parado na fila esperando um clique. Uma regra diz qual evento do xWinner vira qual evento da Meta, e se ele sai sozinho."
+            acao={
+              <Button variant="outline" onClick={adicionar}>
+                <Plus className="size-4" aria-hidden />
+                Nova regra
+              </Button>
+            }
+          />
+        ) : (
+          <EstadoVazio
+            cenario="filtrado"
+            titulo="Nenhuma regra encontrada"
+            motivo={`As ${regras.length} regras existentes não casam com a busca ou com o filtro atual.`}
+            acao={
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setBusca('');
+                  setFiltro('todas');
+                }}
+              >
+                Limpar filtros
+              </Button>
+            }
+          />
+        )
       ) : (
       <Accordion
         multiple
@@ -280,7 +294,7 @@ export function RulesSection({
                     <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
                       {r.eventoOrigem || 'Nova regra'}
                     </span>
-                    <span className="text-fg-disabled" aria-hidden>
+                    <span className="text-fg-muted" aria-hidden>
                       →
                     </span>
                     {par ? (
@@ -296,9 +310,9 @@ export function RulesSection({
                         {r.modo === 'ignorar' ? 'Não enviar' : 'Sem evento da Meta escolhido'}
                       </span>
                     )}
-                    <span className="w-fit rounded-full border border-line px-2 py-0.5 text-caption font-semibold text-fg-muted uppercase">
+                    <Badge className="w-fit">
                       {MODOS.find((m) => m.valor === r.modo)?.rotulo}
-                    </span>
+                    </Badge>
                   </span>
                   <span className="text-caption font-normal text-fg-muted">{explicacao}</span>
                 </span>
@@ -465,14 +479,10 @@ export function RulesSection({
                             {m.pixelId || 'sem pixel'}
                           </span>
                           {m.testCode?.trim() ? (
-                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
-                              teste
-                            </span>
+                            <Badge variant="aviso">teste</Badge>
                           ) : null}
                           {!m.temToken && (
-                            <span className="rounded-full border border-danger/40 px-2 py-0.5 text-caption text-danger uppercase">
-                              sem token
-                            </span>
+                            <Badge variant="perigo">sem token</Badge>
                           )}
                         </label>
                       ))}
