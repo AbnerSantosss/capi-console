@@ -30,7 +30,7 @@ export function ParamChip({
   return (
     <code
       className={cn(
-        'rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-micro text-fg-muted',
+        'rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-caption text-fg-muted',
         className
       )}
     >
@@ -315,7 +315,7 @@ export function Panel({
     >
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+          <h3 className="flex items-center gap-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
             {Icon && <Icon className="size-3.5" aria-hidden />}
             {title}
           </h3>

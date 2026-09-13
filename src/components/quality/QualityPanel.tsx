@@ -110,7 +110,7 @@ export function QualityPanel() {
             <li key={p.id}>
               <span
                 className={cn(
-                  'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-micro',
+                  'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-caption',
                   p.presente
                     ? 'border-success/40 bg-success/10 text-success'
                     : p.critico
@@ -197,7 +197,7 @@ export function QualityModal({
               corBarra={cor.barra}
               className="mt-2"
             />
-            <div className="mt-1 flex justify-between text-micro text-fg-muted tabular">
+            <div className="mt-1 flex justify-between text-caption text-fg-muted tabular">
               <span>0</span>
               <span>5 · mínimo aceitável</span>
               <span className="text-success">8+ · excelente</span>
@@ -212,16 +212,16 @@ export function QualityModal({
             </caption>
             <thead>
               <tr className="border-b border-line">
-                <th scope="col" className="py-2 pr-3 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
                   Parâmetro
                 </th>
-                <th scope="col" className="py-2 pr-3 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
                   Peso
                 </th>
-                <th scope="col" className="py-2 pr-3 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
                   Situação
                 </th>
-                <th scope="col" className="py-2 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
                   Como obter
                 </th>
               </tr>
@@ -233,7 +233,7 @@ export function QualityModal({
                     <span className="block text-label font-medium text-fg-body">
                       {p.nome}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-micro text-fg-muted">
+                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-caption text-fg-muted">
                       {p.sigla}
                       {p.hash && (
                         <span
@@ -249,7 +249,7 @@ export function QualityModal({
                   <td className="py-3 pr-3 text-label text-fg-body tabular">
                     {p.peso.toFixed(1)}
                     {p.critico && (
-                      <span className="mt-0.5 block text-micro font-semibold text-warning uppercase">
+                      <span className="mt-0.5 block text-caption font-semibold text-warning uppercase">
                         crítico
                       </span>
                     )}
@@ -272,7 +272,7 @@ export function QualityModal({
                       </span>
                     )}
                     {p.amostra && (
-                      <span className="wrap-token mt-1 block max-w-40 font-mono text-micro text-fg-muted">
+                      <span className="wrap-token mt-1 block max-w-40 font-mono text-caption text-fg-muted">
                         {p.amostra}
                       </span>
                     )}

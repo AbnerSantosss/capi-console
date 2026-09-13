@@ -48,7 +48,7 @@ export function GuideIndex({ onIr }: { onIr: (id: string) => void }) {
 
       {/* Desktop */}
       <aside className={styles.side}>
-        <p className="px-2 pb-2 text-micro font-semibold tracking-[0.14em] text-fg-muted uppercase">
+        <p className="px-2 pb-2 text-caption font-semibold tracking-[0.14em] text-fg-muted uppercase">
           Neste guia
         </p>
         <nav aria-label="Assuntos do guia" className={styles.sideList}>

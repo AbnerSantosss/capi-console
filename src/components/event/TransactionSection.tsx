@@ -295,7 +295,7 @@ function ResumoUtms({ url }: { url: string }) {
 
   return (
     <div className="rounded-control border border-line bg-surface-2 p-3">
-      <p className="mb-2 text-micro font-semibold tracking-wide text-fg-muted uppercase">
+      <p className="mb-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
         Lido da URL
       </p>
       <dl className="flex flex-wrap gap-x-6 gap-y-2">

@@ -130,7 +130,7 @@ export function Header() {
             <span className="text-label font-semibold text-fg-strong">
               Meta CAPI Console
             </span>
-            <span className="mt-0.5 text-micro text-fg-muted">
+            <span className="mt-0.5 text-caption text-fg-muted">
               Código Vencedor
             </span>
           </span>
@@ -163,7 +163,7 @@ export function Header() {
                     {item.estado && (
                       <span
                         className={cn(
-                          'rounded-full border px-1.5 py-px text-micro font-semibold tracking-wide',
+                          'rounded-full border px-1.5 py-px text-caption font-semibold tracking-wide',
                           SELO_AUTO[automatico.situacao]
                         )}
                       >
@@ -171,7 +171,7 @@ export function Header() {
                       </span>
                     )}
                   </span>
-                  <span className="mt-0.5 hidden whitespace-nowrap text-micro font-normal text-fg-disabled xl:block">
+                  <span className="mt-0.5 hidden whitespace-nowrap text-caption font-normal text-fg-disabled xl:block">
                     {item.sub}
                   </span>
                 </span>
@@ -188,7 +188,7 @@ export function Header() {
             type="button"
             onClick={() => setMarcaAberta(true)}
             className={cn(
-              'flex h-control-sm shrink-0 items-center gap-2 rounded-control border px-2.5 text-micro font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'flex h-control-sm shrink-0 items-center gap-2 rounded-control border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               emTeste
                 ? 'border-accent-text/40 bg-accent-text/10 text-accent-text hover:bg-accent-text/15'
                 : 'border-warning/50 bg-warning/10 text-warning hover:bg-warning/15'
@@ -233,7 +233,7 @@ export function Header() {
           aria-label="Abrir a paleta de comandos"
         >
           <Command className="size-3.5" aria-hidden />
-          <span className="font-mono text-micro">K</span>
+          <span className="font-mono text-caption">K</span>
         </Button>
 
         <Button
@@ -303,7 +303,7 @@ export function Header() {
         <span className="text-caption text-fg-muted">Disparo automático:</span>
         <span
           className={cn(
-            'rounded-full border px-1.5 py-px text-micro font-semibold tracking-wide',
+            'rounded-full border px-1.5 py-px text-caption font-semibold tracking-wide',
             SELO_AUTO[automatico.situacao]
           )}
         >

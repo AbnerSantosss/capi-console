@@ -276,7 +276,7 @@ export function RulesSection({
                     <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
                       {r.ativo ? 'Ativa' : 'Desativada'}
                     </StatusDot>
-                    <span className="text-micro text-fg-muted uppercase">xWinner</span>
+                    <span className="text-caption text-fg-muted uppercase">xWinner</span>
                     <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
                       {r.eventoOrigem || 'Nova regra'}
                     </span>
@@ -285,7 +285,7 @@ export function RulesSection({
                     </span>
                     {par ? (
                       <>
-                        <span className="text-micro text-fg-muted uppercase">Meta</span>
+                        <span className="text-caption text-fg-muted uppercase">Meta</span>
                         <span className="text-label font-semibold text-fg-strong">{par.pt}</span>
                         <span className="break-words font-mono text-caption text-fg-body">
                           {par.tecnico}
@@ -296,7 +296,7 @@ export function RulesSection({
                         {r.modo === 'ignorar' ? 'Não enviar' : 'Sem evento da Meta escolhido'}
                       </span>
                     )}
-                    <span className="w-fit rounded-full border border-line px-2 py-0.5 text-micro font-semibold text-fg-muted uppercase">
+                    <span className="w-fit rounded-full border border-line px-2 py-0.5 text-caption font-semibold text-fg-muted uppercase">
                       {MODOS.find((m) => m.valor === r.modo)?.rotulo}
                     </span>
                   </span>
@@ -461,16 +461,16 @@ export function RulesSection({
                             }
                           />
                           <span>{m.nome}</span>
-                          <span className="font-mono text-micro text-fg-muted">
+                          <span className="font-mono text-caption text-fg-muted">
                             {m.pixelId || 'sem pixel'}
                           </span>
                           {m.testCode?.trim() ? (
-                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-micro font-semibold text-warning uppercase">
+                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
                               teste
                             </span>
                           ) : null}
                           {!m.temToken && (
-                            <span className="rounded-full border border-danger/40 px-2 py-0.5 text-micro text-danger uppercase">
+                            <span className="rounded-full border border-danger/40 px-2 py-0.5 text-caption text-danger uppercase">
                               sem token
                             </span>
                           )}

@@ -166,7 +166,7 @@ function TabelaEmq() {
                 <span className="block text-label font-medium text-fg-body">
                   {p.nome}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 font-mono text-micro text-fg-muted">
+                <span className="mt-0.5 flex items-center gap-1.5 font-mono text-caption text-fg-muted">
                   {p.sigla}
                   {p.hash && (
                     <span className="inline-flex items-center gap-0.5 text-success">
@@ -179,7 +179,7 @@ function TabelaEmq() {
               <td className="text-label text-fg-body tabular">
                 {p.peso.toFixed(1)}
                 {p.critico && (
-                  <span className="mt-0.5 block text-micro font-semibold text-warning uppercase">
+                  <span className="mt-0.5 block text-caption font-semibold text-warning uppercase">
                     crítico
                   </span>
                 )}

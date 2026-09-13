@@ -221,7 +221,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
             type="button"
             onClick={onAbrirMarcas}
             className={cn(
-              'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-micro font-semibold tracking-wide uppercase',
+              'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-caption font-semibold tracking-wide uppercase',
               d.emTeste
                 ? 'border-accent-text/40 bg-accent-text/10 text-accent-text'
                 : 'border-warning/50 bg-warning/10 text-warning'
@@ -242,7 +242,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
               <NumeroAnimado valor={emq.nota} />
               <span className="text-caption font-normal text-fg-muted"> / 10</span>
             </p>
-            <p className="truncate text-micro text-fg-muted">
+            <p className="truncate text-caption text-fg-muted">
               {emq.presentes} de {emq.total} parâmetros
             </p>
           </div>

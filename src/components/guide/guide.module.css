@@ -283,8 +283,11 @@
   border: 1px solid color-mix(in srgb, var(--hue) 32%, transparent);
   border-radius: 13px;
   background:
-    linear-gradient(150deg, color-mix(in srgb, var(--hue) 22%, transparent), rgb(17 22 31 / 88%));
-  color: var(--hue);
+    linear-gradient(150deg, color-mix(in srgb, var(--hue) 22%, transparent), rgb(18 21 26 / 88%));
+  /* DS-1.5: o matiz identifica o tile pela BORDA e pelo fundo, nunca pelo
+     glifo. Como cor de glifo ele nao passa pelo contrast-check e reprovava
+     em 4 dos 6 topicos. */
+  color: var(--fg-strong);
   box-shadow: 0 10px 28px rgb(0 0 0 / 26%);
 }
 
@@ -422,7 +425,8 @@
 }
 
 .purposeTerm {
-  color: color-mix(in srgb, var(--hue) 72%, #ffffff);
+  /* DS-1.5: matiz nao e cor de texto. */
+  color: var(--fg-body);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -485,7 +489,8 @@
   border: 1px solid color-mix(in srgb, var(--hue) 36%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--hue) 12%, transparent);
-  color: var(--hue);
+  /* DS-1.5: o matiz fica na borda e no fundo; o numero e texto. */
+  color: var(--fg-strong);
   font-family: var(--font-mono), monospace;
   font-size: max(12px, 0.75rem);
   font-weight: 700;
@@ -671,7 +676,7 @@
     gap: 4px;
     border: 1px solid var(--border-default);
     border-radius: 12px;
-    background: rgb(17 22 31 / 94%);
+    background: rgb(18 21 26 / 94%);
     padding: 10px;
   }
 

@@ -11,46 +11,67 @@
    ========================================================================= */
 
 :root {
-  /* --- Densidade --------------------------------------------------------
-     Toda a escala tipográfica e o espaçamento do Tailwind são em rem, então
-     um único multiplicador na raiz reescala a interface inteira de forma
-     proporcional. Existe porque a escala do sistema operacional varia muito
-     entre máquinas (Windows costuma vir em 125–150%), e o que é confortável
-     num monitor fica enorme no outro. O controle está em Preferências.       */
-  --ui-scale: 0.875;
+  /* --- Densidade (DS-4.10) ----------------------------------------------
+     São DOIS multiplicadores, de propósito:
 
-  /* --- Superfícies (elevação vem da BORDA, não do fill) ------------------ */
-  --surface-0: #0a0e14; /* fundo do app                                    */
-  --surface-1: #11161f; /* painel / card                                   */
-  --surface-2: #171e29; /* input, cabeçalho de accordion, elemento elevado */
+     --ui-scale       governa ESPAÇAMENTO (é o `--spacing` do Tailwind).
+     --ui-scale-text  governa TAMANHO DE TEXTO (é o font-size do <html>).
+
+     Densidade não encolhe texto. "Compacta" significa mais coisa na tela,
+     não letra menor: `compacta` e `padrao` têm o MESMO texto e espaçamentos
+     diferentes; só `confortavel` aumenta a letra. Antes de DS-4.10 um único
+     multiplicador puxava os dois, e a densidade padrão (0.875) renderizava
+     --text-caption a 10,5px — abaixo do piso duro de 12px (DS-4.9). O piso
+     era salvo por quatro regras `max()` em console.module.css, que de quebra
+     neutralizavam a densidade em 74% do texto. As regras saíram; o piso
+     agora é estrutural.                                                     */
+  --ui-scale: 0.875;
+  --ui-scale-text: 1;
+
+  /* --- Superfícies (elevação vem da BORDA, não do fill) ------------------
+     FONTE ÚNICA DE COR (DS-0.1). Nenhum --surface-*, --border-*, --fg-* ou
+     --accent-* pode ser redefinido fora deste bloco: `scripts/contrast-check.mjs`
+     (G4) reprova o build se encontrar. Os valores abaixo são os que estavam em
+     produção dentro de `.shell` — subiram para cá em vez de serem trocados
+     pelos do :root antigo, que ninguém nunca viu renderizado (DS-1.1).       */
+  --surface-0: #090b0f; /* fundo do app                                    */
+  --surface-1: #12151a; /* painel / card                                   */
+  --surface-2: #1a1e25; /* input, cabeçalho de accordion, elemento elevado */
 
   /* Superfície ÚNICA de tudo que flutua por cima da página: dialog, popover,
      select, tooltip, paleta de comandos, toast. É mais clara que o painel de
      propósito, mas o fill sozinho quase não separa — 1.22 s/ surface-1 e
      1.30 s/ surface-0. Quem separa é a borda: `border-line-control` dá
-     3.18 s/ esta superfície e 3.85 contra a página escurecida pelo overlay
-     preto a 60% (#040608). Por isso NÃO existe e não deve voltar a existir
+     3.20 s/ esta superfície e 4.38 contra a página escurecida pelo overlay
+     preto a 60% (#040406). Por isso NÃO existe e não deve voltar a existir
      paleta local de modal: quem flutua usa --surface-3 + --border-control.   */
-  --surface-3: #1f2836; /* popover / dialog / tooltip / paleta             */
+  --surface-3: #222730; /* popover / dialog / tooltip / paleta             */
 
-  /* --- Bordas -----------------------------------------------------------
-     Regra: todo LIMITE que o operador precisa enxergar (contorno de controle,
-     borda de camada flutuante, régua de rodapé de modal, cartão clicável) usa
-     --border-control, o único que cruza 3:1 em todas as superfícies (WCAG 2.2
-     §1.4.11). --border-subtle e --border-default são ornamento dentro de uma
-     superfície já delimitada — nunca limite de componente.                   */
-  --border-subtle: #232c3b; /* ornamento          1.29 s0 · 1.13 s3        */
-  --border-default: #4a5a70; /* divisória visível  2.58 s1 · 2.11 s3        */
-  --border-control: #647592; /* limite de componente
-                                4.15 s0 · 3.89 s1 · 3.59 s2 · 3.18 s3 ✅    */
-  --border-focus: #4da6ff; /* anel de foco       7.09 s1 · 5.80 s3 ✅      */
+  /* --- Bordas (DS-3.1 — o nome diz o USO, não a ênfase) ------------------
+     --border-subtle   divisória INTERNA: linha de tabela, separador dentro de
+                       um painel que já está delimitado.
+     --border-default  contorno de SUPERFÍCIE: cartão, painel, barra.
+     --border-control  contorno de CONTROLE interativo: input, select, botão
+                       secundário, checkbox, cartão clicável, régua de rodapé
+                       de modal — e a borda externa de tudo que flutua.
+
+     As três cruzam 3:1 contra a superfície que delimitam (DS-2.1 / SC 1.4.11);
+     é essa a diferença para a paleta anterior, em que subtle (1.29 s0) e
+     default (2.58 s1) eram ornamento invisível. Elevação vem da borda, e uma
+     borda que não se enxerga não eleva nada.                                 */
+  --border-subtle: #5c636e; /* divisória interna  3.25 s0 · 3.02 s1 ✅     */
+  --border-default: #636b77; /* contorno de superfície
+                                3.66 s0 · 3.40 s1 · 3.10 s2 ✅             */
+  --border-control: #697586; /* limite de componente
+                                4.21 s0 · 3.91 s1 · 3.57 s2 · 3.20 s3 ✅    */
+  --border-focus: #4da6ff; /* anel de foco       7.16 s1 · 5.86 s3 ✅      */
 
   /* --- Texto (razões medidas sobre painel s1 e sobre a camada flutuante s3) */
-  --fg-strong: #f4f7fb; /* títulos, valores      16.87 s1 · 13.81 s3      */
-  --fg-body: #c9d4e3; /* corpo, rótulos        12.09 s1 ·  9.90 s3      */
-  --fg-muted: #93a1b5; /* helper, legendas, placeholder
-                               6.91 s1 ·  5.66 s3 ✅                      */
-  --fg-disabled: #6b7a90; /* SÓ desabilitado/ornamento   4.15 s1 · 3.40 s3
+  --fg-strong: #fafafa; /* títulos, valores      17.53 s1 · 14.36 s3      */
+  --fg-body: #e4e7ec; /* corpo, rótulos        14.76 s1 · 12.09 s3      */
+  --fg-muted: #adb5c2; /* helper, legendas, placeholder
+                               8.86 s1 ·  7.26 s3 ✅                      */
+  --fg-disabled: #7f8896; /* SÓ desabilitado/ornamento   5.11 s1 · 4.19 s3
                               — reprova como conteúdo em QUALQUER
                               superfície; placeholder usa --fg-muted       */
 
@@ -168,16 +189,31 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* --- Tipografia ------------------------------------------------------- */
+  /* --- Tipografia -------------------------------------------------------
+     As famílias ficam aqui (e não no @theme static abaixo) porque o valor se
+     refere à variável homônima que o next/font injeta no <html>: emitida em
+     :root ela se auto-referenciaria.                                        */
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", "Courier New", monospace;
+}
 
-  /* Escala nomeada. Proibido text-[9px] e text-[10px].
-     text-micro só com uppercase + tracking. */
-  --text-micro: 0.6875rem; /* 11px */
-  --text-micro--line-height: 1rem; /* 16px */
+/* =========================================================================
+   Escala nomeada — tipografia, raio, espaço e altura de controle.
+
+   `static` (e não `inline`) de propósito: assim o Tailwind emite cada token
+   como custom property em :root, e os CSS Modules podem escrever
+   `font-size: var(--text-label)` em vez de repetir um literal. É a condição
+   para a verificação G6 do gate (nenhum font-size fora do @theme) poder ser
+   cumprida fora do Tailwind.
+   ========================================================================= */
+@theme static {
+  /* Seis degraus. Proibido text-[9px], text-[10px] e text-[13px].
+     O antigo degrau de 11px foi ELIMINADO por DS-4.9: o piso do produto é 12px
+     renderizados, em qualquer densidade e inclusive em selo. Um token cujo
+     único papel era ficar abaixo do piso não tem papel. Os 53 usos migraram
+     para --text-caption, o menor degrau que sobra. */
   --text-caption: 0.75rem; /* 12px */
   --text-caption--line-height: 1.125rem; /* 18px */
   --text-label: 0.8125rem; /* 13px */
@@ -190,6 +226,19 @@
   --text-heading--line-height: 1.75rem; /* 28px */
   --text-data: 1.75rem; /* 28px */
   --text-data--line-height: 2rem; /* 32px */
+
+  /* A única exceção nomeada ao piso e à escala (§6.4.4): o Safari iOS dá zoom
+     automático em campo com texto abaixo de 16px, e bloquear o zoom por
+     `maximumScale` quebraria a acessibilidade. Existe como token para ser
+     encontrável e única — não copie o literal `text-[16px]`. */
+  --text-input-mobile: 16px;
+
+  /* --- Espaço (DS-4.10) -------------------------------------------------
+     Em px multiplicados por --ui-scale, não em rem: assim o espaçamento
+     continua respondendo às três densidades sem ficar preso ao font-size do
+     <html>, que a partir de DS-4.10 só muda em `confortavel`. Os valores
+     resultantes são idênticos aos de antes nas três densidades. */
+  --spacing: calc(4px * var(--ui-scale));
 
   /* --- Raios ------------------------------------------------------------ */
   --radius-sm: 4px;
@@ -218,7 +267,9 @@
 
   html {
     @apply font-sans;
-    font-size: calc(16px * var(--ui-scale));
+    /* Único font-size fora do @theme em todo o produto, e por isso nomeado:
+       é o que converte rem em px. Usa --ui-scale-text, NÃO --ui-scale (DS-4.10). */
+    font-size: calc(16px * var(--ui-scale-text));
     color-scheme: dark;
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
@@ -260,16 +311,24 @@
   }
 }
 
-/* Presets de densidade. O padrão é compacta: este console é uma ferramenta de
-   trabalho densa, e a maioria das telas Windows já aplica escala do sistema. */
+/* Presets de densidade. O padrão continua sendo compacta: este console é uma
+   ferramenta de trabalho densa, a maioria das telas Windows já aplica escala do
+   sistema, e não se troca em silêncio a densidade que alguém já escolheu.
+
+   DS-4.10: `compacta` e `padrao` têm o MESMO texto (--ui-scale-text: 1) e
+   espaçamentos diferentes; só `confortavel` aumenta a letra. Nenhuma das três
+   produz texto abaixo de 12px. */
 :root[data-densidade='compacta'] {
   --ui-scale: 0.875;
+  --ui-scale-text: 1;
 }
 :root[data-densidade='padrao'] {
   --ui-scale: 1;
+  --ui-scale-text: 1;
 }
 :root[data-densidade='confortavel'] {
   --ui-scale: 1.0625;
+  --ui-scale-text: 1.0625;
 }
 
 /* =========================================================================

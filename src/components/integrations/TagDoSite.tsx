@@ -533,7 +533,7 @@ export function TagDoSite({
                             <th
                               key={h}
                               scope="col"
-                              className="py-2 pr-4 text-micro font-semibold tracking-wide text-fg-muted uppercase"
+                              className="py-2 pr-4 text-caption font-semibold tracking-wide text-fg-muted uppercase"
                             >
                               {h}
                             </th>

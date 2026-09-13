@@ -600,9 +600,9 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
                   }
                 />
                 <span className="flex-1">{m.nome}</span>
-                <span className="font-mono text-micro text-fg-muted">{m.pixelId}</span>
+                <span className="font-mono text-caption text-fg-muted">{m.pixelId}</span>
                 {m.testCode?.trim() ? (
-                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-micro font-semibold text-warning uppercase">
+                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
                     teste
                   </span>
                 ) : null}
@@ -737,14 +737,14 @@ function LinhaEntrada({
       <div className="min-w-0 flex-1">
         {/* O par: o que a plataforma mandou → o que a Meta recebe. */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-micro text-fg-muted uppercase">xWinner</span>
+          <span className="text-caption text-fg-muted uppercase">xWinner</span>
           <span className="font-mono text-label text-fg-body">
             {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
           </span>
           <ArrowRight className="size-3.5 shrink-0 text-fg-disabled" aria-hidden />
           {par ? (
             <>
-              <span className="text-micro text-fg-muted uppercase">Meta</span>
+              <span className="text-caption text-fg-muted uppercase">Meta</span>
               <span className="text-label font-semibold text-fg-strong">{par.pt}</span>
               <span className="font-mono text-caption text-fg-muted">{par.tecnico}</span>
               {!par.padrao && <StatusDot tone="warning">fora do padrão da Meta</StatusDot>}
@@ -771,22 +771,22 @@ function LinhaEntrada({
         {/* Selos de estado. */}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {item.status === 'novo' && (
-            <span className="rounded-full border border-accent-text/40 bg-accent-text/10 px-2 py-0.5 text-micro font-semibold text-accent-text uppercase">
+            <span className="rounded-full border border-accent-text/40 bg-accent-text/10 px-2 py-0.5 text-caption font-semibold text-accent-text uppercase">
               novo
             </span>
           )}
           {item.status === 'carregado' && (
-            <span className="rounded-full border border-line-strong px-2 py-0.5 text-micro text-fg-muted uppercase">
+            <span className="rounded-full border border-line-strong px-2 py-0.5 text-caption text-fg-muted uppercase">
               carregado no formulário
             </span>
           )}
           {item.status === 'disparado' && (
-            <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-micro font-semibold text-success uppercase">
+            <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-caption font-semibold text-success uppercase">
               enviado à Meta
             </span>
           )}
           {item.modo && (
-            <span className="rounded-full border border-line-strong px-2 py-0.5 text-micro text-fg-muted uppercase">
+            <span className="rounded-full border border-line-strong px-2 py-0.5 text-caption text-fg-muted uppercase">
               {ROTULO_MODO[item.modo]}
             </span>
           )}
@@ -850,12 +850,12 @@ function LinhaEntrada({
                   <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>
                 ) : null}
                 {r.fbtraceId && (
-                  <span className="font-mono text-micro text-fg-muted">
+                  <span className="font-mono text-caption text-fg-muted">
                     fbtrace {r.fbtraceId.slice(0, 12)}…
                   </span>
                 )}
                 {r.modoTeste && (
-                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-micro font-semibold text-warning uppercase">
+                  <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-semibold text-warning uppercase">
                     teste
                   </span>
                 )}

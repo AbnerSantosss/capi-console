@@ -425,7 +425,7 @@ export function IntegrationsPage({
                   <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
                   {item.label}
                   {count !== undefined && (
-                    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-micro text-fg-muted tabular">
+                    <span className="rounded-full border border-line px-2 py-0.5 font-mono text-caption text-fg-muted tabular">
                       {count}
                     </span>
                   )}
@@ -657,7 +657,7 @@ export function IntegrationsPage({
                 e não é alcançável de fora. Para receber webhooks reais, abra um
                 túnel:
               </p>
-              <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-2 p-2.5 font-mono text-micro text-fg-muted">
+              <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-2 p-2.5 font-mono text-caption text-fg-muted">
                 cloudflared tunnel --url http://localhost:3333
               </pre>
               <p className="mt-2 text-caption text-fg-muted">
@@ -905,7 +905,7 @@ export function IntegrationsPage({
                       <th
                         key={h}
                         scope="col"
-                        className="py-2 pr-4 text-micro font-semibold tracking-wide text-fg-muted uppercase"
+                        className="py-2 pr-4 text-caption font-semibold tracking-wide text-fg-muted uppercase"
                       >
                         {h}
                       </th>

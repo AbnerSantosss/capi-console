@@ -22,15 +22,19 @@ interface Props {
   onOpenChange: (v: boolean) => void;
 }
 
+/* A amostra em px que vivia aqui mostrava 12 / 13,5 / 15 e era falsa desde
+   que a densidade passou a separar espaco de texto (DS-4.10): Compacta e
+   Padrao renderizam a MESMA letra — o que muda entre elas e o respiro. So
+   Ampla aumenta os dois. A dica agora diz isso, em vez de um numero que o
+   produto nao entrega. */
 const DENSIDADES: {
   valor: Densidade;
   rotulo: string;
   dica: string;
-  amostra: string;
 }[] = [
-  { valor: 'compacta', rotulo: 'Compacta', dica: 'padrão', amostra: '12px' },
-  { valor: 'padrao', rotulo: 'Padrão', dica: 'equilibrada', amostra: '13.5px' },
-  { valor: 'confortavel', rotulo: 'Ampla', dica: 'letras maiores', amostra: '15px' },
+  { valor: 'compacta', rotulo: 'Compacta', dica: 'padrão, mais itens na tela' },
+  { valor: 'padrao', rotulo: 'Padrão', dica: 'mais respiro' },
+  { valor: 'confortavel', rotulo: 'Ampla', dica: 'respiro e letras maiores' },
 ];
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
@@ -73,9 +77,9 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               Densidade da interface
             </legend>
             <p className="mb-1 text-caption text-fg-muted">
-              A escala do seu sistema operacional já amplia tudo. Se as letras
-              estiverem grandes ou pequenas demais, ajuste aqui — o efeito é
-              imediato.
+              A escala do seu sistema operacional já amplia tudo. Compacta e
+              Padrão usam a mesma letra e mudam o espaço entre os elementos;
+              Ampla aumenta os dois. O efeito é imediato.
             </p>
             <div className="grid grid-cols-3 gap-2">
               {DENSIDADES.map((d) => (
@@ -93,14 +97,13 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 >
                   <span
                     className={
-                      'font-semibold ' +
+                      'text-body font-semibold ' +
                       (densidade === d.valor ? 'text-accent-text' : 'text-fg-body')
                     }
-                    style={{ fontSize: d.amostra }}
                   >
                     {d.rotulo}
                   </span>
-                  <span className="text-micro text-fg-muted">{d.dica}</span>
+                  <span className="text-caption text-fg-muted">{d.dica}</span>
                 </button>
               ))}
             </div>

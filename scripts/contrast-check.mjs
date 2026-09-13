@@ -1,43 +1,74 @@
 #!/usr/bin/env node
 /**
- * Verifica os pares de cor do design system contra a WCAG 2.2.
- *   §1.4.3  texto normal        >= 4.5:1
- *   §1.4.11 limite de componente / texto grande >= 3:1
+ * O portao de qualidade visual do console. Roda em `npm run check`.
  *
- * Cobre tambem o que vinha sendo ignorado e por onde o contraste voltava a
- * quebrar: as camadas que FLUTUAM por cima da pagina (dialog, popover, select,
- * tooltip, paleta de comandos), o empilhamento de superficie dentro de um
- * modal, as bordas e as cores com alfa, que precisam ser compostas contra o
- * fundo antes de medir.
+ * Sao SETE verificacoes (§6.6.1 do blueprint):
  *
- * Os hex NAO sao duplicados aqui: sao lidos de src/app/globals.css. Mudar um
- * token la refaz as contas aqui — de proposito.
+ *   G1  Contraste de texto            WCAG 2.2 SC 1.4.3   >= 4.5:1
+ *   G2  Borda de controle e de foco   WCAG 2.2 SC 1.4.11  >= 3:1
+ *   G3  Borda de SUPERFICIE           DS-2.1 / DS-0.3     >= 3:1
+ *   G4  Token de cor fora do :root    DS-0.1              zero
+ *   G5  Classe da ponte shadcn em camada flutuante        zero
+ *   G6  font-size fora do @theme      DS-0.4              zero
+ *   G7  Hexadecimal literal fora da lista de excecoes     zero
  *
- * Uso: node scripts/contrast-check.mjs
- * Sai com codigo 1 se qualquer par reprovar ou se alguma camada flutuante
- * voltar a usar classe da ponte shadcn.
+ * G3 e uma extensao deliberada do SC 1.4.11: a norma exige 3:1 do limite de
+ * COMPONENTE e nada diz do contorno de superficie. Aqui a elevacao vem da
+ * borda (globals.css), entao uma borda de cartao invisivel nao e ornamento
+ * mal resolvido — e a elevacao inteira deixando de existir.
+ *
+ * G4 fecha o furo que anulava tudo o mais: ate a FASE 1 a classe `.shell`
+ * redefinia onze tokens, este script media os do `:root`, e o build passava
+ * verde descrevendo cores que ninguem via. Os hex NAO sao duplicados aqui:
+ * sao lidos do :root de src/app/globals.css, que agora e a fonte unica.
+ *
+ * Uso: node scripts/contrast-check.mjs   (sai 1 se qualquer verificacao falhar)
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ler = (rel) => readFileSync(join(RAIZ, rel), 'utf8');
 
 /* -------------------------------------------------------------------------
-   Tokens lidos de globals.css
+   Leitura do :root — a fonte unica de cor
    ------------------------------------------------------------------------- */
 
-const cssGlobal = readFileSync(join(RAIZ, 'src/app/globals.css'), 'utf8');
+const GLOBALS = 'src/app/globals.css';
+const cssGlobal = ler(GLOBALS);
+
+/** Recorta o corpo do primeiro bloco `:root {...}` de globals.css. */
+function corpoRoot(css) {
+  const abre = css.indexOf(':root {');
+  if (abre === -1) {
+    console.error('\n  ERRO: globals.css nao tem um bloco `:root {`.\n');
+    process.exit(1);
+  }
+  let i = css.indexOf('{', abre);
+  let nivel = 0;
+  for (let j = i; j < css.length; j++) {
+    if (css[j] === '{') nivel++;
+    else if (css[j] === '}') {
+      nivel--;
+      if (nivel === 0) return { texto: css.slice(i + 1, j), inicio: i + 1, fim: j };
+    }
+  }
+  console.error('\n  ERRO: bloco `:root` de globals.css nao fecha.\n');
+  process.exit(1);
+}
+
+const ROOT = corpoRoot(cssGlobal);
 
 const tok = (nome) => {
-  const achado = cssGlobal.match(
-    new RegExp(`--${nome}:\\s*(#[0-9a-fA-F]{6})\\s*;`)
-  );
+  const achado = ROOT.texto.match(new RegExp(`--${nome}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
   if (!achado) {
     console.error(
-      `\n  ERRO: o token --${nome} nao existe (ou nao e hex) em globals.css.` +
-        '\n  Renomeou ou apagou um token? Atualize este script junto.\n'
+      `\n  ERRO: o token --${nome} nao existe (ou nao e hex de 6 digitos) no ` +
+        ':root de globals.css.\n  Renomeou, apagou ou converteu para rgba()/oklch()? ' +
+        'Este script so calcula contraste de cor opaca em hex —\n  ' +
+        'e por isso que DS-0.2 exige hex de 6 digitos. Atualize os dois juntos.\n'
     );
     process.exit(1);
   }
@@ -120,14 +151,277 @@ const CARTAO_ATIVO = sobrepor(ACENTO_TEXTO, 0.1, S3); // cartao selecionado
 const CAIXA_ERRO = sobrepor(ERRO, 0.1, S3); // callout/selo de erro
 const CAIXA_AVISO = sobrepor(AVISO, 0.1, S3);
 
+const TEXTO = 4.5; // SC 1.4.3 texto normal
+const LIMITE = 3.0; // SC 1.4.11 limite de componente / texto grande
+
 /* -------------------------------------------------------------------------
-   Pares
+   Varredura de arquivos
    ------------------------------------------------------------------------- */
 
-const TEXTO = 4.5; // §1.4.3 texto normal
-const LIMITE = 3.0; // §1.4.11 limite de componente / texto grande
+function arquivosCss(dir = 'src') {
+  const achados = [];
+  const anda = (d) => {
+    for (const nome of readdirSync(join(RAIZ, d))) {
+      const rel = `${d}/${nome}`;
+      if (statSync(join(RAIZ, rel)).isDirectory()) anda(rel);
+      else if (nome.endsWith('.css')) achados.push(rel);
+    }
+  };
+  anda(dir);
+  return achados.sort();
+}
 
-const grupos = [
+const CSS_DO_PRODUTO = arquivosCss();
+
+/** Linhas de um arquivo, ja numeradas a partir de 1. */
+const linhasDe = (rel) => ler(rel).split('\n');
+
+/* -------------------------------------------------------------------------
+   G5 — quem flutua nao usa a ponte shadcn
+   -------------------------------------------------------------------------
+   Os tokens-ponte (--muted, --popover, --accent, --border, --input,
+   --foreground) sao declarados uma unica vez no :root e chegam ja resolvidos
+   por heranca. Dentro de uma camada flutuante eles ignoram a superficie em que
+   estao e reintroduzem exatamente os pares que este script mede.
+
+   A lista continua sendo uma ENUMERACAO, nao uma exclusao. Inverte-la para
+   "todo src/components/** menos os decorativos" e o item de maior alavancagem
+   do blueprint — e cabe a FASE 3, na mesma alteracao que converte os quatro
+   primitivos stock (tabs, checkbox, accordion, label) que a inversao reprova
+   de imediato. Inverter antes deles deixaria a guarda vermelha de proposito,
+   e fase vermelha nao entra em commit.                                        */
+
+const ARQUIVOS_FLUTUANTES = [
+  'src/components/ui/dialog.tsx',
+  'src/components/ui/tooltip.tsx',
+  'src/components/ui/select.tsx',
+  'src/components/ui/badge.tsx',
+  'src/components/common/CommandPalette.tsx',
+  'src/components/brand/BrandDialog.tsx',
+  'src/components/settings/SettingsDialog.tsx',
+  'src/components/dispatch/ConfirmDialog.tsx',
+];
+
+const CLASSES_PROIBIDAS = [
+  ['bg-muted', /\bbg-muted\b/, 'bg-surface-2'],
+  ['text-muted-foreground', /\btext-muted-foreground\b/, 'text-fg-muted'],
+  ['bg-popover', /\bbg-popover\b/, 'bg-surface-3'],
+  ['text-popover-foreground', /\btext-popover-foreground\b/, 'text-fg-strong'],
+  ['text-foreground', /\btext-foreground\b/, 'text-fg-body / text-fg-strong'],
+  ['ring-foreground', /\bring-foreground\b/, 'border border-line-control'],
+  ['bg-background', /\bbg-background\b/, 'bg-surface-0'],
+  ['bg-accent', /\bbg-accent(?![-\w])/, 'bg-surface-2 ou bg-accent-text/15'],
+  ['text-accent-foreground', /\btext-accent-foreground\b/, 'text-fg-strong'],
+  ['bg-border', /\bbg-border\b/, 'bg-line-strong'],
+  ['border-input', /\bborder-input\b/, 'border-line-control'],
+  ['-ring (ponte)', /\b(?:border|outline|ring)-ring\b/, 'accent-text'],
+  ['destructive', /\b(?:bg|text|border|ring)-destructive\b/, 'danger'],
+  ['fg-disabled em texto', /\btext-fg-disabled\b/, 'text-fg-muted'],
+];
+
+/* -------------------------------------------------------------------------
+   G4 — token de cor fora do :root
+   ------------------------------------------------------------------------- */
+
+// Os quatro namespaces que so podem nascer no :root de globals.css.
+const TOKEN_DE_COR = /--(surface|border|fg|accent)-[a-z0-9-]+\s*:/;
+
+// Excecao unica, nomeada e auditada (DS-1.5): o Guia identifica topico por
+// matiz, e matiz ali E a funcao. `--hue` nao pertence a nenhum dos quatro
+// namespaces, entao nao casa com a regex acima — esta nota existe para que
+// ninguem "conserte" isso achando que e esquecimento.
+
+function verificarTokensForaDoRoot() {
+  const problemas = [];
+  for (const rel of CSS_DO_PRODUTO) {
+    const linhas = linhasDe(rel);
+    let deslocamento = 0;
+    linhas.forEach((linha, i) => {
+      const inicioDaLinha = deslocamento;
+      deslocamento += linha.length + 1;
+      if (!TOKEN_DE_COR.test(linha)) return;
+      const dentroDoRoot =
+        rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim;
+      if (dentroDoRoot) return;
+      problemas.push([
+        `${rel}:${i + 1}`,
+        linha.trim().slice(0, 56),
+        'mova o valor para o :root de globals.css',
+      ]);
+    });
+  }
+  return problemas;
+}
+
+/* -------------------------------------------------------------------------
+   G6 — font-size fora do @theme
+   ------------------------------------------------------------------------- */
+
+/* Divida de FASE 2 (§6.6.2, passo 3 — "corrigir por categoria: tokens,
+   primitivos, paginas"). Estes dois arquivos ainda escrevem font-size a mao,
+   inclusive abaixo do piso de 12px de DS-4.9:
+     guide.module.css    27 declaracoes, 9 delas em 11px
+     console.module.css   3 declaracoes, 1 delas em 11px (.eyebrow)
+   A FASE 1 nao os converte porque isso muda o tamanho de titulo e de capa de
+   topico, que e redesenho de pagina e nao consolidacao de token. Tire o
+   arquivo desta lista assim que ele usar var(--text-*). */
+const CSS_COM_TIPOGRAFIA_PENDENTE = [
+  'src/components/guide/guide.module.css',
+  'src/components/layout/console.module.css',
+];
+
+const FONT_SIZE_CSS = /(^|[;{\s])font-size\s*:/;
+// text-[13px], text-[0.8rem] — e tambem text-sm/text-xs/text-2xl da escala
+// generica do Tailwind, que convive com a escala nomeada e nao deveria.
+const FONT_SIZE_CLASSE =
+  /\btext-\[[^\]]*(px|rem|em|pt|%|vw)[^\]]*\]|\btext-(xs|sm|base|lg|xl|[2-9]xl)\b/;
+const FONT_SIZE_INLINE = /\bfontSize\b/;
+
+function verificarFontSize() {
+  const problemas = [];
+
+  for (const rel of CSS_DO_PRODUTO) {
+    if (CSS_COM_TIPOGRAFIA_PENDENTE.includes(rel)) continue;
+    linhasDe(rel).forEach((linha, i) => {
+      if (!FONT_SIZE_CSS.test(linha)) return;
+      // A unica declaracao legitima do produto: a raiz que converte rem em px
+      // e a porta de entrada da densidade (DS-4.10).
+      if (linha.includes('--ui-scale-text')) return;
+      problemas.push([
+        `${rel}:${i + 1}`,
+        linha.trim().slice(0, 56),
+        'use var(--text-*) da escala nomeada',
+      ]);
+    });
+  }
+
+  for (const rel of ARQUIVOS_FLUTUANTES) {
+    let linhas;
+    try {
+      linhas = linhasDe(rel);
+    } catch {
+      continue; // a ausencia do arquivo ja e reportada por G5
+    }
+    linhas.forEach((linha, i) => {
+      if (FONT_SIZE_CLASSE.test(linha)) {
+        problemas.push([
+          `${rel}:${i + 1}`,
+          (linha.match(FONT_SIZE_CLASSE) || [''])[0],
+          'use text-caption/label/body/title/heading/data',
+        ]);
+      }
+      if (FONT_SIZE_INLINE.test(linha)) {
+        problemas.push([
+          `${rel}:${i + 1}`,
+          'style fontSize',
+          'use uma classe da escala nomeada',
+        ]);
+      }
+    });
+  }
+
+  return problemas;
+}
+
+/* -------------------------------------------------------------------------
+   G7 — hexadecimal literal
+   ------------------------------------------------------------------------- */
+
+/* Marca de terceiro e ornamento sem papel semantico ficam de fora: a cor da
+   Meta, do Pix e do WhatsApp E a identidade deles, nao uma escolha nossa.
+   `login/` e `auth/` ficam de fora porque a tela de entrada esta fora do
+   escopo de redesenho (decisao irreversivel #13) — o que nao a absolve: ela
+   tem 14 hexadecimais proprios, e e por isso que parece de outro sistema. */
+const SEM_HEX = [
+  'src/components/ui/brand-icons.tsx',
+  'src/components/ui/app-mark.tsx',
+  'src/components/ui/border-beam.tsx',
+  'src/components/magicui/',
+  'src/components/auth/',
+  'src/app/login/',
+];
+
+const HEX_LITERAL = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/;
+
+function verificarHexLiteral() {
+  const problemas = [];
+  const alvos = [...CSS_DO_PRODUTO, ...ARQUIVOS_FLUTUANTES];
+
+  for (const rel of alvos) {
+    if (SEM_HEX.some((p) => rel.startsWith(p))) continue;
+    let linhas;
+    try {
+      linhas = linhasDe(rel);
+    } catch {
+      continue;
+    }
+    let deslocamento = 0;
+    linhas.forEach((linha, i) => {
+      const inicioDaLinha = deslocamento;
+      deslocamento += linha.length + 1;
+      if (!HEX_LITERAL.test(linha)) return;
+      // O :root de globals.css e o unico lugar do produto onde um hex e a
+      // definicao, e nao uma copia.
+      if (rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim)
+        return;
+      // DS-1.5: os seis matizes do Guia. Excecao nomeada e auditada.
+      if (/--hue\s*:/.test(linha)) return;
+      problemas.push([
+        `${rel}:${i + 1}`,
+        (linha.match(HEX_LITERAL) || [''])[0],
+        'use um token de globals.css',
+      ]);
+    });
+  }
+
+  // themeColor e metadado: nao aceita var(). Entao em vez de dispensa-lo do
+  // G7, conferimos que ele repete exatamente --surface-0 — e a cor da barra
+  // do navegador, e ela emendar com o fundo da aplicacao e o ponto.
+  const layout = ler('src/app/layout.tsx');
+  const achado = layout.match(/themeColor:\s*'(#[0-9a-fA-F]{6})'/);
+  if (!achado) {
+    problemas.push(['src/app/layout.tsx', 'themeColor ausente', `use '${S0.toLowerCase()}'`]);
+  } else if (achado[1].toUpperCase() !== S0) {
+    problemas.push([
+      'src/app/layout.tsx',
+      `themeColor ${achado[1]} != --surface-0 ${S0}`,
+      `use '${S0.toLowerCase()}'`,
+    ]);
+  }
+
+  return problemas;
+}
+
+/* -------------------------------------------------------------------------
+   G5 (execucao)
+   ------------------------------------------------------------------------- */
+
+function verificarClasses() {
+  const problemas = [];
+  for (const arquivo of ARQUIVOS_FLUTUANTES) {
+    let conteudo;
+    try {
+      conteudo = ler(arquivo);
+    } catch {
+      problemas.push([arquivo, '(arquivo nao encontrado)', '']);
+      continue;
+    }
+    conteudo.split('\n').forEach((linha, i) => {
+      for (const [nome, padrao, troca] of CLASSES_PROIBIDAS) {
+        if (padrao.test(linha)) {
+          problemas.push([`${arquivo}:${i + 1}`, nome, troca]);
+        }
+      }
+    });
+  }
+  return problemas;
+}
+
+/* -------------------------------------------------------------------------
+   Pares medidos — G1, G2, G3
+   ------------------------------------------------------------------------- */
+
+const G1 = [
   [
     'Base — texto sobre as superficies da pagina',
     [
@@ -176,8 +470,11 @@ const grupos = [
       ['aviso sobre caixa de aviso no modal', AVISO, CAIXA_AVISO, TEXTO],
     ],
   ],
+];
+
+const G2 = [
   [
-    'Limites de componente (§1.4.11) — o que separa uma camada da outra',
+    'Limites de componente (SC 1.4.11) — controle e foco',
     [
       ['borda de controle sobre app', LINHA_CONTROLE, S0, LIMITE],
       ['borda de controle sobre painel', LINHA_CONTROLE, S1, LIMITE],
@@ -196,140 +493,136 @@ const grupos = [
   ],
 ];
 
-/* -------------------------------------------------------------------------
-   Guarda de classes: quem flutua nao usa a ponte shadcn
-   -------------------------------------------------------------------------
-   Os tokens-ponte (--muted, --popover, --accent, --border, --input,
-   --foreground) sao declarados uma unica vez no :root e chegam ja resolvidos
-   por heranca. Dentro de uma camada flutuante eles ignoram a superficie em que
-   estao e reintroduzem exatamente os pares que este script mede. Por isso sao
-   proibidos por nome nos componentes abaixo.
-   --fg-disabled entra na lista porque reprova como conteudo em qualquer
-   superficie (3.40 sobre o modal) e vinha sendo usado como placeholder.       */
-
-const ARQUIVOS_FLUTUANTES = [
-  'src/components/ui/dialog.tsx',
-  'src/components/ui/tooltip.tsx',
-  'src/components/ui/select.tsx',
-  'src/components/ui/badge.tsx',
-  'src/components/common/CommandPalette.tsx',
-  'src/components/brand/BrandDialog.tsx',
-  'src/components/settings/SettingsDialog.tsx',
-  'src/components/dispatch/ConfirmDialog.tsx',
+const G3 = [
+  [
+    'Contorno de superficie (DS-2.1) — a elevacao vem da borda',
+    [
+      ['contorno de cartao sobre o app', LINHA_FORTE, S0, LIMITE],
+      ['contorno de cartao sobre painel', LINHA_FORTE, S1, LIMITE],
+      ['contorno de cartao sobre input', LINHA_FORTE, S2, LIMITE],
+      ['divisoria interna sobre o app', LINHA_SUTIL, S0, LIMITE],
+      ['divisoria interna sobre painel', LINHA_SUTIL, S1, LIMITE],
+    ],
+  ],
 ];
-
-const CLASSES_PROIBIDAS = [
-  ['bg-muted', /\bbg-muted\b/, 'bg-surface-2'],
-  ['text-muted-foreground', /\btext-muted-foreground\b/, 'text-fg-muted'],
-  ['bg-popover', /\bbg-popover\b/, 'bg-surface-3'],
-  ['text-popover-foreground', /\btext-popover-foreground\b/, 'text-fg-strong'],
-  ['text-foreground', /\btext-foreground\b/, 'text-fg-body / text-fg-strong'],
-  ['ring-foreground', /\bring-foreground\b/, 'border border-line-control'],
-  ['bg-background', /\bbg-background\b/, 'bg-surface-0'],
-  ['bg-accent', /\bbg-accent(?![-\w])/, 'bg-surface-2 ou bg-accent-text/15'],
-  ['text-accent-foreground', /\btext-accent-foreground\b/, 'text-fg-strong'],
-  ['bg-border', /\bbg-border\b/, 'bg-line-strong'],
-  ['border-input', /\bborder-input\b/, 'border-line-control'],
-  ['-ring (ponte)', /\b(?:border|outline|ring)-ring\b/, 'accent-text'],
-  ['destructive', /\b(?:bg|text|border|ring)-destructive\b/, 'danger'],
-  ['fg-disabled em texto', /\btext-fg-disabled\b/, 'text-fg-muted'],
-];
-
-function verificarClasses() {
-  const problemas = [];
-  for (const arquivo of ARQUIVOS_FLUTUANTES) {
-    let conteudo;
-    try {
-      conteudo = readFileSync(join(RAIZ, arquivo), 'utf8');
-    } catch {
-      problemas.push([arquivo, '(arquivo nao encontrado)', '']);
-      continue;
-    }
-    conteudo.split('\n').forEach((linha, i) => {
-      for (const [nome, padrao, troca] of CLASSES_PROIBIDAS) {
-        if (padrao.test(linha)) {
-          problemas.push([`${arquivo}:${i + 1}`, nome, troca]);
-        }
-      }
-    });
-  }
-  return problemas;
-}
 
 /* -------------------------------------------------------------------------
    Saida
    ------------------------------------------------------------------------- */
 
-let tudoOk = true;
-
-console.log('\n  Contraste — Meta CAPI Console');
-console.log(
-  `  superficies  app ${S0}  painel ${S1}  elevado ${S2}  flutuante ${S3}`
-);
-console.log(`  compostos    pagina escurecida ${PAGINA_ESCURECIDA}  selecao ${SELECAO}`);
-
+const veredito = {};
 const largura = Math.max(
-  ...grupos.flatMap(([, casos]) => casos.map(([n]) => n.length))
+  ...[...G1, ...G2, ...G3].flatMap(([, casos]) => casos.map(([n]) => n.length))
 );
 
-for (const [titulo, casos] of grupos) {
-  console.log(`\n  ${titulo}`);
-  for (const [nome, fg, bg, alvo] of casos) {
-    const r = razao(fg, bg);
-    const passou = r >= alvo;
-    if (!passou) tudoOk = false;
-    console.log(
-      `  ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  ${r
-        .toFixed(2)
-        .padStart(5)}:1  (min ${alvo.toFixed(1)})`
-    );
+function rodarPares(id, titulo, blocos) {
+  let ok = true;
+  console.log(`\n  ${id} — ${titulo}`);
+  for (const [subtitulo, casos] of blocos) {
+    console.log(`    ${subtitulo}`);
+    for (const [nome, fg, bg, alvo] of casos) {
+      const r = razao(fg, bg);
+      const passou = r >= alvo;
+      if (!passou) ok = false;
+      console.log(
+        `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  ${r
+          .toFixed(2)
+          .padStart(5)}:1  (min ${alvo.toFixed(1)})`
+      );
+    }
   }
+  veredito[id] = ok;
+  return ok;
 }
 
-// Ordem: sutil < forte < controle. Se alguem inverter a escala, os comentarios
-// de globals.css passam a mentir e a regra "limite usa --border-control" perde
-// o sentido.
-console.log('\n  Escala de bordas');
-const escalaOk =
-  razao(LINHA_CONTROLE, S3) > razao(LINHA_FORTE, S3) &&
-  razao(LINHA_FORTE, S3) > razao(LINHA_SUTIL, S3);
-if (!escalaOk) tudoOk = false;
-console.log(
-  `  ${escalaOk ? 'OK   ' : 'FALHA'} sutil ${razao(LINHA_SUTIL, S3).toFixed(2)}` +
-    ` < forte ${razao(LINHA_FORTE, S3).toFixed(2)}` +
-    ` < controle ${razao(LINHA_CONTROLE, S3).toFixed(2)} (sobre o modal)`
-);
+function rodarLista(id, titulo, problemas, resumoOk) {
+  console.log(`\n  ${id} — ${titulo}`);
+  if (problemas.length === 0) {
+    console.log(`    OK    ${resumoOk}`);
+    veredito[id] = true;
+    return true;
+  }
+  for (const [onde, o_que, troca] of problemas) {
+    console.log(`    FALHA ${onde}  ${o_que}${troca ? ` — ${troca}` : ''}`);
+  }
+  veredito[id] = false;
+  return false;
+}
+
+console.log('\n  Portao visual — Meta CAPI Console');
+console.log(`  superficies  app ${S0}  painel ${S1}  elevado ${S2}  flutuante ${S3}`);
+console.log(`  bordas       sutil ${LINHA_SUTIL}  padrao ${LINHA_FORTE}  controle ${LINHA_CONTROLE}`);
+console.log(`  compostos    pagina escurecida ${PAGINA_ESCURECIDA}  selecao ${SELECAO}`);
+console.log(`  fonte unica  ${GLOBALS} :root  —  ${CSS_DO_PRODUTO.length} arquivos CSS auditados`);
+
+rodarPares('G1', 'Contraste de texto (SC 1.4.3)', G1);
 
 // --fg-disabled so pode existir enquanto ornamento. Se um dia ele cruzar 4.5
 // sobre o modal, deixou de ser "desabilitado" e virou mais um cinza de texto.
 const disabledOk = razao(FG_DESABILITADO, S3) < TEXTO;
-if (!disabledOk) tudoOk = false;
+if (!disabledOk) veredito.G1 = false;
 console.log(
-  `  ${disabledOk ? 'OK   ' : 'FALHA'} fg-disabled sobre o modal ${razao(
+  `    ${disabledOk ? 'OK   ' : 'FALHA'} fg-disabled sobre o modal ${razao(
     FG_DESABILITADO,
     S3
   ).toFixed(2)}:1 — ornamento, nunca conteudo`
 );
 
-console.log('\n  Camadas flutuantes sem classe da ponte shadcn');
-const problemas = verificarClasses();
-if (problemas.length === 0) {
-  console.log(
-    `  OK    ${ARQUIVOS_FLUTUANTES.length} arquivos limpos ` +
-      `(${CLASSES_PROIBIDAS.length} classes proibidas)`
-  );
-} else {
-  tudoOk = false;
-  for (const [onde, nome, troca] of problemas) {
-    console.log(`  FALHA ${onde}  usa \`${nome}\` — troque por \`${troca}\``);
-  }
-}
+rodarPares('G2', 'Contraste de borda de controle e de foco (SC 1.4.11)', G2);
+rodarPares('G3', 'Contraste de borda de superficie (DS-2.1, extensao do SC 1.4.11)', G3);
 
+// Ordem: sutil < forte < controle. Se alguem inverter a escala, os comentarios
+// de globals.css passam a mentir e a regra "limite usa --border-control" perde
+// o sentido.
+const escalaOk =
+  razao(LINHA_CONTROLE, S3) > razao(LINHA_FORTE, S3) &&
+  razao(LINHA_FORTE, S3) > razao(LINHA_SUTIL, S3);
+if (!escalaOk) veredito.G3 = false;
+console.log(
+  `    ${escalaOk ? 'OK   ' : 'FALHA'} escala sutil ${razao(LINHA_SUTIL, S3).toFixed(2)}` +
+    ` < padrao ${razao(LINHA_FORTE, S3).toFixed(2)}` +
+    ` < controle ${razao(LINHA_CONTROLE, S3).toFixed(2)} (sobre o modal)`
+);
+
+rodarLista(
+  'G4',
+  'Token de cor definido fora do :root (DS-0.1)',
+  verificarTokensForaDoRoot(),
+  `nenhuma redefinicao de --surface-*/--border-*/--fg-*/--accent-* nos ${CSS_DO_PRODUTO.length} arquivos CSS`
+);
+
+rodarLista(
+  'G5',
+  'Classe da ponte shadcn em camada flutuante',
+  verificarClasses(),
+  `${ARQUIVOS_FLUTUANTES.length} arquivos vigiados limpos (${CLASSES_PROIBIDAS.length} classes proibidas)`
+);
+
+rodarLista(
+  'G6',
+  'font-size fora do @theme (DS-0.4)',
+  verificarFontSize(),
+  `escala nomeada respeitada — ${CSS_COM_TIPOGRAFIA_PENDENTE.length} arquivos ainda isentos (divida de FASE 2)`
+);
+
+rodarLista(
+  'G7',
+  'Hexadecimal literal fora do :root',
+  verificarHexLiteral(),
+  `nenhum hex solto; themeColor == --surface-0 (${S0})`
+);
+
+const tudoOk = Object.values(veredito).every(Boolean);
+
+console.log('\n  Veredito');
+for (const [id, ok] of Object.entries(veredito)) {
+  console.log(`    ${ok ? 'OK   ' : 'FALHA'} ${id}`);
+}
 console.log(
   `\n  ${
     tudoOk
-      ? 'Todos os pares passam.'
-      : 'Ha pares reprovados acima — nao prossiga sem corrigir.'
+      ? 'As sete verificacoes passam.'
+      : 'Ha verificacao reprovada acima — nao prossiga sem corrigir.'
   }\n`
 );
 process.exit(tudoOk ? 0 : 1);

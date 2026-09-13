@@ -1,15 +1,10 @@
+/* Este arquivo NAO define token de cor (DS-0.1). Os onze que moravam aqui
+   subiram para o :root de globals.css, que agora e a fonte unica — e o que
+   o scripts/contrast-check.mjs audita de verdade (G4 reprova o build se
+   voltarem). Dialog, select e tooltip renderizam em portal, FORA do .shell:
+   enquanto os tokens moravam aqui, toda camada flutuante do produto tinha
+   uma cor diferente do resto da tela. */
 .shell {
-  --surface-0: #090b0f;
-  --surface-1: #12151a;
-  --surface-2: #1a1e25;
-  --surface-3: #222730;
-  --border-subtle: #292f38;
-  --border-default: #3b4350;
-  --border-control: #697586;
-  --fg-strong: #fafafa;
-  --fg-body: #e4e7ec;
-  --fg-muted: #adb5c2;
-  --fg-disabled: #7f8896;
   position: relative;
   isolation: isolate;
   display: flex;
@@ -116,7 +111,7 @@
   justify-content: center;
   border: 1px solid rgb(77 166 255 / 28%);
   border-radius: 12px;
-  background: linear-gradient(145deg, rgb(0 100 224 / 20%), rgb(17 22 31 / 92%));
+  background: linear-gradient(145deg, rgb(0 100 224 / 20%), rgb(18 21 26 / 92%));
   color: var(--accent-text);
   box-shadow: 0 12px 36px rgb(0 0 0 / 20%);
 }
@@ -157,28 +152,13 @@
   box-shadow: 0 18px 48px rgb(0 0 0 / 14%);
 }
 
-.sectionCard :global(.text-caption),
-.shell :global(.text-caption) {
-  font-size: max(12px, 0.75rem);
-  line-height: 1.5;
-}
-
-.sectionCard :global(.text-label),
-.shell :global(.text-label) {
-  font-size: max(13px, 0.8125rem);
-  line-height: 1.5;
-}
-
-.sectionCard :global(.text-body),
-.shell :global(.text-body) {
-  font-size: max(14px, 0.875rem);
-  line-height: 1.55;
-}
-
-.sectionCard :global(.text-title) {
-  font-size: max(17px, 1rem);
-  line-height: 1.45;
-}
+/* Aqui havia quatro regras `max()` reescrevendo .text-caption, .text-label,
+   .text-body e .text-title dentro do console — 74% do texto do produto. Eram,
+   no fundo, um piso de legibilidade implementado de forma invisivel: sem elas
+   a densidade compacta renderizava caption a 10,5px. O piso estava certo; a
+   implementacao, nao — de quebra neutralizava o controle de densidade, que
+   prometia "efeito imediato" e nao fazia nada. O piso agora e estrutural
+   (DS-4.9 + DS-4.10, globals.css), e a densidade voltou a funcionar. */
 
 .mainGrid {
   display: grid;
@@ -203,7 +183,7 @@
 .guideNav {
   border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: rgb(17 22 31 / 94%);
+  background: rgb(18 21 26 / 94%);
   padding: 12px;
 }
 

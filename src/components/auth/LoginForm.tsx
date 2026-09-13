@@ -258,7 +258,7 @@ export function LoginForm({
         </div>
 
         {/* Rodapé da coluna */}
-        <p className="text-center text-micro text-[#45556c]">
+        <p className="text-center text-caption text-[#45556c]">
           Abner Traker · Meta Conversions API &amp; Server-Side Tracking
         </p>
       </div>
