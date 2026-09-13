@@ -250,8 +250,14 @@ fs.writeFileSync(
         chave: CHAVE_TAG,
         dominios: [{ id: 'dom1', host: 'loja.com.br', criadoEm: '2026-01-01T00:00:00.000Z', hits: 42 }],
       },
-      // Chave de TOPO desconhecida (é o formato que a FASE 6 vai escrever).
-      autoDisparo: { ligado: false },
+      // Chave de TOPO desconhecida, só para provar o passthrough.
+      //
+      // 🔴 Este canário se chamava `autoDisparo` enquanto o campo não existia.
+      // A FASE 6 criou o campo de verdade — em `marcas.json`, por Pixel, como
+      // booleano — e um canário com o nome de um campo real deixa de provar
+      // "chave que o handler não conhece" e passa a parecer contrato. Daí o
+      // nome novo, que ninguém vai implementar.
+      chaveDeVersaoFutura: { ligado: false },
     },
     null,
     2
@@ -285,8 +291,8 @@ ok(resPut.status === 200, 'PUT com só `regras` no corpo → 200', `status=${res
 
 const depois = JSON.parse(lerArq(ARQ));
 ok(
-  depois.autoDisparo?.ligado === false,
-  'B12-a: a chave de TOPO desconhecida (`autoDisparo`) sobreviveu ao round-trip'
+  depois.chaveDeVersaoFutura?.ligado === false,
+  'B12-a: a chave de TOPO desconhecida (`chaveDeVersaoFutura`) sobreviveu ao round-trip'
 );
 ok(
   depois.entrada.campoDeVersaoFutura === 'nao-me-apague',
@@ -319,7 +325,10 @@ ok(
   resVazia.status === 200 && semSaida.saida.length === 0,
   'um `saida: []` EXPLÍCITO esvazia a lista — e só ele'
 );
-ok(semSaida.autoDisparo?.ligado === false, 'e a chave desconhecida continua lá depois do segundo save');
+ok(
+  semSaida.chaveDeVersaoFutura?.ligado === false,
+  'e a chave desconhecida continua lá depois do segundo save'
+);
 
 // Corpo inválido: 400 com a lista de problemas, e NADA gravado.
 const antesInvalido = lerArq(ARQ);

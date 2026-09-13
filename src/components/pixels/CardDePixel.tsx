@@ -17,6 +17,7 @@ import {
 import type { MarcaPublica } from '@/stores/useBrandStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { MetaGlyph } from '@/components/ui/brand-icons';
 import { estadoDePixel, type FaixaDePixel } from '@/components/pixels/estado-pixel';
 import { cn } from '@/lib/utils';
@@ -38,7 +39,8 @@ import { cn } from '@/lib/utils';
  *   PX-4  o valor da credencial nunca aparece, nem mascarado. So o estado dela.
  *   PX-5  codigo de teste preenchido e AVISO em `--warning`, com a consequencia
  *         escrita — nao um valor neutro.
- *   PX-6  rodape com divisoria; o Switch entra ali na FASE 6.
+ *   PX-6  rodape com divisoria; o Switch de disparo automatico e o ultimo
+ *         bloco do cartao (FASE 6, alteracao 9.C).
  *   PX-7  um so cartao marcado "Ativo".
  *   PX-8  nenhuma acao destrutiva no corpo: Editar e Apagar so no menu `⋯`.
  *   PX-9  o cartao do Pixel `default` nao tem "Apagar" (trava de config-store).
@@ -110,6 +112,19 @@ export interface CardDePixelProps {
   onUsar: () => void;
   onEditar: () => void;
   /**
+   * O operador pediu para ligar (true) ou desligar (false) o automatico.
+   *
+   * O cartao NAO confirma nada e NAO grava nada: a confirmacao de 9.7.1 cita
+   * o nome do Pixel e a contagem real de regras em `auto`, e quem tem as duas
+   * coisas e a pagina. C-4 — ligar confirma, desligar nao, e essa assimetria
+   * mora la, num lugar so, para nao ser reinventada em cada cartao.
+   */
+  onAlternarAuto: (ligado: boolean) => void;
+  /** C-6 — verdadeiro enquanto o PUT deste Pixel nao respondeu. */
+  salvandoAuto?: boolean;
+  /** 9.7.2 — este e o unico Pixel cadastrado. A tela admite a redundancia. */
+  pixelUnico?: boolean;
+  /**
    * Ausente quando o Pixel nao pode ser apagado. O `default` e o caso: e a
    * trava de config-store.ts, nao uma decisao de tela — nao a contorne aqui.
    */
@@ -122,6 +137,9 @@ export function CardDePixel({
   regrasAuto,
   onUsar,
   onEditar,
+  onAlternarAuto,
+  salvandoAuto = false,
+  pixelUnico = false,
   onApagar,
 }: CardDePixelProps) {
   const [copiado, setCopiado] = React.useState(false);
@@ -148,23 +166,21 @@ export function CardDePixel({
 
   const emTeste = Boolean(marca.testCode?.trim());
 
+  // 🔴 COSTURA DA FASE 6, FECHADA. `=== true` e a UNICA leitura aceita do
+  // campo (decisao irreversivel #12 / §9.5.1 regra 1) — e aqui ela e quase
+  // redundante de proposito: `MarcaPublica.autoDisparo` ja chega do servidor
+  // normalizado por `publicarMarca()`. Quase, e nao totalmente: o dia em que
+  // alguem afrouxar o tipo do cliente, esta linha continua desligada.
+  //
+  // PROIBIDOS aqui e em qualquer outro lugar: `!!marca.autoDisparo`,
+  // `marca.autoDisparo ?? true`, `marca.autoDisparo !== false`. Os tres leem
+  // "campo ausente" como "ligado", e campo ausente e o estado de TODOS os
+  // Pixels gravados antes desta fase.
+  const autoLigado = marca.autoDisparo === true;
+
   const estado = estadoDePixel({
     temToken: marca.temToken,
-    // 🟠 COSTURA COM A FASE 6 (alteracao 15.A). O campo `autoDisparo` do Pixel
-    // AINDA NAO EXISTE — ele nasce junto com o Switch, na FASE 6 — entao aqui
-    // ele e `false` e nao um palpite. O resultado honesto e que todo Pixel com
-    // credencial mostra ⚪ "So acumulando fila": nada dispara sozinho POR PIXEL
-    // hoje. Nao maquie isto com a contagem global de regras `auto`, que e outra
-    // pergunta.
-    //
-    // 🔴 Quando o campo existir, a UNICA leitura aceita e:
-    //        marca?.autoDisparo === true
-    // Decisao irreversivel #12 / 9.5.1. PROIBIDOS `!!marca.autoDisparo`,
-    // `marca.autoDisparo ?? true` e `marca.autoDisparo !== false`: os tres leem
-    // "campo ausente" como "ligado", e campo ausente e o estado de TODOS os
-    // Pixels gravados ate hoje. Seria ligar o disparo automatico de todos no
-    // primeiro deploy da FASE 6.
-    autoDisparo: false,
+    autoDisparo: autoLigado,
     regrasAuto,
   });
 
@@ -341,36 +357,78 @@ export function CardDePixel({
         )}
 
         {/* -------- PX-6 — o rodape -------- */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-          {ativo ? (
-            <p className="text-caption text-fg-muted">
-              É para este Pixel que o disparo manual aponta agora.
-            </p>
-          ) : (
-            <p className="text-caption text-fg-muted">
-              O disparo manual está apontando para outro Pixel.
-            </p>
-          )}
+        <div className="mt-4 border-t border-line pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {ativo ? (
+              <p className="text-caption text-fg-muted">
+                É para este Pixel que o disparo manual aponta agora.
+              </p>
+            ) : (
+              <p className="text-caption text-fg-muted">
+                O disparo manual está apontando para outro Pixel.
+              </p>
+            )}
 
-          {/* 8.3.4 — trocar o Pixel ativo. Some quando ja e o ativo, porque
-              usar o que ja esta em uso nao e acao. */}
-          {!ativo && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onUsar}
-              aria-label={`Usar ${marca.nome} no disparo manual`}
-            >
-              Usar neste disparo
-            </Button>
-          )}
+            {/* 8.3.4 — trocar o Pixel ativo. Some quando ja e o ativo, porque
+                usar o que ja esta em uso nao e acao. */}
+            {!ativo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onUsar}
+                aria-label={`Usar ${marca.nome} no disparo manual`}
+              >
+                Usar neste disparo
+              </Button>
+            )}
+          </div>
 
-          {/* 🟠 FASE 6 (alteracao 15.A) — o Switch de disparo automatico DESTE
-              Pixel entra aqui, como ultimo bloco do cartao (PX-6), com o texto
-              A2 sempre visivel abaixo dele e confirmacao no clique. A divisoria
-              e o espaco ja existem para que a FASE 6 seja acrescimo, e nao
-              refatoracao de layout. Nada de Switch em `⋯` e nada de tooltip: e
-              o controle que liga conversao real sem ninguem clicar. */}
+          {/* O Switch de disparo automatico DESTE Pixel — ultimo bloco do
+              cartao (PX-6 / alteracao 9.C). Ele fica aqui, no corpo, e nunca
+              dentro do menu `⋯` ou de um tooltip (C-5): e o controle que faz
+              conversao real sair sem ninguem clicar, e um controle assim nao
+              se esconde atras de um hover. */}
+          <div className="mt-3 border-t border-line pt-3">
+            <Switch
+              checked={autoLigado}
+              disabled={!marca.temToken}
+              salvando={salvandoAuto}
+              onCheckedChange={(v) => onAlternarAuto(v)}
+              rotulo="Disparo automático"
+              descricao="Eventos que casarem com uma regra automática vão para a Meta sem você fazer nada."
+              rodape={
+                <div className="flex flex-col gap-1.5 text-caption text-fg-muted">
+                  {/* RD-21 — nada de controle cinza e mudo. Se nao da para
+                      ligar, a tela diz por que na mesma linha do controle. */}
+                  {!marca.temToken && (
+                    <p className="text-danger">
+                      Só é possível ligar depois que este Pixel tiver um token
+                      de acesso — sem token nada sai para a Meta.
+                    </p>
+                  )}
+
+                  {/* 9.7.2 — honestidade explicita. A tela nao finge uma
+                      granularidade que ainda nao existe. */}
+                  {pixelUnico && (
+                    <p>
+                      Você tem um único Pixel configurado. Enquanto for assim,
+                      este botão equivale a ligar ou desligar o automático do
+                      sistema inteiro.
+                    </p>
+                  )}
+
+                  {/* O terceiro estado de 9.C dito onde a acao acontece: ligado
+                      e sem nenhuma regra em `auto` nao e "funcionando". */}
+                  {autoLigado && marca.temToken && regrasAuto === 0 && (
+                    <p className="text-warning">
+                      Ligado, mas nenhuma regra está no modo automático — então
+                      nada sai sozinho ainda.
+                    </p>
+                  )}
+                </div>
+              }
+            />
+          </div>
         </div>
       </article>
     </li>

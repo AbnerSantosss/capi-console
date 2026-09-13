@@ -139,6 +139,28 @@ export function contarRegrasAuto(
 }
 
 /**
+ * QUAIS regras automaticas mandam evento para este Pixel, pelo nome do evento.
+ *
+ * A confirmacao de ligar o automatico (9.7.1) precisa citar a contagem real, e
+ * citar so o numero ainda deixa ligar as cegas: "3 regras" nao diz se uma
+ * delas e Purchase. O nome mostrado e o evento da META — e ele que aparece no
+ * Gerenciador de Eventos e e por ele que o operador reconhece o estrago.
+ *
+ * Duplicatas saem: duas regras que mandam Purchase nao viram "Purchase,
+ * Purchase" no texto do dialogo.
+ */
+export function nomesDasRegrasAuto(
+  regras: RegraRoteamento[],
+  marcaId: string
+): string[] {
+  const nomes = regras
+    .filter((r) => r.ativo && r.modo === 'auto' && regraApontaPara(r, marcaId))
+    .map((r) => (r.eventoMeta || r.eventoOrigem || '').trim())
+    .filter(Boolean);
+  return [...new Set(nomes)];
+}
+
+/**
  * Quantas regras ATIVAS mandam evento para este Pixel, em qualquer modo que
  * de fato entregue — `auto` e `fila`.
  *

@@ -78,7 +78,30 @@ export interface ItemInbox {
   /** Evento da Meta que a regra escolheu. */
   eventoMeta?: string;
   regraId?: string;
+  /**
+   * Modo que a REGRA pediu, escalar, como sempre foi.
+   *
+   * Continua sendo gravado — `logs/inbox.jsonl` e append-only e toda a tela
+   * atual le este campo. O que ele NAO diz mais, desde a FASE 6, e o que
+   * aconteceu de fato: com dois Pixels de destino, um pode ter saido sozinho e
+   * o outro ter ficado na fila. Quem precisa do resultado le `modoPorMarca`.
+   */
   modo?: 'auto' | 'fila' | 'ignorar';
+  /**
+   * Modo efetivo POR MARCA, depois de aplicar a trava do Pixel (§9.4.3).
+   *
+   * Aditivo: ausente em todo item gravado antes da FASE 6, e a tela trata a
+   * ausencia caindo de volta em `modo`. Nunca reescrevemos linha antiga.
+   */
+  modoPorMarca?: Record<string, 'auto' | 'fila'>;
+  /**
+   * Por que a marca ficou na fila. So texto de tela: nenhuma decisao le isto.
+   *
+   * O vocabulario e fechado e vive em `modo-por-marca.ts` (`MotivoFila`);
+   * aqui ele aparece por extenso porque `inbox.ts` descreve um formato de
+   * arquivo, e um formato de arquivo nao deve importar o motor que o escreve.
+   */
+  motivoFila?: Record<string, 'regra-em-fila' | 'auto-do-pixel-desligado' | 'sem-token'>;
   /** false quando o nome do evento nao esta no catalogo conhecido. */
   conhecido?: boolean;
   /* --- campos de leitura: explicam a decisao, nao mudam roteamento nenhum --- */

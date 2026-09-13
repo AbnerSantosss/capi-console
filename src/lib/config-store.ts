@@ -59,6 +59,23 @@ export interface Marca {
   adAccountId?: string;
   /** true quando os valores vem do .env e nao de config/marcas.json. */
   doEnv?: boolean;
+  /**
+   * 🔴 Disparo automatico DESTE Pixel. OPCIONAL de proposito, e AUSENTE = DESLIGADO.
+   *
+   * Todas as marcas gravadas antes da FASE 6 nao tem o campo. Qualquer leitura
+   * que trate a ausencia como "ligado" liga o automatico de TODOS os Pixels ja
+   * existentes no primeiro boot depois do deploy — e o sistema nunca disparou
+   * automaticamente em producao (9.1.1: 0 regras em `auto`).
+   *
+   * A UNICA leitura aceita, em qualquer lugar do codigo, e:
+   *
+   *     marca?.autoDisparo === true
+   *
+   * PROIBIDOS: `!!marca.autoDisparo`, `marca.autoDisparo ?? true`,
+   * `marca.autoDisparo !== false`. Os tres ligam quando o campo falta.
+   * Regra 1 de 9.5.1 — item de revisao de codigo, nao preferencia de estilo.
+   */
+  autoDisparo?: boolean;
 }
 
 /** A forma que o cliente pode ver. */
@@ -70,6 +87,13 @@ export interface MarcaPublica {
   testCode: string;
   adAccountId?: string;
   doEnv?: boolean;
+  /**
+   * Booleano FIRME, nunca opcional: o cliente recebe sempre `true` ou `false`.
+   * A normalizacao acontece aqui, na borda, para que nenhuma tela precise
+   * decidir o que fazer com `undefined` — e para que nenhuma tela seja tentada
+   * a usar `?? true` (9.A, 9.5.1).
+   */
+  autoDisparo: boolean;
 }
 
 export function publicarMarca(m: Marca): MarcaPublica {
@@ -81,6 +105,8 @@ export function publicarMarca(m: Marca): MarcaPublica {
     testCode: m.testCode ?? '',
     adAccountId: m.adAccountId,
     doEnv: m.doEnv,
+    // === true e o ponto inteiro. Ver o JSDoc de `Marca.autoDisparo`.
+    autoDisparo: m.autoDisparo === true,
   };
 }
 
@@ -192,6 +218,16 @@ function marcaDoEnv(): Marca {
     testCode: process.env.TEST_EVENT_CODE || '',
     adAccountId: process.env.AD_ACCOUNT_ID || undefined,
     doEnv: true,
+    /**
+     * B3-d: a marca implicita nasce DESLIGADA, e isso e escrito de proposito.
+     *
+     * Sem `marcas.json` em disco (primeiro boot, volume novo, restauracao de
+     * backup) esta e a UNICA marca que existe. Omitir o campo daria o mesmo
+     * resultado hoje, porque `autoDisparo === true` ja e falso para
+     * `undefined` — mas o `false` escrito aqui e o que continua desligado
+     * se alguem, la na frente, escrever um `?? true` por engano.
+     */
+    autoDisparo: false,
   };
 }
 

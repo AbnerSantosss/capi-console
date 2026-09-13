@@ -54,7 +54,14 @@ interface ResultadoDisparo {
    * A leitura tolera a falta: vira "Pixel removido" sem numero, e nao quebra.
    */
   pixelId?: string;
-  status: 'enviado' | 'duplicado' | 'invalido' | 'erro' | 'teste-ignorado' | 'sem-token';
+  status:
+    | 'enviado'
+    | 'duplicado'
+    | 'invalido'
+    | 'erro'
+    | 'teste-ignorado'
+    | 'sem-token'
+    | 'pixel-desligado';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -127,6 +134,26 @@ const TOM_RESULTADO: Record<ResultadoDisparo['status'], 'success' | 'danger' | '
   invalido: 'danger',
   erro: 'danger',
   'sem-token': 'danger',
+  // Neutro, nao vermelho: o Pixel estar desligado e uma escolha de quem
+  // opera, nao um defeito. O item continua na fila, inteiro, esperando.
+  'pixel-desligado': 'neutral',
+};
+
+/**
+ * O que a linha do resultado DIZ, em portugues.
+ *
+ * Antes a tela imprimia o slug cru ("teste-ignorado", "sem-token"). Quem opera
+ * nao conhece o vocabulario interno, e a FASE 6 acrescentaria mais um slug
+ * ("pixel-desligado") a essa lista de enigmas.
+ */
+const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
+  enviado: 'enviado',
+  duplicado: 'já tinha sido enviado',
+  invalido: 'recusado antes de sair',
+  erro: 'erro no envio',
+  'teste-ignorado': 'teste interno, não enviado',
+  'sem-token': 'sem Pixel ID ou token',
+  'pixel-desligado': 'automático deste Pixel desligado',
 };
 
 const FORMATO_TEXTO: Record<'A' | 'B' | 'outro', string> = {
@@ -883,7 +910,7 @@ function LinhaEntrada({
               >
                 <StatusDot tone={TOM_RESULTADO[r.status]}>
                   {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
-                  {r.status}
+                  {ROTULO_RESULTADO[r.status] ?? r.status}
                 </StatusDot>
                 {r.httpStatus ? (
                   <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>

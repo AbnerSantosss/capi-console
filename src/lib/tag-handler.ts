@@ -14,6 +14,7 @@ import { registrarEntrada } from '@/lib/inbox';
 import { calcularEmq } from '@/lib/emq';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
+import { resolverModoPorMarca } from '@/lib/modo-por-marca';
 
 /**
  * Coletor da tag de navegador — o unico endpoint PUBLICO deste console.
@@ -504,6 +505,15 @@ export async function processarTag(
   delete payload.k;
   delete payload.chave;
 
+  // A TRAVA DO PIXEL (FASE 6, alteracao 9.B). Mesma decisao do webhook, mesma
+  // funcao: a tag do site e o segundo caminho que chega em dispararItem(), e
+  // duas copias da mesma regra e como nasce um disparo fantasma (§9.5.1 r. 2).
+  //
+  // Fica depois do freio de volume de proposito: hit repetido nao precisa
+  // pagar uma leitura de marcas.json para ser descartado.
+  const marcas = regra?.marcas?.length ? regra.marcas : ['default'];
+  const decisao = await resolverModoPorMarca(modo, marcas);
+
   const item = await registrarEntrada({
     origem: 'tag',
     evento: eventoMeta,
@@ -511,6 +521,8 @@ export async function processarTag(
     eventoMeta,
     regraId: regra?.id,
     modo,
+    modoPorMarca: decisao.modoPorMarca,
+    motivoFila: decisao.motivoFila,
     conhecido: true,
     classificacao: 'mapeado',
     temFbc: Boolean(campos.fbc),
@@ -522,11 +534,16 @@ export async function processarTag(
   // 12. Disparo depois da resposta. O beacon do navegador nao espera: se o
   // disparo para a Meta ficasse na frente da resposta, a aba fecharia antes e o
   // hit se perderia inteiro.
-  if (modo === 'auto') {
-    const marcas = regra?.marcas?.length ? regra.marcas : ['default'];
+  if (decisao.marcasAuto.length > 0) {
     after(async () => {
       try {
-        await dispararItem({ item, campos, eventoMeta, marcas, origem: 'auto' });
+        await dispararItem({
+          item,
+          campos,
+          eventoMeta,
+          marcas: decisao.marcasAuto,
+          origem: 'auto',
+        });
       } catch (e) {
         console.error('[tag] auto-dispatch falhou:', e);
       }
@@ -535,7 +552,9 @@ export async function processarTag(
 
   // 14. Corpo minusculo, sempre 202. Nada de chave, de segredo, nem eco do payload.
   return NextResponse.json(
-    { ok: true, guardado: true, disparado: modo === 'auto' },
+    // "disparado" agora e o que aconteceu, nao o que a regra queria: com o
+    // Switch do Pixel desligado a regra continua em 'auto' e nada sai.
+    { ok: true, guardado: true, disparado: decisao.marcasAuto.length > 0 },
     { status: 202 }
   );
 }

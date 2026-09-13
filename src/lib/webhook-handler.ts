@@ -17,6 +17,7 @@ import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
+import { resolverModoPorMarca, decisaoDaSonda, SEM_DECISAO } from '@/lib/modo-por-marca';
 
 /**
  * Handler único do recebimento de webhook, usado por duas rotas e três formas
@@ -278,6 +279,23 @@ export async function processarWebhook(
   const modo: 'auto' | 'fila' | 'ignorar' = sonda ? 'auto' : modoDaRegra;
   const eventoFinal = sonda ? EVENTO_DA_SONDA : eventoDaRegra;
 
+  // A TRAVA DO PIXEL (FASE 6, alteracao 9.B). Entra aqui, e so aqui: depois
+  // de a regra ter escolhido evento e destinos, antes de qualquer envio.
+  //
+  // Ate a FASE 5 o modo era escalar e valia para todos os destinos de uma vez.
+  // A partir daqui cada Pixel responde por si: a regra diz que o evento DEVE
+  // ser automatico, o Pixel diz se ACEITA ser disparado sozinho, e so o "sim"
+  // das duas pontas manda a conversao embora.
+  //
+  // 'ignorar' nao passa por aqui (§9.5.1 regra 3) e a sonda passa por fora da
+  // trava — o porque esta escrito em decisaoDaSonda().
+  const decisao =
+    modo === 'ignorar'
+      ? SEM_DECISAO
+      : sonda
+        ? decisaoDaSonda(marcas)
+        : await resolverModoPorMarca(modoDaRegra, marcas);
+
   const motivoIgnorar: MotivoIgnorar | undefined =
     modo !== 'ignorar' ? undefined : regra ? 'regra' : motivoDoParser;
 
@@ -293,6 +311,12 @@ export async function processarWebhook(
     eventoMetaSugerido,
     regraId: regra?.id,
     modo,
+    // Aditivo: o modo da regra continua em "modo", o que de fato aconteceu com
+    // cada Pixel fica aqui. Item ignorado nao ganha os campos, para nao poluir
+    // o historico com dois objetos vazios.
+    ...(modo === 'ignorar'
+      ? {}
+      : { modoPorMarca: decisao.modoPorMarca, motivoFila: decisao.motivoFila }),
     conhecido,
     classificacao,
     motivoIgnorar,
@@ -330,7 +354,11 @@ export async function processarWebhook(
 
   // A plataforma espera resposta rápida e tenta de novo se demorar. O disparo
   // roda depois da resposta, com after(), para o 202 sair em menos de 1 s.
-  if (modo === 'auto' && eventoFinal) {
+  // Antes era "modo === 'auto'", e o disparo ia para TODAS as marcas da
+  // regra. Agora entram no laco so os Pixels que aceitaram; se nenhum aceitou,
+  // o after() nem e agendado e o item fica na fila — que e exatamente o
+  // comportamento de hoje, com todo Switch desligado.
+  if (decisao.marcasAuto.length > 0 && eventoFinal) {
     after(async () => {
       try {
         // A sonda substitui os campos: o `ping` chega vazio e um evento vazio
@@ -343,7 +371,7 @@ export async function processarWebhook(
           item,
           campos: camposDoDisparo,
           eventoMeta: eventoFinal,
-          marcas,
+          marcas: decisao.marcasAuto,
           origem: 'auto',
         });
       } catch (e) {
@@ -360,6 +388,11 @@ export async function processarWebhook(
       eventoMeta: eventoFinal ?? null,
       classificacao,
       modo,
+      // O "modo" acima e o da regra e continua onde sempre esteve, para nao
+      // quebrar quem ja le esta resposta. O que realmente aconteceu com cada
+      // Pixel vem aqui do lado: sem isto, um 202 dizendo "auto" sem nada ter
+      // sido enviado seria uma resposta que mente.
+      modoPorMarca: decisao.modoPorMarca,
       regra: regra?.id ?? null,
       rotulo: rotuloRecebido,
       rotuloDivergente,

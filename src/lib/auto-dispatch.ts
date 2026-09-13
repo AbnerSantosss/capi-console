@@ -9,6 +9,7 @@ import { jaEnviado, marcarEnviado } from './dedup';
 import { transmitir } from './relay';
 import { marcarStatus, anotarResultado, type ItemInbox } from './inbox';
 import { ehTesteInterno } from './parser';
+import { pixelAceitaAuto } from './modo-por-marca';
 
 /**
  * Disparo de um item da caixa de entrada para um ou mais pixels.
@@ -22,12 +23,26 @@ import { ehTesteInterno } from './parser';
  *   2. enriquecimento  -> herda fbc/fbp/ip/ua do pre-checkout pelo e-mail
  *   3. validacao       -> janela de 7 dias e campos obrigatorios
  *   4. deduplicacao    -> o mesmo event_id no mesmo pixel nunca vai duas vezes
+ *
+ * Sobre a trava do Pixel da FASE 6 (autoDisparo): quem DECIDE e
+ * `modo-por-marca.ts`, chamado pelos handlers; esta funcao recebe a lista de
+ * marcas ja filtrada. A conferencia que existe aqui dentro so sabe RECUSAR
+ * (B4-a) — ela nunca liga nada, entao nao cria uma segunda fonte de verdade.
+ * E cinto de seguranca para um chamador futuro que esqueca de filtrar.
  */
 
 export interface ResultadoDisparoAuto {
   marcaId: string;
   pixelId: string;
-  status: 'enviado' | 'duplicado' | 'invalido' | 'erro' | 'teste-ignorado' | 'sem-token';
+  status:
+    | 'enviado'
+    | 'duplicado'
+    | 'invalido'
+    | 'erro'
+    | 'teste-ignorado'
+    | 'sem-token'
+    /** O Pixel esta com o disparo automatico desligado. Nao e erro, nao e falha. */
+    | 'pixel-desligado';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -128,6 +143,29 @@ export async function dispararItem(params: {
     const accessToken = (marca?.accessToken || '').trim();
     const modoTeste = Boolean(marca?.testCode?.trim());
     const base = { marcaId, pixelId, modoTeste, herdados, emq: emq.nota };
+
+    /**
+     * B4-a: conferencia final da trava do Pixel, dentro do laco, por marca.
+     *
+     * So vale para `origem: 'auto'`. O botao "Disparar agora" da tela e um
+     * clique humano com o item na frente — o Switch responde por disparo
+     * AUTOMATICO, nao por permissao de uso do Pixel (§9.3.2). Bloquear o
+     * manual aqui deixaria a fila sem saida, que e o oposto do que a FASE 6
+     * existe para fazer.
+     *
+     * `marca.id === marcaId` de proposito: `acharMarca` cai na primeira
+     * marca da lista quando o id nao existe, e herdar o "ligado" de outro
+     * Pixel por causa de um id errado e justamente o disparo que nao pode
+     * acontecer.
+     */
+    if (params.origem === 'auto' && !pixelAceitaAuto(marca?.id === marcaId ? marca : undefined)) {
+      resultados.push({
+        ...base,
+        status: 'pixel-desligado',
+        erro: 'O disparo automático deste Pixel está desligado. O item fica na fila.',
+      });
+      continue;
+    }
 
     if (!pixelId || !accessToken) {
       resultados.push({ ...base, status: 'sem-token', erro: 'Marca sem Pixel ID ou token.' });

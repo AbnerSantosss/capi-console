@@ -42,6 +42,55 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ erro: 'Informe o Pixel ID.' }, { status: 400 });
     }
 
+    /**
+     * 🔴 `autoDisparo` so entra no objeto quando o corpo manda um BOOLEANO.
+     *
+     * `salvarMarca` mescla (`...base, ...entrada`), entao uma chave ausente
+     * preserva o valor gravado e uma chave presente sobrescreve. Isso separa
+     * as duas intencoes que chegam por este mesmo PUT:
+     *
+     *   - o formulario de edicao (nome, pixel, token) NAO manda o campo, e
+     *     salvar o formulario nunca desliga o automatico por acidente;
+     *   - o Switch do card manda `true`/`false` de proposito.
+     *
+     * Qualquer outro valor (string "true", 1, null) e IGNORADO, nao coagido:
+     * este campo autoriza envio de conversao real sem revisao humana, e
+     * coercao e exatamente como se liga o que ninguem pediu (9.5.1).
+     */
+    const mudaAuto = typeof body.autoDisparo === 'boolean';
+    const ligando = mudaAuto && body.autoDisparo === true;
+
+    /**
+     * B3-e: LIGAR exige Pixel ID e token. DESLIGAR nunca e recusado.
+     *
+     * A tela ja impede antes (o Switch nasce desabilitado num Pixel sem
+     * token), mas a tela nao e a garantia: este PUT e publico para qualquer
+     * sessao autenticada, e quem liga aqui autoriza envio de conversao real
+     * sem revisao humana. O Pixel ID ja e obrigatorio em todo PUT, acima.
+     *
+     * O token conferido e o que a marca VAI ter depois desta gravacao, com a
+     * mesma regra de mesclagem de `salvarMarca`: string vazia = "nao mexer",
+     * `null` = limpar. Ligar e limpar o token no MESMO pedido e recusado —
+     * fila e sempre a direcao segura quando a resposta nao e obvia.
+     */
+    if (ligando) {
+      const limpandoToken = body.accessToken === null;
+      const tokenEnviado = limpandoToken ? '' : String(body.accessToken ?? '').trim();
+      const atual = (await listarMarcas()).find((m) => m.id === id);
+      const tokenDepois = limpandoToken ? '' : tokenEnviado || (atual?.accessToken ?? '').trim();
+
+      if (!tokenDepois) {
+        return NextResponse.json(
+          {
+            erro:
+              'Este Pixel não tem token de acesso. Sem token nada sai para a Meta, ' +
+              'então o disparo automático não pode ser ligado. Salve o token primeiro.',
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await salvarMarca({
       id,
       nome: String(body.nome).trim(),
@@ -49,6 +98,7 @@ export async function PUT(request: NextRequest) {
       accessToken: body.accessToken === null ? null : String(body.accessToken ?? ''),
       testCode: String(body.testCode ?? '').trim(),
       adAccountId: String(body.adAccountId ?? '').trim() || undefined,
+      ...(mudaAuto ? { autoDisparo: body.autoDisparo as boolean } : {}),
     } as Parameters<typeof salvarMarca>[0]);
 
     // Devolve a visao mesclada (config + .env), nao o registro cru: uma marca
