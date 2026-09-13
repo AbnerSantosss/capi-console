@@ -527,6 +527,13 @@ export async function processarTag(
     classificacao: 'mapeado',
     temFbc: Boolean(campos.fbc),
     temFbp: Boolean(campos.fbp),
+    // A tag do site mede VISITA, nao venda: nao ha nome de comprador para
+    // guardar aqui, e por isso `nomeCliente` fica ausente de proposito. O que
+    // ha e a atribuicao de clique, que e justamente o motivo de a tag existir —
+    // e o fbclid capturado na pagina de vendas que salva o Purchase do PIX,
+    // que chega depois, fora do navegador, sem atribuicao nenhuma.
+    temFbclid: Boolean(campos.fbclid),
+    temGclid: Boolean(campos.gclid),
     emq: emq.nota,
     payload,
   });

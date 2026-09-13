@@ -12,6 +12,7 @@ import {
 } from '@/lib/config-store';
 import { respostaConfigIndisponivel } from '@/lib/erro-api';
 import { registrarEntrada, mascararEmail } from '@/lib/inbox';
+import { sinaisDoPayload } from '@/lib/inbox-sinais';
 import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
@@ -303,6 +304,20 @@ export async function processarWebhook(
   // É isso que salva o Purchase do PIX, que chega sem atribuição nenhuma.
   await guardarPerfil(campos).catch(() => {});
 
+  // Sinais de leitura da caixa de entrada (nome, fbclid, gclid).
+  //
+  // Por que ler o payload de novo se o parser ja encheu `campos`: porque as
+  // duas leituras PRECISAM concordar. Item antigo ganha os sinais por
+  // `sinaisDoPayload` na hora de ler o disco (`inbox.ts carregarDoDisco`); se o
+  // recebimento usasse outra regra, a mesma venda apareceria com um chip antes
+  // do restart e outro depois. O caso concreto: quando so o cookie `_fbc` vem
+  // no corpo, `campos.fbclid` fica vazio (o parser reconstroi o `fbc` a partir
+  // do fbclid, nao o contrario) mas a Meta ainda consegue atribuir — e
+  // `sinaisDoPayload` sabe disso. `campos` tem precedencia; os sinais so
+  // preenchem o que falta.
+  const sinais = sinaisDoPayload(payload);
+  const nomeDosCampos = [texto('firstName'), texto('lastName')].filter(Boolean).join(' ');
+
   const item = await registrarEntrada({
     origem,
     evento: eventoFinal ?? nomeOriginal,
@@ -333,6 +348,9 @@ export async function processarWebhook(
     orderId: texto('orderId'),
     temFbc: Boolean(texto('fbc')),
     temFbp: Boolean(texto('fbp')),
+    nomeCliente: nomeDosCampos || sinais.nomeCliente,
+    temFbclid: Boolean(texto('fbclid')) || sinais.temFbclid,
+    temGclid: Boolean(texto('gclid')) || sinais.temGclid,
     emq: emq.nota,
     payload,
     status: modo === 'ignorar' ? 'ignorado' : 'novo',
@@ -417,6 +435,12 @@ async function registrarNaoLido(params: {
     origem: params.origem,
     temFbc: false,
     temFbp: false,
+    // Explicitos, e nao ausentes: corpo que nao deu para ler nao tem sinal
+    // nenhum, e deixar `temFbclid` undefined faria a releitura do disco tentar
+    // achar fbclid dentro do envelope `__naoLido` (que so guarda uma amostra de
+    // texto cru) toda vez que o processo subisse.
+    temFbclid: false,
+    temGclid: false,
     modo: 'ignorar',
     status: 'ignorado',
     classificacao: 'sem-evento',

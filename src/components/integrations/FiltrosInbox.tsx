@@ -1,0 +1,385 @@
+'use client';
+
+/**
+ * Barra de filtros da caixa de entrada + gatilho do disparo em lote.
+ *
+ * Por que saiu do `InboxList.tsx`: aquele arquivo já passava de mil linhas e
+ * carrega o SSE, a mesclagem e a linha da lista. Filtro é outra preocupação —
+ * decide O QUE APARECE, nunca o que é enviado — e quis-se que isso ficasse
+ * óbvio pela separação física dos arquivos.
+ *
+ * 🔴 Este módulo NÃO conhece elegibilidade de disparo. Quem decide se um item
+ * pode entrar num lote é `src/lib/inbox-lote.ts`, e só ele. Aqui só existe
+ * "passa no filtro da tela" — que é um recorte de EXIBIÇÃO. Misturar as duas
+ * coisas foi exatamente o erro que o módulo dedicado existe para impedir: um
+ * filtro mais frouxo nunca pode ampliar o que vai para a Meta.
+ */
+
+import React from 'react';
+import { ListFilter, Send, Square, X } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from '@/components/ui/select';
+
+/* ------------------------------------------------------------------ */
+/* O vocabulário do filtro                                             */
+/* ------------------------------------------------------------------ */
+
+/** `'todos'` é sentinela, nunca nome de evento: o Select do DS não lida bem com valor vazio. */
+export const TODOS = 'todos';
+
+export type FiltroAtribuicao = 'todos' | 'fbc' | 'fbclid' | 'gclid' | 'sem';
+export type FiltroOrigem = 'todos' | 'webhook' | 'tag';
+
+export interface FiltrosInboxValor {
+  /** Nome do evento como a plataforma mandou, ou `TODOS`. */
+  evento: string;
+  atribuicao: FiltroAtribuicao;
+  origem: FiltroOrigem;
+}
+
+export const FILTROS_VAZIOS: FiltrosInboxValor = {
+  evento: TODOS,
+  atribuicao: 'todos',
+  origem: 'todos',
+};
+
+/**
+ * O mínimo que o filtro precisa enxergar de um item.
+ *
+ * Estrutural de propósito: assim este arquivo não importa `InboxList.tsx` só
+ * para pegar um tipo, e um `ItemInbox` real satisfaz o formato sem conversão.
+ */
+export interface ItemFiltravel {
+  evento?: string;
+  eventoOrigem?: string;
+  origem: string;
+  temFbc: boolean;
+  temFbclid?: boolean;
+  temGclid?: boolean;
+}
+
+/** Nome do evento usado pelo filtro e pela lista de opções — sempre o mesmo. */
+export function nomeDoEvento(item: ItemFiltravel): string {
+  return item.eventoOrigem ?? item.evento ?? 'sem nome de evento';
+}
+
+/** `origem` guarda o rótulo de entrada; só a tag grava literalmente 'tag'. */
+export function origemDoItem(item: ItemFiltravel): 'webhook' | 'tag' {
+  return item.origem === 'tag' ? 'tag' : 'webhook';
+}
+
+export function haFiltroAtivo(f: FiltrosInboxValor): boolean {
+  return f.evento !== TODOS || f.atribuicao !== 'todos' || f.origem !== 'todos';
+}
+
+/**
+ * Recorte de exibição. Uma função pura para poder ser lida de cima a baixo
+ * sem abrir o componente — é ela que decide o número que o operador vê no
+ * botão do lote, e esse número precisa ser conferível a olho nu.
+ */
+export function passaFiltros(item: ItemFiltravel, f: FiltrosInboxValor): boolean {
+  if (f.evento !== TODOS && nomeDoEvento(item) !== f.evento) return false;
+  if (f.origem !== 'todos' && origemDoItem(item) !== f.origem) return false;
+
+  switch (f.atribuicao) {
+    case 'fbc':
+      return item.temFbc === true;
+    case 'fbclid':
+      return item.temFbclid === true;
+    case 'gclid':
+      return item.temGclid === true;
+    // "Sem atribuição" é a ausência dos TRÊS sinais. Não é o mesmo que "sem
+    // fbc": um item pode ter chegado com fbclid na URL e nenhum cookie _fbc.
+    case 'sem':
+      return item.temFbc !== true && item.temFbclid !== true && item.temGclid !== true;
+    default:
+      return true;
+  }
+}
+
+const TEXTO_ATRIBUICAO: Record<FiltroAtribuicao, string> = {
+  todos: 'qualquer atribuição',
+  fbc: 'com fbc',
+  fbclid: 'com fbclid',
+  gclid: 'com gclid (Google)',
+  sem: 'sem atribuição nenhuma',
+};
+
+const TEXTO_ORIGEM: Record<FiltroOrigem, string> = {
+  todos: 'qualquer origem',
+  webhook: 'webhook',
+  tag: 'tag do site',
+};
+
+/**
+ * O filtro ativo EM PALAVRAS, para o diálogo de confirmação do lote.
+ *
+ * Existe porque "Disparar os 12 filtrados" não diz quais 12. Quem confirma um
+ * disparo real precisa ler, em português, o recorte que produziu aquele número
+ * — sem voltar para a tela de trás para conferir os três seletores.
+ */
+export function descreverFiltros(f: FiltrosInboxValor): string {
+  if (!haFiltroAtivo(f)) return 'Sem filtro: todos os eventos da lista.';
+  const partes: string[] = [];
+  if (f.evento !== TODOS) partes.push(`Evento: ${f.evento}`);
+  if (f.atribuicao !== 'todos') partes.push(`Atribuição: ${TEXTO_ATRIBUICAO[f.atribuicao]}`);
+  if (f.origem !== 'todos') partes.push(`Origem: ${TEXTO_ORIGEM[f.origem]}`);
+  return partes.join(' · ');
+}
+
+/* ------------------------------------------------------------------ */
+/* Progresso do lote                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Contagem viva do lote em andamento. `pulados` é categoria própria e não erro:
+ * é a resposta "já foi enviado" da rota, que significa que o console fez a
+ * coisa certa ao não mandar de novo.
+ */
+export interface ProgressoLote {
+  total: number;
+  feitos: number;
+  ok: number;
+  pulados: number;
+  erros: { id: string; evento: string; motivo: string }[];
+}
+
+/* ------------------------------------------------------------------ */
+/* A barra                                                             */
+/* ------------------------------------------------------------------ */
+
+export function FiltrosInbox({
+  valor,
+  onValor,
+  opcoesEvento,
+  totalItens,
+  totalVisiveis,
+  totalElegiveis,
+  lote,
+  onAbrirLote,
+  onPararLote,
+}: {
+  valor: FiltrosInboxValor;
+  onValor: (v: FiltrosInboxValor) => void;
+  /** Eventos presentes na lista, com quantos itens cada um tem. */
+  opcoesEvento: { valor: string; total: number }[];
+  totalItens: number;
+  totalVisiveis: number;
+  totalElegiveis: number;
+  /** Não-nulo enquanto um lote roda: a barra troca o botão pelo progresso. */
+  lote: ProgressoLote | null;
+  onAbrirLote: () => void;
+  onPararLote: () => void;
+}) {
+  const ativo = haFiltroAtivo(valor);
+  const rodando = lote !== null;
+  const pct = rodando && lote.total > 0 ? Math.round((lote.feitos / lote.total) * 100) : 0;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-1 p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <span className="inline-flex h-control-sm items-center gap-1.5 text-caption font-medium text-fg-muted">
+          <ListFilter className="size-3.5" aria-hidden />
+          Filtrar
+        </span>
+
+        <CampoFiltro id="filtro-evento" rotulo="Evento">
+          <Select
+            value={valor.evento}
+            onValueChange={(v) => v && onValor({ ...valor, evento: String(v) })}
+          >
+            <SelectTrigger id="filtro-evento" className="w-full min-w-40">
+              <span className="truncate text-fg-strong">
+                {valor.evento === TODOS ? 'Todos os eventos' : valor.evento}
+              </span>
+            </SelectTrigger>
+            <SelectContent className="max-h-80">
+              <SelectItem value={TODOS}>
+                <span className="text-label text-fg-body">Todos os eventos ({totalItens})</span>
+              </SelectItem>
+              {opcoesEvento.map((o) => (
+                <SelectItem key={o.valor} value={o.valor}>
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate font-mono text-label text-fg-body">{o.valor}</span>
+                    <span className="text-caption text-fg-muted tabular">({o.total})</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
+
+        <CampoFiltro id="filtro-atribuicao" rotulo="Atribuição">
+          <Select
+            value={valor.atribuicao}
+            onValueChange={(v) => v && onValor({ ...valor, atribuicao: v as FiltroAtribuicao })}
+          >
+            <SelectTrigger id="filtro-atribuicao" className="w-full min-w-40">
+              <span className="truncate text-fg-strong">
+                {valor.atribuicao === 'todos' ? 'Todas' : TEXTO_ATRIBUICAO[valor.atribuicao]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <OpcaoSimples valor="todos" rotulo="Todas" ajuda="Não filtra por atribuição." />
+              <OpcaoSimples
+                valor="fbc"
+                rotulo="Com fbc"
+                ajuda="O cookie _fbc do clique no anúncio veio junto."
+              />
+              <OpcaoSimples
+                valor="fbclid"
+                rotulo="Com fbclid"
+                ajuda="O parâmetro de clique da Meta apareceu no payload."
+              />
+              <OpcaoSimples
+                valor="gclid"
+                rotulo="Com gclid (Google)"
+                ajuda="Atribuição do Google Ads no payload."
+              />
+              <OpcaoSimples
+                valor="sem"
+                rotulo="Sem atribuição"
+                ajuda="Nenhum dos três sinais: fbc, fbclid ou gclid."
+              />
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
+
+        <CampoFiltro id="filtro-origem" rotulo="Origem">
+          <Select
+            value={valor.origem}
+            onValueChange={(v) => v && onValor({ ...valor, origem: v as FiltroOrigem })}
+          >
+            <SelectTrigger id="filtro-origem" className="w-full min-w-36">
+              <span className="truncate text-fg-strong">
+                {valor.origem === 'todos' ? 'Todas' : TEXTO_ORIGEM[valor.origem]}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <OpcaoSimples valor="todos" rotulo="Todas" ajuda="Webhook e tag do site." />
+              <OpcaoSimples
+                valor="webhook"
+                rotulo="Webhook"
+                ajuda="Chegou pela URL que a plataforma chama."
+              />
+              <OpcaoSimples
+                valor="tag"
+                rotulo="Tag do site"
+                ajuda="Chegou do navegador, pelo coletor da tag."
+              />
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
+
+        {ativo && (
+          <Button size="sm" variant="ghost" onClick={() => onValor(FILTROS_VAZIOS)}>
+            <X className="size-3.5" aria-hidden />
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+        <p className="text-caption text-fg-muted">
+          <span className="tabular text-fg-body">{totalVisiveis}</span> de{' '}
+          <span className="tabular">{totalItens}</span> evento
+          {totalItens === 1 ? '' : 's'}
+          {ativo ? ' com este filtro' : ' na lista'}
+          {' · '}
+          {totalElegiveis === 0
+            ? 'nenhum pode ser disparado em lote'
+            : `${totalElegiveis} pode${totalElegiveis === 1 ? '' : 'm'} ir para a Meta`}
+        </p>
+
+        {rodando ? (
+          <div className="flex min-w-56 flex-col gap-1">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-caption text-fg-body tabular">
+                Enviando {Math.min(lote.feitos + 1, lote.total)} de {lote.total} · {lote.ok} ok
+                {lote.pulados > 0 ? ` · ${lote.pulados} pulado${lote.pulados === 1 ? '' : 's'}` : ''}
+                {lote.erros.length > 0
+                  ? ` · ${lote.erros.length} erro${lote.erros.length === 1 ? '' : 's'}`
+                  : ''}
+              </span>
+              <Button size="sm" variant="outline" onClick={onPararLote}>
+                <Square className="size-3.5" aria-hidden />
+                Parar
+              </Button>
+            </div>
+            {/* Barra simples: o DS não tem componente de progresso, e inventar
+                um aqui daria uma cor nova para o `check:contrast` conferir. */}
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={lote.total}
+              aria-valuenow={lote.feitos}
+              aria-label="Progresso do disparo em lote"
+            >
+              <div
+                className="h-full bg-accent-fill transition-[width] duration-200"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-end gap-1">
+            <Button size="sm" onClick={onAbrirLote} disabled={totalElegiveis === 0}>
+              <Send className="size-3.5" aria-hidden />
+              Disparar {totalElegiveis > 0 ? `os ${totalElegiveis} ` : ''}filtrados
+            </Button>
+            {totalElegiveis === 0 && totalVisiveis > 0 && (
+              <span className="text-caption text-fg-muted">
+                Nenhum evento elegível neste recorte.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CampoFiltro({
+  id,
+  rotulo,
+  children,
+}: {
+  id: string;
+  rotulo: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <label htmlFor={id} className="text-caption font-medium text-fg-muted">
+        {rotulo}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function OpcaoSimples({
+  valor,
+  rotulo,
+  ajuda,
+}: {
+  valor: string;
+  rotulo: string;
+  ajuda: string;
+}) {
+  return (
+    <SelectItem value={valor}>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-label font-medium text-fg-body">{rotulo}</span>
+        <span className="text-caption text-fg-muted">{ajuda}</span>
+      </span>
+    </SelectItem>
+  );
+}

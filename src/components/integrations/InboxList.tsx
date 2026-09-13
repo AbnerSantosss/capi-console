@@ -17,7 +17,9 @@ import {
   PlugZap,
   Ban,
   FileWarning,
+  FileJson,
   HelpCircle,
+  MousePointerClick,
 } from 'lucide-react';
 
 import { useEventStore } from '@/stores/useEventStore';
@@ -46,6 +48,21 @@ import { ItemDeLista, AnimatePresence } from '@/components/common/motion';
 import { SeletorDePixel, nomeDoPixel } from '@/components/pixels/SeletorDePixel';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis';
+// Fonte UNICA da elegibilidade do lote (regras 1 e 4 do CLAUDE.md). A tela nao
+// reimplementa nada disto: ela pergunta e obedece. Modulo neutro, sem
+// `server-only`, justamente para poder ser importado daqui.
+import { separarParaLote } from '@/lib/inbox-lote';
+import {
+  FiltrosInbox,
+  FILTROS_VAZIOS,
+  descreverFiltros,
+  nomeDoEvento,
+  passaFiltros,
+  type FiltrosInboxValor,
+  type ProgressoLote,
+} from './FiltrosInbox';
+import { DialogoPayload } from './DialogoPayload';
+import { DialogoLote, type MotivoFora } from './DialogoLote';
 
 interface ResultadoDisparo {
   marcaId: string;
@@ -71,7 +88,14 @@ interface ResultadoDisparo {
   emq: number;
 }
 
-interface ItemInbox {
+/**
+ * COPIA cliente de `ItemInbox` (`src/lib/inbox.ts`).
+ *
+ * Nao da para importar de la: aquele arquivo abre com `server-only`. Campo novo
+ * no servidor precisa de campo novo aqui — o `tsc` nao liga os dois lados, e um
+ * campo esquecido nao quebra a compilacao, so some da tela em silencio.
+ */
+export interface ItemInbox {
   id: string;
   recebidoEm: string;
   origem: string;
@@ -84,9 +108,23 @@ interface ItemInbox {
   valor?: number;
   moeda?: string;
   emailMascarado?: string;
+  /**
+   * Nome do comprador como veio da plataforma, INTEIRO.
+   *
+   * O e-mail continua mascarado (`emailMascarado`) — foi o pedido literal do
+   * dono: dava para reconhecer o cliente, mas sem o endereco completo na tela.
+   */
+  nomeCliente?: string;
   orderId?: string;
   temFbc: boolean;
   temFbp: boolean;
+  /**
+   * Sinais de atribuicao, BOOLEANOS. O valor cru do clique nunca chega aqui —
+   * a lista precisa saber SE existe, jamais qual e. Itens gravados antes destes
+   * campos vem com os sinais derivados do payload pelo servidor, na leitura.
+   */
+  temFbclid?: boolean;
+  temGclid?: boolean;
   emq?: number;
   status: 'novo' | 'carregado' | 'disparado' | 'ignorado';
   payload: unknown;
@@ -205,6 +243,26 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   const [disparando, setDisparando] = useState(false);
   /** Incrementar força o efeito do SSE a refazer a conexão do zero. */
   const [tentativa, setTentativa] = useState(0);
+
+  /* --- Filtros, payload e lote (FASE B do plano multi-empresa) ---------- */
+
+  /**
+   * Filtro em estado LOCAL, nunca na URL (IA-R5 / D-10 do plano). Recorte de
+   * tela não é endereço: um link colado com `?evento=purchase` levaria outra
+   * pessoa a um lote com contagem diferente da que quem mandou o link viu.
+   */
+  const [filtros, setFiltros] = useState<FiltrosInboxValor>(FILTROS_VAZIOS);
+  const [payloadAberto, setPayloadAberto] = useState<ItemInbox | null>(null);
+  const [loteAberto, setLoteAberto] = useState(false);
+  const [marcasDoLote, setMarcasDoLote] = useState<string[]>(['default']);
+  const [lote, setLote] = useState<ProgressoLote | null>(null);
+  const [resumoLote, setResumoLote] = useState<ProgressoLote | null>(null);
+  /**
+   * "Parar" precisa ser visto DENTRO do laço, que roda fora do ciclo de render.
+   * Um `useState` aqui devolveria sempre o valor congelado da closure e o botão
+   * não pararia nada — num disparo real isso são eventos que não deviam sair.
+   */
+  const cancelarLote = useRef(false);
 
   // Uma lista de Pixel so no produto inteiro (IA-R8). A leitura propria que
   // existia aqui foi eliminada: duas copias da mesma lista podem divergir na
@@ -450,24 +508,54 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
     setMarcasEscolhidas(['default']);
   };
 
+  /**
+   * UMA chamada = UM item. É a forma silenciosa do disparo manual: nenhum
+   * toast, nenhuma mudança de estado de tela — só a ida ao servidor e a
+   * resposta crua de volta.
+   *
+   * 🔴 Contrato medido de `POST /api/inbox/disparar` (`src/app/api/inbox/disparar/route.ts`),
+   * que é o mesmo caminho do botão "Disparar direto" de uma linha:
+   *
+   *  • CORPO: `{ id: string, marcas?: string[], eventoMeta?: string }`.
+   *    Sem `marcas`, a rota cai nas marcas da regra e, se não houver, em
+   *    `['default']`. `eventoMeta` é obrigatório na prática — a rota recusa
+   *    qualquer nome fora do padrão da Meta (`ehNomePadraoMeta`), porque nome
+   *    livre vira evento personalizado com HTTP 200 que não otimiza campanha.
+   *
+   *  • SUCESSO: HTTP 200 `{ resultados: ResultadoDisparo[] }`, um resultado
+   *    por Pixel. Aceito pela Meta = pelo menos um com `status: 'enviado'`.
+   *
+   *  • JÁ ENVIADO: também HTTP 200 — `{ resultados: [{ status: 'duplicado',
+   *    erro: 'event_id já aceito pela Meta neste pixel.' }] }`. NÃO é erro: é o
+   *    dedup (`jaEnviado`) segurando a conversão duplicada, exatamente o que se
+   *    espera dele. O lote conta isso como "pulado". Mesma classificação vale
+   *    para `teste-ignorado`, que é a trava de teste interno respondendo.
+   *
+   *  • RECUSA: HTTP 4xx com `{ erro: string }` — 404 item sumiu, 409 regra em
+   *    Ignorar, 400 sem evento da Meta ou nome fora do padrão. O `pedir()`
+   *    transforma isso em `ErroApi` com a mensagem do servidor.
+   */
+  const dispararUm = useCallback(
+    (item: ItemInbox, marcasAlvo: string[]) =>
+      pedir<{ resultados?: ResultadoDisparo[]; erro?: string }>('/api/inbox/disparar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: item.id,
+          marcas: marcasAlvo,
+          // Só o evento da Meta, nunca o nome de origem: mandar `ping` para a
+          // CAPI criaria um evento personalizado com HTTP 200 e ninguém veria.
+          eventoMeta: item.eventoMeta,
+        }),
+      }),
+    []
+  );
+
   const confirmarDisparo = async () => {
     if (!alvo?.eventoMeta) return;
     setDisparando(true);
     try {
-      const d = await pedir<{ resultados?: ResultadoDisparo[]; erro?: string }>(
-        '/api/inbox/disparar',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: alvo.id,
-            marcas: marcasEscolhidas,
-            // Só o evento da Meta, nunca o nome de origem: mandar `ping` para a
-            // CAPI criaria um evento personalizado com HTTP 200 e ninguém veria.
-            eventoMeta: alvo.eventoMeta,
-          }),
-        }
-      );
+      const d = await dispararUm(alvo, marcasEscolhidas);
 
       const enviados = (d.resultados ?? []).filter((x) => x.status === 'enviado');
       if (enviados.length) {
@@ -520,6 +608,169 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
       });
     }
   };
+
+  /* ------------------------------------------------------------------ */
+  /* Recorte de EXIBIÇÃO — filtros                                       */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * 🔴 No modo compacto (a caixa embutida na tela de disparo manual) a barra de
+   * filtros não aparece — logo não há filtro para aplicar, e `visiveis` é a
+   * lista inteira. Sem esta guarda, um filtro deixado ligado na tela grande
+   * apareceria "vazando" para a tela inicial no próximo mount.
+   */
+  const visiveis = useMemo(
+    () => (compacto ? itens : itens.filter((i) => passaFiltros(i, filtros))),
+    [itens, filtros, compacto]
+  );
+
+  /** Os nomes de evento que REALMENTE chegaram, com quantos itens cada um tem. */
+  const opcoesEvento = useMemo(() => {
+    const contagem = new Map<string, number>();
+    for (const i of itens) {
+      const n = nomeDoEvento(i);
+      contagem.set(n, (contagem.get(n) ?? 0) + 1);
+    }
+    return [...contagem.entries()]
+      .map(([valor, total]) => ({ valor, total }))
+      .sort((a, b) => a.valor.localeCompare(b.valor, 'pt-BR'));
+  }, [itens]);
+
+  /* ------------------------------------------------------------------ */
+  /* Quem pode entrar no lote                                            */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Duas travas em série, e nesta ordem:
+   *
+   * 1. `separarParaLote` (`src/lib/inbox-lote.ts`) — a autoridade. Ela barra
+   *    o que já foi enviado, o que está marcado para ignorar e o teste interno
+   *    da equipe (regra 4 do `CLAUDE.md`). Esta tela NÃO reimplementa nada
+   *    disso: duas cópias da mesma regra viram duas respostas diferentes no dia
+   *    em que uma mudar, e a resposta errada aqui custa dinheiro.
+   *
+   * 2. `podeDisparar` — a mesma função que decide se a LINHA ganha o botão
+   *    "Disparar direto". O lote é esse botão repetido, então o conjunto dele
+   *    não pode ser maior do que o conjunto de botões visíveis. Item sem evento
+   *    padrão da Meta escolhido levaria 400 da rota; fica de fora com motivo
+   *    próprio ('sem-evento-meta') em vez de virar erro no relatório.
+   *
+   * A trava 2 só EXCLUI — nunca reabilita algo que a trava 1 recusou.
+   */
+  const { elegiveis, fora } = useMemo(() => {
+    const { elegiveis: passaram, excluidos } = separarParaLote(visiveis);
+    return {
+      elegiveis: passaram.filter(podeDisparar),
+      fora: [
+        ...excluidos.map((e) => ({ item: e.item, motivo: e.motivo as MotivoFora })),
+        ...passaram
+          .filter((i) => !podeDisparar(i))
+          .map((item) => ({ item, motivo: 'sem-evento-meta' as MotivoFora })),
+      ],
+    };
+  }, [visiveis]);
+
+  /**
+   * O lote, item por item, concorrência 1.
+   *
+   * 🔴 Nenhum evento é inventado aqui (regra 1 do `CLAUDE.md`, E-7 do plano):
+   * o laço percorre itens que JÁ chegaram e chama a MESMA rota do botão da
+   * linha, uma vez por item. Não há rota de lote, não se toca em `autoDisparo`,
+   * não se usa `modo-por-marca` nem a fila — é o disparo manual de sempre,
+   * repetido, com o operador vendo a contagem andar.
+   *
+   * Sequencial de propósito: paralelo multiplicaria o efeito de um erro de
+   * seleção antes de dar tempo de alguém apertar "Parar", e tiraria a ordem
+   * cronológica dos eventos que chegam ao Gerenciador.
+   */
+  const executarLote = useCallback(async () => {
+    setLoteAberto(false);
+    setResumoLote(null);
+    cancelarLote.current = false;
+
+    const fila = elegiveis;
+    let p: ProgressoLote = { total: fila.length, feitos: 0, ok: 0, pulados: 0, erros: [] };
+    setLote(p);
+
+    for (const item of fila) {
+      // Conferido ANTES de cada ida ao servidor: o item em voo termina, o
+      // próximo não sai. "Parar" que não para é pior do que não ter botão.
+      if (cancelarLote.current) break;
+      const nome = item.eventoOrigem ?? item.evento ?? item.id;
+
+      try {
+        const d = await dispararUm(item, marcasDoLote);
+        const r = d.resultados ?? [];
+        if (r.some((x) => x.status === 'enviado')) {
+          p = { ...p, ok: p.ok + 1 };
+        } else if (
+          // PULADO, não erro: `duplicado` é o dedup segurando uma conversão
+          // que já foi (o console fez o certo), e `teste-ignorado` é a trava de
+          // teste interno respondendo. Contar isso como falha faria o operador
+          // tentar de novo — e tentar de novo é o caminho da venda duplicada.
+          r.length > 0 &&
+          r.every((x) => x.status === 'duplicado' || x.status === 'teste-ignorado')
+        ) {
+          p = { ...p, pulados: p.pulados + 1 };
+        } else {
+          const primeiro = r[0];
+          p = {
+            ...p,
+            erros: [
+              ...p.erros,
+              {
+                id: item.id,
+                evento: nome,
+                motivo: primeiro
+                  ? `${ROTULO_RESULTADO[primeiro.status] ?? primeiro.status}${
+                      primeiro.erro ? ': ' + primeiro.erro : ''
+                    }`
+                  : 'a rota respondeu sem resultado nenhum',
+              },
+            ],
+          };
+        }
+      } catch (e) {
+        // Sessão expirada: o `pedir()` já está levando para o /login. Insistir
+        // com os itens restantes só encheria a tela de erro durante a saída.
+        if (e instanceof SessaoExpirada) {
+          cancelarLote.current = true;
+          break;
+        }
+        p = {
+          ...p,
+          erros: [
+            ...p.erros,
+            {
+              id: item.id,
+              evento: nome,
+              motivo: e instanceof Error ? e.message : 'Erro desconhecido',
+            },
+          ],
+        };
+      }
+
+      p = { ...p, feitos: p.feitos + 1 };
+      setLote(p);
+    }
+
+    const interrompido = cancelarLote.current;
+    setLote(null);
+    setResumoLote(p);
+
+    const resumo = `${p.ok} ok · ${p.pulados} pulado${p.pulados === 1 ? '' : 's'} · ${
+      p.erros.length
+    } erro${p.erros.length === 1 ? '' : 's'}`;
+    const titulo = `${p.feitos} de ${p.total} disparado${p.feitos === 1 ? '' : 's'}${
+      interrompido ? ' (interrompido)' : ''
+    }`;
+    if (p.erros.length > 0) toast.warning(titulo, { description: resumo });
+    else toast.success(titulo, { description: resumo });
+
+    // O SSE já anuncia cada item atualizado; o GET é a rede de segurança para
+    // quando o stream estiver preso num buffer de proxy.
+    void buscar();
+  }, [elegiveis, marcasDoLote, dispararUm, buscar]);
 
   const escolhidasEmProducao = marcas.filter(
     (m) => marcasEscolhidas.includes(m.id) && !m.testCode?.trim()
@@ -602,12 +853,70 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
         </div>
       </div>
 
+      {/* 🔴 B.2.11: esta linha conta `itens`, NUNCA `visiveis`. O tamanho da
+          fila é um fato do servidor; filtrar a tela não despacha nada, e um
+          contador que encolhe com o filtro faria o operador achar que itens
+          sumiram da caixa. */}
       {itens.length > 0 && (
         <p className="text-caption text-fg-muted">
           {itens.length} entrega{itens.length > 1 ? 's' : ''} nesta lista
           {aguardando > 0 ? ` · ${aguardando} ainda sem tratamento` : ''} · tudo o que chega
           aparece aqui, inclusive o que não vai para a Meta.
         </p>
+      )}
+
+      {/* B.3.21: no modo compacto não há barra de filtros nem lote. Aquela é a
+          prévia da tela inicial — quem vai disparar em série abre a caixa
+          inteira, onde a confirmação e o relatório cabem na tela. */}
+      {!compacto && itens.length > 0 && (
+        <FiltrosInbox
+          valor={filtros}
+          onValor={setFiltros}
+          opcoesEvento={opcoesEvento}
+          totalItens={itens.length}
+          totalVisiveis={visiveis.length}
+          totalElegiveis={elegiveis.length}
+          lote={lote}
+          onAbrirLote={() => setLoteAberto(true)}
+          onPararLote={() => {
+            cancelarLote.current = true;
+          }}
+        />
+      )}
+
+      {!compacto && resumoLote && resumoLote.erros.length > 0 && (
+        <Callout
+          tone="danger"
+          icon={AlertTriangle}
+          title={`${resumoLote.erros.length} evento(s) não saíram`}
+        >
+          <ul className="flex flex-col gap-1">
+            {resumoLote.erros.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-mono text-fg-body">{e.evento}</span>
+                <span>{e.motivo}</span>
+                <button
+                  type="button"
+                  className="text-accent-text underline underline-offset-2"
+                  onClick={() => {
+                    const achado = itens.find((i) => i.id === e.id);
+                    if (achado) setPayloadAberto(achado);
+                  }}
+                >
+                  Ver payload
+                </button>
+              </li>
+            ))}
+          </ul>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-2"
+            onClick={() => setResumoLote(null)}
+          >
+            Dispensar
+          </Button>
+        </Callout>
       )}
 
       {itens.length === 0 ? (
@@ -627,16 +936,36 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
             </Button>
           }
         />
+      ) : visiveis.length === 0 ? (
+        // Lista cheia e tela vazia é o momento em que se acha que o console
+        // perdeu a venda. O estado vazio do filtro diz que o problema é o
+        // recorte, e oferece o caminho de volta num clique.
+        <EstadoVazio
+          titulo="Nenhum evento com este filtro"
+          motivo={
+            <>
+              As {itens.length} entregas continuam na caixa — só nenhuma casa com{' '}
+              <strong>{descreverFiltros(filtros)}</strong>
+            </>
+          }
+          acao={
+            <Button variant="outline" onClick={() => setFiltros(FILTROS_VAZIOS)}>
+              <MousePointerClick className="size-4" aria-hidden />
+              Limpar filtros
+            </Button>
+          }
+        />
       ) : (
         <ul className="flex flex-col gap-2">
           <AnimatePresence initial={false}>
-            {itens.slice(0, compacto ? 5 : 50).map((item, i) => (
+            {visiveis.slice(0, compacto ? 5 : 50).map((item, i) => (
               <ItemDeLista key={item.id} indice={i}>
                 <LinhaEntrada
                   item={item}
                   marcas={marcas}
                   aoCarregar={() => carregarNoFormulario(item)}
                   aoDisparar={() => abrirDisparo(item)}
+                  aoVerPayload={() => setPayloadAberto(item)}
                 />
               </ItemDeLista>
             ))}
@@ -710,6 +1039,21 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* JSON cru, sem máscara — o oposto da linha, que segue mascarando o
+          e-mail. Ver B.2.13 e o cabeçalho de `DialogoPayload.tsx`. */}
+      <DialogoPayload item={payloadAberto} onFechar={() => setPayloadAberto(null)} />
+
+      <DialogoLote
+        aberto={loteAberto}
+        onFechar={() => setLoteAberto(false)}
+        elegiveis={elegiveis}
+        fora={fora}
+        descricaoFiltro={descreverFiltros(filtros)}
+        marcasEscolhidas={marcasDoLote}
+        onMarcas={setMarcasDoLote}
+        onConfirmar={() => void executarLote()}
+      />
     </div>
   );
 }
@@ -778,11 +1122,13 @@ function LinhaEntrada({
   marcas,
   aoCarregar,
   aoDisparar,
+  aoVerPayload,
 }: {
   item: ItemInbox;
   marcas: MarcaPublica[];
   aoCarregar: () => void;
   aoDisparar: () => void;
+  aoVerPayload: () => void;
 }) {
   const naoLido = ehNaoLido(item);
   const teste = item.testePlataforma || item.classificacao === 'teste-plataforma';
@@ -810,7 +1156,12 @@ function LinhaEntrada({
       <div className="min-w-0 flex-1">
         {/* O par: o que a plataforma mandou → o que a Meta recebe. */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-caption text-fg-muted uppercase">xWinner</span>
+          {/* Por onde o evento entrou. Era "xWinner" fixo aqui: a caixa passou
+              a receber também a tag do site, e nome de plataforma fixo no
+              código mente em metade das linhas. */}
+          <span className="text-caption text-fg-muted uppercase">
+            {item.origem === 'tag' ? 'Tag' : 'Webhook'}
+          </span>
           <span className="font-mono text-label text-fg-body">
             {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
           </span>
@@ -890,6 +1241,9 @@ function LinhaEntrada({
 
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-muted">
           <span className="tabular">{hora(item.recebidoEm)}</span>
+          {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono. Dá
+              para reconhecer o cliente sem o endereço completo aberto na tela. */}
+          {item.nomeCliente && <span className="text-fg-strong">{item.nomeCliente}</span>}
           {item.emailMascarado && <span>{item.emailMascarado}</span>}
           {item.orderId && <span className="font-mono">pedido {item.orderId}</span>}
           {!naoLido && (
@@ -897,6 +1251,10 @@ function LinhaEntrada({
               {item.temFbc ? 'com fbc' : 'sem fbc'}
             </StatusDot>
           )}
+          {/* Só quando existe: um "sem fbclid" em toda linha de venda orgânica
+              viraria ruído vermelho constante. A ausência já é dita pelo fbc. */}
+          {!naoLido && item.temFbclid && <StatusDot tone="success">fbclid</StatusDot>}
+          {!naoLido && item.temGclid && <StatusDot tone="neutral">gclid</StatusDot>}
           {item.formato && <span>{FORMATO_TEXTO[item.formato]}</span>}
           {item.emq !== undefined && <span className="tabular">EMQ {item.emq.toFixed(1)}</span>}
         </p>
@@ -936,6 +1294,12 @@ function LinhaEntrada({
       </div>
 
       <div className="flex items-center gap-1">
+        {/* Sempre presente, inclusive no item que não pôde ser lido — é
+            justamente nele que ver o corpo cru resolve o problema. */}
+        <Button size="sm" variant="ghost" onClick={aoVerPayload}>
+          <FileJson className="size-3.5" aria-hidden />
+          Ver payload
+        </Button>
         {!naoLido && (
           <Button size="sm" variant="outline" onClick={aoCarregar}>
             <ArrowDownToLine className="size-3.5" aria-hidden />

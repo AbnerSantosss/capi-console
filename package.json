@@ -17,7 +17,9 @@
     "test:persistencia": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/persistencia-atomica.test.mjs",
     "test:auto-pixel": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/auto-por-pixel.test.mjs",
     "test:rotas": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/rotas-api.test.mjs",
-    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel"
+    "test:inbox-sinais": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/inbox-sinais.test.mjs",
+    "test:inbox-lote": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/inbox-lote.test.mjs",
+    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel && npm run test:inbox-sinais && npm run test:inbox-lote"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

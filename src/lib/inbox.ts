@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import type { ClassificacaoEvento, MotivoIgnorar } from './parser';
+import { sinaisDoPayload } from './inbox-sinais';
 
 /**
  * Caixa de entrada de webhooks.
@@ -65,11 +66,36 @@ export interface ItemInbox {
   evento?: string;
   valor?: number;
   moeda?: string;
+  /**
+   * Nome do cliente, COMPLETO e sem mascara.
+   *
+   * O e-mail continua mascarado (`emailMascarado`) porque e-mail e credencial
+   * de acesso; nome nao e. O operador precisa do nome inteiro para achar a
+   * pessoa no backoffice antes de decidir disparar — que e exatamente a
+   * pergunta que a caixa de entrada existe para responder.
+   *
+   * Opcional: todo item gravado antes desta fase nao tem o campo. A ausencia e
+   * resolvida na leitura (ver `carregarDoDisco`), nunca reescrevendo o arquivo.
+   */
+  nomeCliente?: string;
   /** E-mail mascarado. O valor inteiro fica so no payload. */
   emailMascarado?: string;
   orderId?: string;
   temFbc: boolean;
   temFbp: boolean;
+  /**
+   * Atribuicao de CLIQUE, que nao e a mesma coisa que `temFbc`/`temFbp`.
+   *
+   * `temFbc`/`temFbp` dizem que o cookie do navegador viajou. `temFbclid` diz
+   * que existe o parametro que a Meta usa para atribuir ao criativo exato — e e
+   * essa a pergunta que o operador faz antes de um disparo em lote ("estas
+   * vendas vieram de anuncio?"). `temGclid` marca trafego do Google: serve para
+   * conferencia de gasto e NUNCA decide disparo para a Meta.
+   *
+   * Opcionais pelo mesmo motivo de `nomeCliente`: item antigo nao tem.
+   */
+  temFbclid?: boolean;
+  temGclid?: boolean;
   emq?: number;
   status: StatusEntrada;
   payload: unknown;
@@ -176,6 +202,27 @@ async function carregarDoDisco() {
       })
       .filter((x): x is ItemInbox => x !== null)
       .slice(-LIMITE_MEMORIA);
+
+    // Retrofit dos sinais em item antigo, SO EM MEMORIA.
+    //
+    // `logs/inbox.jsonl` e append-only e e o historico de vendas reais: reescrever
+    // o arquivo para encaixar campo novo trocaria um beneficio de tela por um
+    // risco de corromper o registro num restart no meio da escrita. O payload
+    // inteiro ja esta em cada linha, entao o calculo e local e barato — e so
+    // acontece uma vez por processo, porque `carregado` trava a releitura.
+    //
+    // `temFbclid === undefined` e o marcador de "linha de antes desta fase";
+    // preenchemos apenas o que falta, para nunca sobrescrever o que o
+    // recebimento ja tinha decidido.
+    for (const item of memoria) {
+      if (item.temFbclid !== undefined) continue;
+      const sinais = sinaisDoPayload(item.payload);
+      item.temFbclid = sinais.temFbclid;
+      if (item.temGclid === undefined) item.temGclid = sinais.temGclid;
+      if (item.nomeCliente === undefined && sinais.nomeCliente) {
+        item.nomeCliente = sinais.nomeCliente;
+      }
+    }
   } catch {
     memoria = [];
   }

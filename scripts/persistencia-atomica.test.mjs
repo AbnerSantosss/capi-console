@@ -436,6 +436,74 @@ ok(
 );
 
 /* ================================================================== */
+/* B-24: logs/inbox.jsonl é append-only — sinais novos entram na LEITURA        */
+/* ================================================================== */
+//
+// A caixa de entrada ganhou `nomeCliente`, `temFbclid` e `temGclid`. Item
+// gravado antes disso não tem os três campos, e a tentação óbvia seria
+// reescrever o `inbox.jsonl` para encaixá-los.
+//
+// 🔴 Não se reescreve esse arquivo. Ele é o histórico de vendas REAIS, é
+// append-only pelo mesmo motivo que o `integracoes.json` é atômico: um processo
+// morto no meio de uma reescrita não deixa o arquivo pela metade — deixa o
+// histórico de compras pela metade, e com ele a chance de disparar de novo uma
+// venda que já foi para a Meta. O retrofit acontece em memória, na leitura.
+//
+// Este bloco prova as duas metades: os campos VÊM preenchidos, e o arquivo NÃO
+// foi tocado (mesmo tamanho, mesmo conteúdo, mesmo mtime).
+
+const ARQ_INBOX = path.join(tmp, 'logs', 'inbox.jsonl');
+
+// Linha exatamente como o código antigo gravava: sem nenhum dos três campos,
+// com o fbclid vivo só lá dentro do payload.
+const ITEM_ANTIGO = {
+  id: 'legado-1',
+  recebidoEm: '2026-01-02T03:04:05.000Z',
+  origem: 'webhook',
+  evento: 'Purchase',
+  status: 'novo',
+  temFbc: false,
+  temFbp: false,
+  payload: {
+    event: 'order_approved',
+    data: {
+      lead: { name: 'Maria de Teste', email: 'maria@exemplo.com.br' },
+      attribution: {
+        event_source_url: 'https://exemplo.com.br/checkout?gclid=Cj0abc&fbclid=IwAR123',
+      },
+    },
+  },
+};
+
+fs.writeFileSync(ARQ_INBOX, JSON.stringify(ITEM_ANTIGO) + '\n', 'utf8');
+const inboxAntes = fs.readFileSync(ARQ_INBOX, 'utf8');
+const statAntes = fs.statSync(ARQ_INBOX);
+
+// Import tardio de propósito: `inbox.ts` resolve `<cwd>/logs` no import, e o
+// `process.chdir(tmp)` lá de cima é o que faz isto cair no diretório temporário.
+const inbox = await import(new URL('../src/lib/inbox.ts', import.meta.url).href);
+const [lido] = await inbox.listarEntradas(10);
+
+ok(lido?.id === 'legado-1', 'B-24: a linha antiga foi lida', `id=${lido?.id}`);
+ok(lido?.temFbclid === true, 'B-24: temFbclid saiu do payload da linha antiga');
+ok(lido?.temGclid === true, 'B-24: temGclid saiu do payload da linha antiga');
+ok(
+  lido?.nomeCliente === 'Maria de Teste',
+  'B-24: nomeCliente saiu do payload da linha antiga',
+  `nome=${lido?.nomeCliente}`
+);
+
+const statDepois = fs.statSync(ARQ_INBOX);
+ok(
+  fs.readFileSync(ARQ_INBOX, 'utf8') === inboxAntes,
+  '🔴 B-24: o inbox.jsonl NÃO foi reescrito — o conteúdo é byte a byte o mesmo'
+);
+ok(
+  statDepois.mtimeMs === statAntes.mtimeMs && statDepois.size === statAntes.size,
+  '🔴 B-24: o inbox.jsonl NÃO foi tocado — mesmo mtime e mesmo tamanho'
+);
+
+/* ================================================================== */
 
 process.chdir(raizAnterior);
 fs.rmSync(tmp, { recursive: true, force: true });
