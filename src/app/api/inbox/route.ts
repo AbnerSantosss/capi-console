@@ -35,6 +35,15 @@ function daEmpresa(item: ItemInbox | undefined, empresaId: string): boolean {
   return item !== undefined && (item.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId;
 }
 
+/** `?limite=` clampado em 1..1000 (teto = LIMITE_MEMORIA de inbox.ts). Ausente ou lixo → 50, o de sempre. */
+const LIMITE_PADRAO = 50;
+const LIMITE_MAXIMO = 1000;
+function limiteDaConsulta(bruto: string | null): number {
+  const n = Number.parseInt(bruto ?? '', 10);
+  if (!Number.isFinite(n) || n < 1) return LIMITE_PADRAO;
+  return Math.min(n, LIMITE_MAXIMO);
+}
+
 export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
@@ -49,7 +58,8 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.json({ item });
     }
-    return NextResponse.json({ itens: await listarEntradas(50, empresaId) });
+    const limite = limiteDaConsulta(new URL(request.url).searchParams.get('limite'));
+    return NextResponse.json({ itens: await listarEntradas(limite, empresaId) });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível ler a caixa de entrada.');
   }

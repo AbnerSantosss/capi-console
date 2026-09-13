@@ -29,7 +29,13 @@ const ARQ = path.join(DIR, 'inbox.jsonl');
  * abrindo espaco para disparar de novo a mesma venda.
  */
 const ARQ_EVENTOS = path.join(DIR, 'inbox-resultados.jsonl');
-const LIMITE_MEMORIA = 100;
+/**
+ * Quantos itens da caixa ficam em memoria.
+ *
+ * 1000 desde o plano do painel: a contagem dos cards e a lista aberta pelo
+ * clique vem daqui, e 100 nao cobre 30 dias.
+ */
+const LIMITE_MEMORIA = 1000;
 
 export type StatusEntrada = 'novo' | 'carregado' | 'disparado' | 'ignorado';
 
@@ -108,6 +114,10 @@ export interface ItemInbox {
    */
   temFbclid?: boolean;
   temGclid?: boolean;
+  /** Sinal booleano do ttclid (TikTok Ads), nunca o valor. */
+  temTtclid?: boolean;
+  /** Sinal booleano do msclkid (Microsoft Ads), nunca o valor. */
+  temMsclkid?: boolean;
   emq?: number;
   status: StatusEntrada;
   payload: unknown;
@@ -197,9 +207,28 @@ export function mascararEmail(email?: string): string | undefined {
   return `${visivel}${'*'.repeat(Math.max(1, usuario.length - 2))}@${dominio}`;
 }
 
+/**
+ * A leitura EM VOO, para quem chegar no meio dela esperar em vez de passar reto.
+ *
+ * 🔴 Corrige uma corrida que só aparecia com duas chamadas simultâneas. O antigo
+ * `carregado = true` ficava ANTES do `await fs.readFile`: quem entrasse no
+ * mesmo tick via a trava já levantada, voltava na hora e lia `memoria` ainda
+ * vazia. Com uma requisição por vez ninguém via nada; com o Painel e a caixa de
+ * entrada carregando juntos na primeira tela, o Painel mostrava "0 eventos" —
+ * mentira de tela, e da pior espécie, porque um F5 a desfazia.
+ */
+let leituraEmVoo: Promise<void> | null = null;
+
 async function carregarDoDisco() {
   if (carregado) return;
-  carregado = true;
+  if (leituraEmVoo) return leituraEmVoo;
+  leituraEmVoo = lerTudoDoDisco().finally(() => {
+    leituraEmVoo = null;
+  });
+  return leituraEmVoo;
+}
+
+async function lerTudoDoDisco() {
   try {
     const txt = await fs.readFile(ARQ, 'utf8');
     memoria = txt
@@ -226,11 +255,16 @@ async function carregarDoDisco() {
     // `temFbclid === undefined` e o marcador de "linha de antes desta fase";
     // preenchemos apenas o que falta, para nunca sobrescrever o que o
     // recebimento ja tinha decidido.
+    // Item gravado entre a FASE B (13/09) e o plano do painel ja tem
+    // `temFbclid` mas NAO tem `temTtclid`: por isso o `continue` exige os dois
+    // marcadores, e cada atribuicao e protegida por `=== undefined`.
     for (const item of memoria) {
-      if (item.temFbclid !== undefined) continue;
+      if (item.temFbclid !== undefined && item.temTtclid !== undefined) continue;
       const sinais = sinaisDoPayload(item.payload);
-      item.temFbclid = sinais.temFbclid;
+      if (item.temFbclid === undefined) item.temFbclid = sinais.temFbclid;
       if (item.temGclid === undefined) item.temGclid = sinais.temGclid;
+      if (item.temTtclid === undefined) item.temTtclid = sinais.temTtclid;
+      if (item.temMsclkid === undefined) item.temMsclkid = sinais.temMsclkid;
       if (item.nomeCliente === undefined && sinais.nomeCliente) {
         item.nomeCliente = sinais.nomeCliente;
       }
@@ -258,6 +292,11 @@ async function carregarDoDisco() {
   } catch {
     /* ainda nao houve disparo nenhum */
   }
+
+  // A trava só sobe no FIM, com `memoria` já preenchida. Se a leitura lançar
+  // antes daqui, `carregado` continua `false` e a próxima chamada tenta de novo
+  // — melhor do que travar o processo inteiro numa caixa de entrada vazia.
+  carregado = true;
 }
 
 async function anotar(registro: Record<string, unknown>) {

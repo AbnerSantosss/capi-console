@@ -12,6 +12,7 @@
  *  7. Nome do cliente em cada caminho suportado e a precedência entre eles
  *  8. Payload fundo demais: não lança, não estoura a pilha
  *  9. Formatos reais A e B (scripts/exemplos)
+ * 10. ttclid (TikTok Ads) e msclkid (Microsoft Ads)
  *
  * Uso: npm run test:inbox-sinais
  */
@@ -126,7 +127,13 @@ const nada = sinaisDoPayload({
   event: 'purchase_approved',
   data: { order_id: '6', amount: 1990, lead: { email: 'a@b.com' }, attribution: { utm: { source: 'facebook' } } },
 });
-ok(nada.temFbclid === false && nada.temGclid === false, 'payload sem click id nenhum -> os dois sinais false');
+ok(
+  nada.temFbclid === false &&
+    nada.temGclid === false &&
+    nada.temTtclid === false &&
+    nada.temMsclkid === false,
+  'payload sem click id nenhum -> os quatro sinais false'
+);
 
 /* ---------------- 6. gclid / gbraid / wbraid ---------------- */
 for (const id of ['gclid', 'gbraid', 'wbraid']) {
@@ -273,6 +280,37 @@ ok(
   sinaisDoPayload({ data: { buyer: { first_name: '   ', last_name: '  ' } } }).nomeCliente ===
     undefined,
   'nome partido só com espaço é tratado como ausente'
+);
+
+/* ---------------- 10. ttclid e msclkid ---------------- */
+ok(sinaisDoPayload({ ttclid: 'x' }).temTtclid === true, 'ttclid em campo proprio na raiz liga temTtclid');
+ok(
+  sinaisDoPayload({ data: { attribution: { msclkid: 'y' } } }).temMsclkid === true,
+  'msclkid em data.attribution liga temMsclkid'
+);
+const doisNovos = sinaisDoPayload({ event_source_url: 'https://a.b/?ttclid=1&msclkid=2' });
+ok(
+  doisNovos.temTtclid === true && doisNovos.temMsclkid === true,
+  'ttclid e msclkid na query da URL de origem ligam os dois sinais'
+);
+const semNovos = sinaisDoPayload({ data: { order_id: '7', lead: { email: 'a@b.com' } } });
+ok(
+  semNovos.temTtclid === false && semNovos.temMsclkid === false,
+  'payload sem ttclid e sem msclkid -> os dois sinais false'
+);
+// A saida antecipada da varredura exige os QUATRO sinais: com fbclid e gclid
+// ja achados, ttclid e msclkid ainda precisam ser encontrados.
+const osQuatro = sinaisDoPayload({
+  fbclid: 'IwAR1',
+  gclid: 'Cj0K',
+  data: { attribution: { ttclid: 'tt', msclkid: 'ms' } },
+});
+ok(
+  osQuatro.temFbclid === true &&
+    osQuatro.temGclid === true &&
+    osQuatro.temTtclid === true &&
+    osQuatro.temMsclkid === true,
+  'fbclid e gclid achados cedo nao abortam a busca de ttclid e msclkid'
 );
 
 console.log(

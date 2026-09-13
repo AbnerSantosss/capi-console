@@ -28,6 +28,10 @@ export interface SinaisDoEvento {
   temFbclid: boolean;
   /** true quando o payload carrega gclid / gbraid / wbraid (atribuição do Google). */
   temGclid: boolean;
+  /** true quando o payload carrega ttclid (atribuição do TikTok Ads). */
+  temTtclid: boolean;
+  /** true quando o payload carrega msclkid (atribuição do Microsoft Ads). */
+  temMsclkid: boolean;
 }
 
 /**
@@ -65,6 +69,10 @@ const CHAVES_DE_URL = new Set([
 
 /** Click ids que ligam `temGclid`. Qualquer um dos três basta. */
 const IDS_DO_GOOGLE = ['gclid', 'gbraid', 'wbraid'] as const;
+
+/** Click ids das outras plataformas. Um nome cada, exatamente como a plataforma grava. */
+const ID_DO_TIKTOK = 'ttclid';
+const ID_DA_MICROSOFT = 'msclkid';
 
 /**
  * Caminhos de nome, em ordem de precedência.
@@ -170,7 +178,12 @@ function pegarCaminho(raiz: unknown, caminho: readonly string[]): unknown {
 }
 
 export function sinaisDoPayload(payload: unknown): SinaisDoEvento {
-  const sinais: SinaisDoEvento = { temFbclid: false, temGclid: false };
+  const sinais: SinaisDoEvento = {
+    temFbclid: false,
+    temGclid: false,
+    temTtclid: false,
+    temMsclkid: false,
+  };
 
   // `null`, string, número, array, undefined: nada disso tem nome de cliente
   // nem atribuição, e o contrato manda devolver os dois sinais em `false` em
@@ -214,7 +227,9 @@ export function sinaisDoPayload(payload: unknown): SinaisDoEvento {
 
   while (pilha.length > 0) {
     if (nos >= NOS_MAXIMOS) break;
-    if (sinais.temFbclid && sinais.temGclid) break; // nada mais a descobrir
+    // Os QUATRO sinais, nao dois: parar em fbclid+gclid deixaria ttclid e
+    // msclkid falsos num payload que ja tivesse achado os dois antigos.
+    if (sinais.temFbclid && sinais.temGclid && sinais.temTtclid && sinais.temMsclkid) break; // nada mais a descobrir
 
     const atual = pilha.pop();
     if (!atual) break;
@@ -244,6 +259,8 @@ export function sinaisDoPayload(payload: unknown): SinaisDoEvento {
         // qualquer nível dentro do teto.
         if (k === 'fbclid') sinais.temFbclid = true;
         if ((IDS_DO_GOOGLE as readonly string[]).includes(k)) sinais.temGclid = true;
+        if (k === ID_DO_TIKTOK) sinais.temTtclid = true;
+        if (k === ID_DA_MICROSOFT) sinais.temMsclkid = true;
 
         // O cookie `_fbc`/`fbc` vale como fbclid — ver fbcImplicaFbclid().
         if ((k === 'fbc' || k === '_fbc') && fbcImplicaFbclid(texto)) sinais.temFbclid = true;
@@ -259,6 +276,8 @@ export function sinaisDoPayload(payload: unknown): SinaisDoEvento {
               }
             }
           }
+          if (!sinais.temTtclid && paramDaUrl(texto, ID_DO_TIKTOK)) sinais.temTtclid = true;
+          if (!sinais.temMsclkid && paramDaUrl(texto, ID_DA_MICROSOFT)) sinais.temMsclkid = true;
         }
         continue;
       }

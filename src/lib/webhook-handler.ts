@@ -369,6 +369,8 @@ export async function processarWebhook(
     nomeCliente: nomeDosCampos || sinais.nomeCliente,
     temFbclid: Boolean(texto('fbclid')) || sinais.temFbclid,
     temGclid: Boolean(texto('gclid')) || sinais.temGclid,
+    temTtclid: sinais.temTtclid,
+    temMsclkid: sinais.temMsclkid,
     emq: emq.nota,
     payload,
     status: modo === 'ignorar' ? 'ignorado' : 'novo',
