@@ -2,7 +2,7 @@
 /**
  * A fundação multi-empresa (FASE D do plano `wiki/plano-multi-empresa-instalacao.md`).
  *
- * Este arquivo existe para travar três coisas que, se soltarem, custam caro:
+ * Este arquivo existe para travar quatro coisas que, se soltarem, custam caro:
  *
  *   🔴 1. `config/empresas.json` NÃO NASCE SOZINHO. Ausência do arquivo é a
  *         instalação de hoje, com a empresa padrão e mais nada (D-2/D-3). Uma
@@ -19,7 +19,13 @@
  *         Empresa com Pixel em `autoDisparo === true` é recusada: desligar o
  *         Switch é um clique consciente, e ele vem antes.
  *
- * O que cada bloco prova (letras da §D.3 do plano):
+ *   🔴 4. `config/integracoes.json` NÃO É TOCADO (E-4). Aquele arquivo guarda
+ *         o segredo pelo qual a venda entra HOJE, e a URL derivada dele já
+ *         está cadastrada num backoffice que ninguém deste lado controla.
+ *         Criar uma empresa nova compara o sha256 do arquivo antes e depois:
+ *         é a regra E-4 virada prova executável.
+ *
+ * O que cada bloco prova (letras da §D.3 e da §E.6 do plano):
  *
  *   (a)  sem `empresas.json` → só a padrão, e o arquivo NÃO é criado
  *   (b)  `salvarEmpresa` cria o arquivo com a padrão + a nova; `.bak` no 2º save
@@ -35,11 +41,21 @@
  *   (l)  empresa ativa: header → cookie → 'default' (D-4)
  *   (m)  a rota: 401 sem sessão, e 400 explícito quando mandam token
  *
+ * As letras (h) a (l) da §E.6 chegaram como (n) a (r) — de (a) a (m) já estavam
+ * tomadas pela FASE D:
+ *
+ *   (n)  🔴 E-4: criar empresa NÃO toca `config/integracoes.json` (sha256)
+ *   (o)  `acharEmpresaPorSegredo`: de quem é este segredo de entrada
+ *   (p)  `acharEmpresaPorChaveTag`: de quem é esta chave de tag
+ *   (q)  a caixa de entrada filtra por empresa, e item sem campo é da padrão
+ *   (r)  a atribuição de uma empresa não enriquece o evento de outra
+ *
  * Roda num diretório temporário (nunca toca `config/` de verdade), sem rede e
  * sem disparar evento nenhum para a Meta.
  *
  * Uso: npm run test:empresas
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -404,13 +420,272 @@ const resDefault = await rota.DELETE(pedido('DELETE', { confirmar: true }, true,
 ok(resDefault.status === 400, '🔴 DELETE da empresa padrão → 400');
 
 /* ================================================================== */
+/*                                                                    */
+/*  FASE E — um arquivo de integrações por empresa.                   */
+/*                                                                    */
+/*  As letras (h) a (l) da §E.6 do plano chegam aqui como (n) a (r):  */
+/*  de (a) a (m) já estavam tomadas pela FASE D.                      */
+/*                                                                    */
+/* ================================================================== */
+
+const cfgStore = await import(new URL('../src/lib/config-store.ts', import.meta.url).href);
+const inbox = await import(new URL('../src/lib/inbox.ts', import.meta.url).href);
+const perfil = await import(new URL('../src/lib/perfil-atribuicao.ts', import.meta.url).href);
+
+const ARQ_INTEG = cfgStore.arquivoIntegracoes();
+const ARQ_INTEG_X = cfgStore.arquivoIntegracoes('emp_x');
+const sha256 = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+
+/** Apaga os arquivos de integrações do sandbox — nunca os de `config/` de verdade. */
+const limparIntegracoes = () => {
+  const dir = path.join(tmp, 'config');
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith('integracoes')) fs.rmSync(path.join(dir, f), { force: true });
+  }
+};
+
+/* ================================================================== */
+console.log('\n  -- (n) [E.6 h] 🔴 E-4: criar empresa NÃO toca config/integracoes.json --');
+
+limpar();
+limparIntegracoes();
+
+// A default só existe em disco depois da primeira leitura (1ª subida). Deixar a
+// migração acontecer ANTES de tirar o hash é proposital: o que interessa
+// comparar é o arquivo já estabilizado, o mesmo estado em que a produção está.
+const cfgDefault = await cfgStore.lerIntegracoes();
+ok(
+  ARQ_INTEG === path.join(tmp, 'config', 'integracoes.json'),
+  '🔴 E-4: a empresa padrão continua em config/integracoes.json, sem renomear',
+  ARQ_INTEG
+);
+ok(fs.existsSync(ARQ_INTEG), 'e o arquivo está no disco');
+const hashAntes = sha256(ARQ_INTEG);
+
+const criada = await cfgStore.criarIntegracoesDaEmpresa({ id: 'emp_x', slug: 'emp-x' });
+ok(criada !== null, 'criarIntegracoesDaEmpresa devolve a configuração nova');
+ok(
+  ARQ_INTEG_X === path.join(tmp, 'config', 'integracoes.emp_x.json'),
+  'a empresa nova ganha config/integracoes.emp_x.json',
+  path.basename(ARQ_INTEG_X)
+);
+ok(fs.existsSync(ARQ_INTEG_X), 'e o arquivo dela nasceu');
+ok(
+  sha256(ARQ_INTEG) === hashAntes,
+  '🔴 E-4: o sha256 de config/integracoes.json é o MESMO byte a byte',
+  hashAntes.slice(0, 16)
+);
+ok(
+  (await cfgStore.lerIntegracoes()).entrada.segredo === cfgDefault.entrada.segredo,
+  '🔴 e o segredo pelo qual a venda entra hoje não mudou'
+);
+
+ok(criada.entrada.segredo !== cfgDefault.entrada.segredo, 'a empresa nova nasce com segredo de entrada próprio');
+ok(criada.tag.chave !== cfgDefault.tag.chave, 'e com chave de tag própria');
+ok(criada.entrada.rotulo === 'emp-x', 'o apelido do webhook sai do slug', String(criada.entrada.rotulo));
+ok(
+  criada.entrada.rotulo !== cfgDefault.entrada.rotulo,
+  '🔴 e NUNCA é o apelido da padrão — duas empresas na mesma URL de webhook'
+);
+
+// Sementes: só as da tag, mais o 'ping' que o botão "Testar" da plataforma manda.
+// As 50 regras de webhook do dono nomeiam eventos do xWinner; uma empresa de
+// Hotmart não deve nascer com elas.
+const doDisco = JSON.parse(fs.readFileSync(ARQ_INTEG_X, 'utf8'));
+const origensX = doDisco.regras.map((r) => r.eventoOrigem);
+const regraPing = doDisco.regras.find((r) => r.eventoOrigem === 'ping');
+ok(regraPing !== undefined, "a regra de 'ping' está lá (o botão Testar da plataforma não é venda)");
+ok(regraPing?.modo === 'ignorar', "e o 'ping' nasce em 'ignorar'", String(regraPing?.modo));
+const foraDaTag = origensX.filter((o) => o !== 'ping' && !String(o).startsWith('tag.'));
+ok(
+  foraDaTag.length === 0,
+  'nenhuma semente de webhook da empresa padrão entra na empresa nova',
+  foraDaTag.slice(0, 6).join(',')
+);
+ok(origensX.includes('tag.pageview'), 'as sementes da tag entram (sem elas o PageView cai num fallback invisível)');
+const emAutoX = doDisco.regras.filter((r) => r.modo === 'auto');
+ok(
+  emAutoX.length === 0,
+  "🔴 E-6: nenhuma regra da empresa nova nasce em 'auto'",
+  emAutoX.map((r) => r.eventoOrigem).join(',')
+);
+ok(doDisco.tag.dominios.length === 0 && doDisco.saida.length === 0, 'nasce sem domínio de tag e sem saída');
+
+// Segunda chamada com o mesmo id: girar o segredo de uma empresa que já recebe
+// venda é o defeito B1 de novo, agora multiplicado por cliente.
+const hashX = sha256(ARQ_INTEG_X);
+const denovo = await cfgStore.criarIntegracoesDaEmpresa({ id: 'emp_x', slug: 'outro-apelido' });
+ok(denovo === null, 'a segunda chamada com o mesmo id devolve null');
+ok(sha256(ARQ_INTEG_X) === hashX, '🔴 e não reescreve o arquivo: o segredo da empresa não gira sozinho');
+
+ok((await cfgStore.criarIntegracoesDaEmpresa({ id: 'default' })) === null, "🔴 E-4: id 'default' é recusado");
+for (const mau of ['../integracoes', 'a/b', '', 'emp x', '..']) {
+  ok(
+    (await cfgStore.criarIntegracoesDaEmpresa({ id: mau })) === null,
+    `id ${JSON.stringify(mau)} é recusado antes de qualquer escrita`
+  );
+}
+ok(sha256(ARQ_INTEG) === hashAntes, '🔴 nem a recusa por travessia de caminho encostou no arquivo da padrão');
+
+// A leitura da empresa nova também não pode arrastar as sementes de webhook de
+// volta: se `lerIntegracoes` mesclar `todasSementes()` sem olhar a empresa, a
+// recusa acima vira enfeite no primeiro acesso à tela de regras.
+const lidaX = await cfgStore.lerIntegracoes('emp_x');
+const foraDaTagNaLeitura = lidaX.regras
+  .map((r) => r.eventoOrigem)
+  .filter((o) => o !== 'ping' && !String(o).startsWith('tag.'));
+ok(
+  foraDaTagNaLeitura.length === 0,
+  'e a PRIMEIRA LEITURA da empresa nova não traz de volta as sementes de webhook (D-14)',
+  `${foraDaTagNaLeitura.length}: ${foraDaTagNaLeitura.slice(0, 6).join(',')}`
+);
+
+/* ================================================================== */
+console.log('\n  -- (o) [E.6 i] de quem é este segredo de entrada --');
+
+await empresas.salvarEmpresa({ id: 'emp_x', nome: 'Empresa X' });
+const cfgX = await cfgStore.lerIntegracoes('emp_x');
+
+const porPadrao = await empresas.acharEmpresaPorSegredo(cfgDefault.entrada.segredo);
+ok(porPadrao?.empresaId === 'default', 'o segredo da padrão acha a padrão', String(porPadrao?.empresaId));
+ok(porPadrao?.cfg?.entrada?.segredo === cfgDefault.entrada.segredo, 'e a busca devolve a config dela junto');
+
+const porX = await empresas.acharEmpresaPorSegredo(cfgX.entrada.segredo);
+ok(porX?.empresaId === 'emp_x', 'o segredo da emp_x acha a emp_x', String(porX?.empresaId));
+ok(porX?.cfg?.tag?.chave === cfgX.tag.chave, 'com a config da emp_x, não a da padrão');
+
+ok(
+  (await empresas.acharEmpresaPorSegredo('segredo-que-ninguem-cadastrou')) === undefined,
+  '🔴 segredo errado → undefined (é dele que sai o 401 idêntico de hoje)'
+);
+ok((await empresas.acharEmpresaPorSegredo('')) === undefined, 'segredo vazio não casa com ninguém');
+ok(
+  (await empresas.acharEmpresaPorSegredo(cfgDefault.entrada.segredo.slice(0, -1))) === undefined,
+  'segredo por um caractere não entra'
+);
+
+/* ================================================================== */
+console.log('\n  -- (p) [E.6 j] de quem é esta chave de tag --');
+
+const tagPadrao = await empresas.acharEmpresaPorChaveTag(cfgDefault.tag.chave);
+ok(tagPadrao?.empresaId === 'default', 'a chave da padrão acha a padrão', String(tagPadrao?.empresaId));
+ok(tagPadrao?.cfg?.tag?.chave === cfgDefault.tag.chave, 'e devolve a config dela');
+
+const tagX = await empresas.acharEmpresaPorChaveTag(cfgX.tag.chave);
+ok(tagX?.empresaId === 'emp_x', 'a chave da emp_x acha a emp_x', String(tagX?.empresaId));
+ok(tagX?.cfg?.entrada?.segredo === cfgX.entrada.segredo, 'com a config da emp_x');
+
+ok(
+  (await empresas.acharEmpresaPorChaveTag('cvt_chaveQueNinguemCadastrou')) === undefined,
+  'chave de tag desconhecida → undefined (o 401 do coletor)'
+);
+ok((await empresas.acharEmpresaPorChaveTag('')) === undefined, 'chave vazia não vira coringa');
+ok((await empresas.acharEmpresaPorChaveTag('   ')) === undefined, 'chave só de espaços também não');
+
+/* ================================================================== */
+console.log('\n  -- (q) [E.6 k] a caixa de entrada é por empresa --');
+
+// Item gravado sem `empresaId` é todo item anterior a esta fase: ele é da
+// padrão, e continua visível para ela sem que ninguém reescreva o jsonl (E-3).
+const itemAntigo = await inbox.registrarEntrada({
+  origem: 'webhook',
+  evento: 'Purchase',
+  temFbc: false,
+  temFbp: false,
+  payload: { nota: 'item gravado antes da FASE E' },
+});
+ok(itemAntigo.empresaId === undefined, 'o item antigo é gravado sem campo de empresa');
+
+const itemX = await inbox.registrarEntrada({
+  origem: 'webhook',
+  evento: 'Purchase',
+  temFbc: false,
+  temFbp: false,
+  empresaId: 'emp_x',
+  payload: { nota: 'item da emp_x' },
+});
+
+const daX = await inbox.listarEntradas(50, 'emp_x');
+ok(daX.some((i) => i.id === itemX.id), 'listarEntradas(50, "emp_x") devolve o item da emp_x');
+ok(
+  !daX.some((i) => i.id === itemAntigo.id),
+  '🔴 e NÃO devolve o item antigo: sem campo, o item é da padrão'
+);
+
+const daPadrao = await inbox.listarEntradas(50, 'default');
+ok(
+  daPadrao.some((i) => i.id === itemAntigo.id),
+  '🔴 E-3: listarEntradas(50, "default") devolve o item antigo, sem migrar nada'
+);
+ok(!daPadrao.some((i) => i.id === itemX.id), 'e não devolve o da emp_x');
+
+const todos = await inbox.listarEntradas(50);
+ok(
+  todos.some((i) => i.id === itemAntigo.id) && todos.some((i) => i.id === itemX.id),
+  '🔴 SEM empresaId a lista continua vindo inteira — o disparo automático depende disso'
+);
+
+/* ================================================================== */
+console.log('\n  -- (r) [E.6 l] atribuição: o perfil de uma empresa não vaza para a outra --');
+
+// A função `chaves()` é interna; o que importa é o comportamento observável, que
+// é o que custa dinheiro: o mesmo visitante navegando em dois clientes deste
+// console são duas atribuições diferentes. Sem separar, a venda de um herdaria o
+// fbc da visita feita no site do outro e seria creditada a uma campanha que não
+// vendeu nada.
+const ARQ_PERFIS = path.join(tmp, 'logs', 'perfis-atribuicao.jsonl');
+const chavesGravadas = () =>
+  fs
+    .readFileSync(ARQ_PERFIS, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l).chave);
+
+const VISITA = 'visita-das-duas-empresas-7777';
+const FBC_DA_X = 'fb.1.1788000000000.PAcGRvDAEMPRESAX';
+const FBC_DA_PADRAO = 'fb.1.1788000000001.PAcGRvDAPADRAO';
+
+await perfil.guardarPerfil({ visitId: VISITA, fbc: FBC_DA_X }, 'emp_x');
+await perfil.guardarPerfil({ visitId: VISITA, fbc: FBC_DA_PADRAO }, 'default');
+
+const gravadas = chavesGravadas();
+ok(gravadas.includes(`emp_x|visita:${VISITA}`), 'a chave de uma empresa não padrão sai prefixada com "emp_x|"');
+ok(
+  gravadas.includes(`visita:${VISITA}`),
+  '🔴 zero migração: a chave da padrão sai exatamente como hoje, SEM prefixo'
+);
+
+perfil._limparCache();
+const naPadrao = await perfil.enriquecer({ visitId: VISITA }, 'default');
+ok(naPadrao.campos.fbc === FBC_DA_PADRAO, 'um evento da padrão herda o fbc da padrão', String(naPadrao.campos.fbc));
+const naX = await perfil.enriquecer({ visitId: VISITA }, 'emp_x');
+ok(naX.campos.fbc === FBC_DA_X, 'e um evento da emp_x herda o da emp_x', String(naX.campos.fbc));
+
+const SO_NA_X = 'visita-so-da-emp-x-8888';
+await perfil.guardarPerfil({ visitId: SO_NA_X, fbc: 'fb.1.1788000000002.PAcGRvSONAX' }, 'emp_x');
+perfil._limparCache();
+const vazou = await perfil.enriquecer({ visitId: SO_NA_X }, 'default');
+ok(
+  !vazou.campos.fbc && vazou.herdados.length === 0,
+  '🔴 uma venda da padrão NÃO herda o fbc de uma visita que só existe na emp_x'
+);
+const soNaX = await perfil.enriquecer({ visitId: SO_NA_X }, 'emp_x');
+ok(soNaX.campos.fbc === 'fb.1.1788000000002.PAcGRvSONAX', 'mas a emp_x herda o dela');
+
+const semArgumento = await perfil.enriquecer({ visitId: VISITA });
+ok(
+  semArgumento.campos.fbc === FBC_DA_PADRAO,
+  'sem argumento, enriquecer continua sendo a padrão — o caminho de hoje, intacto'
+);
+
+/* ================================================================== */
 
 process.chdir(raizAnterior);
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(
   falhas === 0
-    ? '\n  Fundação multi-empresa fechada: o arquivo não nasce sozinho, o token não entra e o automático ligado trava a remoção.\n'
+    ? '\n  Fundação multi-empresa fechada: o arquivo não nasce sozinho, o token não entra, o automático ligado trava a remoção — e config/integracoes.json continua byte a byte o mesmo.\n'
     : `\n  ${falhas} falha(s).\n`
 );
 process.exit(falhas === 0 ? 0 : 1);

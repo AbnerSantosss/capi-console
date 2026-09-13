@@ -4,8 +4,11 @@ import {
   acharEntrada,
   marcarStatus,
   limparEntradas,
+  type ItemInbox,
   type StatusEntrada,
 } from '@/lib/inbox';
+import { EMPRESA_DEFAULT_ID } from '@/lib/config-store';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
 
@@ -22,18 +25,31 @@ export const dynamic = 'force-dynamic';
  * substitui o proxy. Custa uma linha por handler.
  */
 
+/**
+ * O item e desta empresa?
+ *
+ * Item gravado antes da FASE E nao tem o campo e pertence a `default` (E-3:
+ * campo novo e opcional na leitura e tem valor derivado quando falta).
+ */
+function daEmpresa(item: ItemInbox | undefined, empresaId: string): boolean {
+  return item !== undefined && (item.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId;
+}
+
 export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
     const id = new URL(request.url).searchParams.get('id');
     if (id) {
       const item = await acharEntrada(id);
-      if (!item) {
+      // 404, nunca 403: 403 confirmaria que o id existe em OUTRA empresa. A
+      // resposta de item alheio e byte a byte a de item inexistente.
+      if (!daEmpresa(item, empresaId)) {
         return respostaErro('Entrada não encontrada.', 404);
       }
       return NextResponse.json({ item });
     }
-    return NextResponse.json({ itens: await listarEntradas(50) });
+    return NextResponse.json({ itens: await listarEntradas(50, empresaId) });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível ler a caixa de entrada.');
   }
@@ -42,7 +58,13 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
     const body = await request.json();
+    // Confere a dona ANTES de escrever: sem isto um id vazado mudaria o status
+    // de um item de outro cliente. 404 pelo mesmo motivo do GET.
+    if (!daEmpresa(await acharEntrada(String(body.id)), empresaId)) {
+      return respostaErro('Entrada não encontrada.', 404);
+    }
     const status = String(body.status) as StatusEntrada;
     const item = await marcarStatus(String(body.id), status);
     return NextResponse.json({ item });
@@ -52,9 +74,13 @@ export async function PATCH(request: NextRequest) {
 }
 
 /**
- * Apaga a caixa de entrada INTEIRA: `logs/inbox.jsonl` e
- * `logs/inbox-resultados.jsonl` (`inbox.ts:217-226`). É destrutivo e
+ * Apaga a caixa de entrada DA EMPRESA ATIVA — as linhas dela em
+ * `logs/inbox.jsonl` e `logs/inbox-resultados.jsonl`. É destrutivo e
  * irreversível — não há backup desses dois arquivos.
+ *
+ * O escopo por empresa é o que impede que "limpar a caixa" de um cliente leve
+ * junto o histórico de todos os outros. Para a `default` ele inclui as linhas
+ * antigas, gravadas antes da FASE E e sem o campo `empresaId`.
  *
  * ⚠️ A assinatura mudou: antes era `DELETE()`, sem o parâmetro `request`, e por
  * isso não tinha como checar sessão nenhuma (§1.7.2).
@@ -66,6 +92,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
 
     // Corpo ausente ou ilegível NÃO é erro de JSON aqui: é falta de confirmação.
     const corpo: unknown = await request.json().catch(() => null);
@@ -79,7 +106,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await limparEntradas();
+    await limparEntradas(empresaId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível limpar a caixa de entrada — nada foi apagado.');

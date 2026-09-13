@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { montarEvento, validar, enviarParaMeta } from '@/lib/meta-capi';
 import { extrairAtribuicao, registrarDisparo } from '@/lib/attribution-log';
-import { acharMarca } from '@/lib/config-store';
+import { EMPRESA_DEFAULT_ID, acharMarca, empresaDaMarca } from '@/lib/config-store';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { jaEnviado, marcarEnviado } from '@/lib/dedup';
@@ -124,6 +124,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Devolve ao n8n / CRM o que a Meta respondeu. Sem segredos: ver relay.ts.
+    //
+    // O destino do relay e o da empresa DONA DO PIXEL, e nao o da empresa que o
+    // operador tem aberta na tela: quem recebeu a venda e quem precisa receber o
+    // retorno. Esta rota continua SEM escopo de empresa — a marca vem do id.
     void transmitir(ok ? 'dispatch.success' : 'dispatch.error', {
       marca: { id: marca?.id, nome: marca?.nome, pixelId },
       evento: {
@@ -146,7 +150,7 @@ export async function POST(request: NextRequest) {
         ausentes: emq.faltando.map((p) => p.sigla),
       },
       atribuicao,
-    }).catch(() => {});
+    }, marca ? empresaDaMarca(marca) : EMPRESA_DEFAULT_ID).catch(() => {});
 
     return NextResponse.json({ ...r, eventoMontado: evento, atribuicao });
   } catch (e) {

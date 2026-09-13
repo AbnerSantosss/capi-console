@@ -12,6 +12,7 @@ import {
   removerEmpresa,
   salvarEmpresa,
 } from '@/lib/empresas';
+import { criarIntegracoesDaEmpresa } from '@/lib/config-store';
 import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
@@ -166,18 +167,50 @@ export async function PUT(request: NextRequest) {
     });
 
     /**
-     * TODO (FASE E, e SÓ na FASE E): ao CRIAR uma empresa, é aqui que entra
-     * `await criarIntegracoesDaEmpresa(empresa)` — o arquivo
-     * `config/integracoes.<id>.json` com segredo de entrada próprio, chave de
-     * tag própria e as sementes de D-14 (só as da tag, nunca as 41 do xWinner,
-     * que são do Código Vencedor e não do produto).
+     * FASE E — a empresa nova nasce com webhook e tag próprios:
+     * `config/integracoes.<id>.json`, com segredo de entrada e chave de tag
+     * gerados ali e só as sementes da tag (nunca as 41 regras do xWinner, que
+     * são do Código Vencedor e não do produto).
      *
-     * 🔴 Ele NÃO é chamado nesta etapa, e a omissão é deliberada: a função não
-     * existe ainda, e um stub que gravasse arquivo de integrações agora ficaria
-     * perto demais de `config/integracoes.json` (E-4) sem nenhuma tela que o
-     * leia. Até a FASE E, uma empresa nova é um cadastro sem webhook próprio.
+     * Só na CRIAÇÃO. Num save de edição a função devolveria `null` porque o
+     * arquivo já existe — e 🔴 é essa recusa que impede que salvar o nome de uma
+     * empresa gire o segredo de webhook dela, que já está cadastrado na
+     * plataforma do cliente. `config/integracoes.json`, da `default`, está fora
+     * de alcance por construção: a função recusa `id === 'default'` (E-4).
      */
-    return NextResponse.json({ empresa: publicarEmpresa(empresa), criada: !existia });
+    let integracoesPendentes = false;
+    if (!existia) {
+      try {
+        await criarIntegracoesDaEmpresa({ id: empresa.id, slug: empresa.slug });
+      } catch (falha) {
+        /**
+         * 🔴 A empresa JÁ está gravada, e falhar aqui NÃO a desfaz.
+         *
+         * Apagá-la de volta descartaria um cadastro válido por causa de um disco
+         * cheio; e um 500 mudo faria a tela achar que nada foi salvo, levando o
+         * operador a criar a mesma empresa de novo e esbarrar num apelido
+         * repetido. Então a resposta continua 200 e `integracoesPendentes` diz o
+         * que falta — o mesmo contrato de "empresa criada, resto pendente" que o
+         * diálogo já sabe tratar na etapa do Pixel.
+         *
+         * Conserto: abrir Instalação com a empresa nova ativa. A primeira leitura
+         * cria o arquivo que faltou (`resolverIntegracoes`, estado 'ausente'),
+         * com apelido de URL igual ao id em vez do slug — cosmético e editável
+         * na própria tela.
+         */
+        console.error(
+          '  empresa criada, mas as integracoes dela nao:',
+          falha instanceof Error ? falha.message : falha
+        );
+        integracoesPendentes = true;
+      }
+    }
+
+    return NextResponse.json({
+      empresa: publicarEmpresa(empresa),
+      criada: !existia,
+      integracoesPendentes,
+    });
   } catch (e) {
     // `ErroDeEmpresa` carrega uma frase escrita para o operador (apelido
     // repetido, teto de empresas, logo grande demais) e nunca carrega segredo —

@@ -6,8 +6,8 @@ import {
   lerIntegracoes,
   atualizarIntegracoes,
   acharRegra,
-  segredoConfere,
 } from '@/lib/config-store';
+import { acharEmpresaPorChaveTag, listarEmpresas } from '@/lib/empresas';
 import { origemPermitida, type DominioTag } from '@/lib/tag-dominios';
 import { eventoTagPermitido } from '@/lib/tag-eventos';
 import { registrarEntrada } from '@/lib/inbox';
@@ -90,16 +90,36 @@ function baseAtual(): string {
  *
  * Exportado porque o OPTIONS precisa da mesma resposta antes de existir
  * qualquer corpo: preflight recusado nao pode ganhar cabecalho de CORS.
+ *
+ * 🔴 POR QUE ACEITA SE **QUALQUER** EMPRESA TIVER O DOMINIO (e nao mexa nisso
+ * achando que e frouxidao): o preflight chega no OPTIONS, onde existe SO o
+ * cabecalho Origin — nao ha corpo, nao ha chave de tag, nao ha como saber de
+ * que empresa e o hit. Entao aqui a pergunta e apenas "alguem cadastrou este
+ * dominio?". Isso libera o navegador a MANDAR o POST; nao autoriza coleta
+ * nenhuma. Quem casa dominio com a empresa DONA DA CHAVE e `processarTag`
+ * (passo 4b), que devolve 403 quando o site do cliente A usa a chave do B.
  */
 export async function resolverOrigemTag(request: NextRequest): Promise<string | null> {
+  const origin = request.headers.get('origin');
   try {
-    const cfg = await lerIntegracoes();
-    return origemPermitida(request.headers.get('origin'), cfg.tag.dominios, baseAtual());
+    for (const e of await listarEmpresas()) {
+      try {
+        const cfg = await lerIntegracoes(e.id);
+        const permitida = origemPermitida(origin, cfg.tag.dominios, baseAtual());
+        if (permitida) return permitida;
+      } catch {
+        // Arquivo de UMA empresa ilegivel nao derruba a coleta das outras: o
+        // cliente A nao pode perder sinal porque a config do B corrompeu.
+        continue;
+      }
+    }
   } catch {
-    // Config ilegivel: na duvida nao autoriza ninguem. Perder hits de navegacao
-    // custa sinal de topo; autorizar todo mundo custa o pixel inteiro.
+    // Registro de empresas ilegivel: na duvida nao autoriza ninguem. Perder
+    // hits de navegacao custa sinal de topo; autorizar todo mundo custa o
+    // pixel inteiro.
     return null;
   }
+  return null;
 }
 
 /**
@@ -298,16 +318,20 @@ function acharDominioDaOrigem(origem: string, dominios: DominioTag[]): DominioTa
 }
 
 /** Soma o hit em memoria e, no maximo uma vez por minuto, leva o total ao disco. */
-async function contabilizarHit(idDominio: string): Promise<void> {
+async function contabilizarHit(idDominio: string, empresaId: string): Promise<void> {
   const agora = Date.now();
-  if (!HITS_DOMINIO.has(idDominio) && HITS_DOMINIO.size >= HITS_DOMINIO_MAX) {
+  // O mapa e global ao processo, mas o id do dominio so e unico DENTRO do
+  // arquivo da empresa: sem o prefixo, id repetido em duas empresas somaria os
+  // hits de uma no contador da outra.
+  const chaveMem = empresaId + '|' + idDominio;
+  if (!HITS_DOMINIO.has(chaveMem) && HITS_DOMINIO.size >= HITS_DOMINIO_MAX) {
     const primeira = HITS_DOMINIO.keys().next().value;
     if (primeira) HITS_DOMINIO.delete(primeira);
   }
-  const reg = HITS_DOMINIO.get(idDominio) ?? { pendentes: 0, ultimoHit: '', gravadoEm: 0 };
+  const reg = HITS_DOMINIO.get(chaveMem) ?? { pendentes: 0, ultimoHit: '', gravadoEm: 0 };
   reg.pendentes += 1;
   reg.ultimoHit = new Date(agora).toISOString();
-  HITS_DOMINIO.set(idDominio, reg);
+  HITS_DOMINIO.set(chaveMem, reg);
 
   if (agora - reg.gravadoEm < HITS_INTERVALO_MS) return;
   reg.gravadoEm = agora;
@@ -324,7 +348,7 @@ async function contabilizarHit(idDominio: string): Promise<void> {
       if (!d) throw new DominioSumiu(); // dominio removido enquanto o hit esperava
       d.hits = (Number(d.hits) || 0) + soma;
       d.ultimoHit = reg.ultimoHit;
-    });
+    }, empresaId);
   } catch (e) {
     if (e instanceof DominioSumiu) return;
     // Config indisponivel ou disco cheio: o contador e telemetria, nao venda.
@@ -407,13 +431,24 @@ export async function processarTag(
     return NextResponse.json({ erro: 'O corpo nao e um JSON valido.' }, { status: 400 });
   }
 
-  const cfg = await lerIntegracoes();
-
-  // 4. Chave publica da tag, comparada em tempo constante. Nao e o segredo
-  // da plataforma: esta aqui pode ser girada a qualquer hora sem derrubar venda.
-  if (!segredoConfere(texto(corpo, 'k', 'chave'), cfg.tag.chave)) {
+  // 4. Chave publica da tag. Nao e o segredo da plataforma: esta aqui pode ser
+  // girada a qualquer hora sem derrubar venda. E ela que diz DE QUEM e o hit —
+  // a varredura vai pelas empresas todas e devolve a dona da chave.
+  const achado = await acharEmpresaPorChaveTag(texto(corpo, 'k', 'chave'));
+  if (!achado) {
     chavesRecusadas++;
     return NextResponse.json({ erro: 'Chave da tag invalida.' }, { status: 401 });
+  }
+  const { empresaId, cfg } = achado;
+
+  // 4b. 🔴 A AUTORIZACAO DE VERDADE. O passo 1 so descobriu que ALGUMA empresa
+  // conhece esta origem — no preflight nao ha corpo, logo nao ha chave, logo
+  // nao da para saber a empresa. Agora, com a chave em maos, o dominio tem de
+  // estar na lista DESTA empresa. E isto que impede o site do cliente A de
+  // coletar com a chave do cliente B.
+  if (!origemPermitida(request.headers.get('origin'), cfg.tag.dominios, baseAtual())) {
+    origensRecusadas++;
+    return NextResponse.json({ erro: 'Origem nao autorizada.' }, { status: 403 });
   }
 
   // 5. Freio por IP. Ver o comentario de HITS_POR_IP: esta e a unica rota do
@@ -461,7 +496,7 @@ export async function processarTag(
   // quem segura o disco e o proprio guardarPerfil: ele nao regrava perfil
   // identico (ver REFRESCO_MS) e a carga compacta o jsonl. Sem isso, cada
   // PageView de cada visitante deixava duas linhas para sempre.
-  await guardarPerfil(campos).catch(() => {});
+  await guardarPerfil(campos, empresaId).catch(() => {});
 
   // 13. Contador do dominio, para a tela dizer "instalada". Tolerante a falha:
   // contador nao pode derrubar coleta. Vai no after() para nao competir com a
@@ -469,7 +504,7 @@ export async function processarTag(
   const dominio = acharDominioDaOrigem(origem, cfg.tag.dominios);
   if (dominio) {
     const idDominio = dominio.id;
-    after(() => contabilizarHit(idDominio).catch(() => {}));
+    after(() => contabilizarHit(idDominio, empresaId).catch(() => {}));
   }
 
   // 9. Regra de roteamento. Em 'ignorar' o hit para aqui, sem virar item: a
@@ -515,6 +550,7 @@ export async function processarTag(
   const decisao = await resolverModoPorMarca(modo, marcas);
 
   const item = await registrarEntrada({
+    empresaId,
     origem: 'tag',
     evento: eventoMeta,
     eventoOrigem,

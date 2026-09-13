@@ -17,13 +17,17 @@ import { ErroConfiguracaoIndisponivel, gravarAtomico, naFila } from './arquivo-a
 // sendo o `config-store.ts`: aqui não se abre um segundo caminho de escrita.
 import {
   EMPRESA_DEFAULT_ID,
+  aposentarIntegracoesDaEmpresa,
   empresaDaMarca,
   erroDoRotulo,
   idDeEmpresaValido,
   lerComBackup,
+  lerIntegracoes,
   listarMarcas,
   normalizarRotulo,
   removerMarca,
+  segredoConfere,
+  type Integracoes,
 } from './config-store';
 
 /**
@@ -506,6 +510,94 @@ export async function removerEmpresa(id: string): Promise<void> {
     const atuais = await lerRegistro();
     await gravarRegistro(normalizar(atuais.filter((e) => e.id !== id)));
   });
+
+  /**
+   * O webhook e a tag da empresa saem POR ÚLTIMO, e por renomeação.
+   *
+   * Por último porque enquanto a empresa existe no registro o arquivo dela
+   * ainda faz sentido; renomeado (`.removido-<ts>`) porque ali dentro está o
+   * segredo de entrada de um cliente, e um clique errado no botão de apagar não
+   * deve ser irreversível. A partir daqui a URL antiga responde 401, que é
+   * exatamente o que se espera de um endpoint aposentado.
+   *
+   * Falha não é propagada: a empresa JÁ saiu do registro, e transformar isso em
+   * erro faria a tela dizer que nada foi apagado quando tudo foi.
+   */
+  await aposentarIntegracoesDaEmpresa(id);
+}
+
+/* ------------------------------------------------------------------ */
+/* Da credencial para a empresa (FASE E)                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 🔴 A empresa de um evento que CHEGA sai da credencial, nunca da empresa ativa.
+ *
+ * Esta é a regra que separa o console de um bug que custa venda. A empresa
+ * ativa é o que o operador está olhando no navegador; o webhook chega de um
+ * servidor da plataforma de vendas, a qualquer hora, sem navegador nenhum do
+ * outro lado. Resolver pelo que está aberto na aba mandaria a compra de um
+ * cliente para o Pixel de outro.
+ *
+ * **Percorre a lista inteira, sempre.** Não há `break` no primeiro acerto — o
+ * `for` continua até o fim mesmo depois de achar. O motivo é `segredoConfere`,
+ * que compara em tempo constante justamente para não vazar o segredo pelo
+ * relógio: parar cedo devolveria esse vazamento pela porta dos fundos, com o
+ * tempo de resposta contando quantas empresas foram testadas antes do acerto.
+ * O custo é uma leitura de arquivo por empresa, com teto de 20 empresas.
+ *
+ * Uma empresa cujo arquivo está ilegível é PULADA, não derruba a busca: o
+ * cliente A não pode perder a venda porque o arquivo do cliente B corrompeu.
+ */
+export async function acharEmpresaPorSegredo(
+  segredo: string
+): Promise<{ empresaId: string; cfg: Integracoes } | undefined> {
+  let achado: { empresaId: string; cfg: Integracoes } | undefined;
+
+  for (const e of await listarEmpresas()) {
+    let cfg: Integracoes;
+    try {
+      cfg = await lerIntegracoes(e.id);
+    } catch {
+      continue;
+    }
+    if (segredoConfere(segredo, cfg.entrada?.segredo ?? '')) {
+      achado ??= { empresaId: e.id, cfg };
+    }
+  }
+
+  return achado;
+}
+
+/**
+ * Quem é dono desta chave de tag.
+ *
+ * A chave da tag é PÚBLICA (ela está no HTML do site do cliente), então aqui
+ * não há segredo a proteger por tempo — mas a varredura é a mesma de
+ * `acharEmpresaPorSegredo` de propósito: uma só forma de "credencial → empresa"
+ * é uma só forma de errar, e essa a gente conhece.
+ */
+export async function acharEmpresaPorChaveTag(
+  chave: string
+): Promise<{ empresaId: string; cfg: Integracoes } | undefined> {
+  const procurada = String(chave ?? '').trim();
+  if (!procurada) return undefined;
+
+  let achado: { empresaId: string; cfg: Integracoes } | undefined;
+
+  for (const e of await listarEmpresas()) {
+    let cfg: Integracoes;
+    try {
+      cfg = await lerIntegracoes(e.id);
+    } catch {
+      continue;
+    }
+    if (cfg.tag?.chave?.trim() === procurada) {
+      achado ??= { empresaId: e.id, cfg };
+    }
+  }
+
+  return achado;
 }
 
 /**

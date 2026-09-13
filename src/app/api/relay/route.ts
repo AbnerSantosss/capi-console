@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { lerIntegracoes } from '@/lib/config-store';
 import { enviarRelay, listarEntregas } from '@/lib/relay';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
 import { NOME_PRODUTO } from '@/lib/produto';
@@ -21,7 +22,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
-    return NextResponse.json({ entregas: await listarEntregas(50) });
+    // Entrega gravada antes da FASE E nao tem o campo e conta como `default`.
+    const empresaId = await empresaDaRequisicao(request);
+    return NextResponse.json({ entregas: await listarEntregas(50, empresaId) });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível ler o histórico de entregas.');
   }
@@ -32,7 +35,10 @@ export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
     const body = await request.json();
-    const cfg = await lerIntegracoes();
+    // Os destinos sao os DA EMPRESA ATIVA — os mesmos que a tela listou. Ler os
+    // da `default` aqui faria o botao Testar de um cliente responder 404 (ou,
+    // pior, bater na URL de outro cliente que tivesse o mesmo id de destino).
+    const cfg = await lerIntegracoes(await empresaDaRequisicao(request));
     const destino = cfg.saida.find((d) => d.id === body.destinoId);
 
     if (!destino) {

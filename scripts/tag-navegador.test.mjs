@@ -33,6 +33,12 @@
  *     clientes de uma vez, em silencio. E o segredo de entrada dentro da tag
  *     publica deixaria qualquer visitante forjar um Purchase pelo webhook.
  *
+ *  8. CHAVE DE TAG NAO ATRAVESSA EMPRESA — a chave e publica (vive no HTML do
+ *     cliente). Se o coletor conferisse o dominio contra a lista de qualquer
+ *     empresa, quem copiasse a chave do cliente B coletaria a partir do site do
+ *     cliente A: os PageView de A cairiam no pixel de B e a campanha de B
+ *     otimizaria para um publico que nunca viu a oferta dela.
+ *
  * Roda num diretorio temporario (nunca toca os logs reais) e sem rede.
  *
  * Uso: npm run test:tag
@@ -47,9 +53,19 @@ import { fileURLToPath } from 'node:url';
 // resolve la e o bundler do Next. O Node cru exige a extensao. Sem este gancho
 // o teste nem carrega tag-script.ts, e a unica prova de que o script gerado
 // compila deixaria de existir — a tag quebrada so apareceria no site do cliente.
+//
+// A cerca do parentURL nao e estilo: o Next publica CommonJS que faz
+// require('../next-url') por dentro. Sem ela o gancho reescrevia AQUILO para
+// '../next-url.ts' e o carregamento de next/server morria — que e justamente o
+// que o bloco 9 precisa para chamar o coletor de verdade.
+const DENTRO_DO_SRC = new URL('../src/', import.meta.url).href;
 registerHooks({
   resolve(especificador, contexto, seguinte) {
-    if (especificador.startsWith('.') && !path.extname(especificador)) {
+    if (
+      especificador.startsWith('.') &&
+      !path.extname(especificador) &&
+      String(contexto.parentURL ?? '').startsWith(DENTRO_DO_SRC)
+    ) {
       return seguinte(especificador + '.ts', contexto);
     }
     return seguinte(especificador, contexto);
@@ -475,12 +491,113 @@ ok(
 );
 
 
+/* ---------------- 9. A chave de tag nao atravessa empresa --------------- */
+
+// A lista branca de Origin do passo 1 do coletor nao consegue, sozinha, separar
+// cliente de cliente: o OPTIONS chega sem corpo, logo sem chave, logo sem
+// empresa — ela so pode responder "ALGUMA empresa conhece esta origem". Quem
+// separa de verdade e o passo 4b, ja com a chave em maos: o dominio precisa
+// estar na lista DA EMPRESA DONA DAQUELA CHAVE.
+//
+// Sem essa segunda conferencia, quem copiasse do HTML do cliente B a chave dele
+// (que e publica, e para ser) coletaria a partir do site do cliente A: os
+// PageView de A cairiam no pixel de B, e a campanha de B otimizaria para um
+// publico que nunca viu a oferta de B.
+
+fs.mkdirSync(path.join(tmp, 'config'), { recursive: true });
+process.env.PUBLIC_BASE_URL = BASE;
+
+// tag-handler.ts arrasta auto-dispatch -> meta-capi -> meta-events ->
+// lucide-react, e o lucide chama react.createContext no topo. Sob
+// --conditions=react-server (que e como npm run test:tag roda) o 'react'
+// resolve para a entrada de servidor, que nao tem createContext, e o import
+// morre antes da primeira assercao. Tirar a condicao SO para o especificador
+// 'react' devolve a entrada normal do pacote. Vale so no teste: o build de
+// producao nunca passa por aqui.
+registerHooks({
+  resolve(especificador, contexto, seguinte) {
+    if (especificador === 'react' || especificador.startsWith('react/')) {
+      return seguinte(especificador, {
+        ...contexto,
+        conditions: (contexto.conditions ?? []).filter((c) => c !== 'react-server'),
+      });
+    }
+    return seguinte(especificador, contexto);
+  },
+});
+
+const { processarTag, resolverOrigemTag } = await import(
+  new URL('../src/lib/tag-handler.ts', import.meta.url).href
+);
+const cfgStore = await import(new URL('../src/lib/config-store.ts', import.meta.url).href);
+const registro = await import(new URL('../src/lib/empresas.ts', import.meta.url).href);
+
+const HOST_A = 'cliente-a.com.br';
+const HOST_B = 'cliente-b.com.br';
+const dominioTag = (id, host) => ({
+  id,
+  host,
+  subdominio: '',
+  criadoEm: '2026-09-13T00:00:00.000Z',
+  hits: 0,
+});
+
+// A empresa A e a padrao: ela mora no config/integracoes.json de sempre.
+const cfgA = await cfgStore.atualizarIntegracoes((a) => {
+  a.tag.dominios = [dominioTag('d-a', HOST_A)];
+});
+await registro.salvarEmpresa({ id: 'emp_b', nome: 'Cliente B' });
+await cfgStore.criarIntegracoesDaEmpresa({ id: 'emp_b', slug: 'cliente-b' });
+const cfgB = await cfgStore.atualizarIntegracoes((b) => {
+  b.tag.dominios = [dominioTag('d-b', HOST_B)];
+}, 'emp_b');
+
+ok(cfgA.tag.chave !== cfgB.tag.chave, 'cada empresa nasce com a sua propria chave de tag');
+
+const hitDe = (origem, chave, visita) =>
+  new Request(BASE + '/api/tag/coletar', {
+    method: 'POST',
+    headers: {
+      origin: origem,
+      'content-type': 'application/json',
+      'user-agent': 'Mozilla/5.0 (Linux; Android 16)',
+      'x-forwarded-for': '187.10.20.60',
+    },
+    body: JSON.stringify({ k: chave, e: 'tag.pageview', vi: visita, u: origem + '/oferta' }),
+  });
+
+// O preflight aceita o site de A — e o que prova que o 403 logo abaixo veio da
+// conferencia POR EMPRESA, e nao da lista branca de Origin do passo 1.
+ok(
+  (await resolverOrigemTag(hitDe('https://' + HOST_A, cfgB.tag.chave, 'x'))) === 'https://' + HOST_A,
+  'o preflight aceita o site do cliente A (ele esta cadastrado em ALGUMA empresa)'
+);
+
+const cruzado = await processarTag(hitDe('https://' + HOST_A, cfgB.tag.chave, 'visita-cruzada-0001'));
+ok(
+  cruzado.status === 403,
+  '🔴 chave de tag do cliente B usada no site do cliente A -> 403',
+  String(cruzado.status)
+);
+
+// Controle: a MESMA chave de B, numa origem que a lista de B aceita, coleta. Sem
+// isto o 403 acima poderia ser so uma chave quebrada, e nao a trava por empresa.
+const deB = await processarTag(hitDe('http://localhost:3333', cfgB.tag.chave, 'visita-do-b-0002'));
+ok(deB.status !== 403, 'a mesma chave de B coleta numa origem que a empresa B aceita', String(deB.status));
+
+// E chave que nenhuma empresa cadastrou para de vez, com o 401 do coletor — que
+// e uma resposta diferente do 403 acima de proposito: uma diz "chave nao existe",
+// a outra diz "chave existe, mas nao neste dominio".
+const semDono = await processarTag(hitDe('https://' + HOST_A, 'cvt_chaveQueNinguemCadastrou', 'v3'));
+ok(semDono.status === 401, 'chave de tag sem dono -> 401, nao 403', String(semDono.status));
+
+
 process.chdir(raiz);
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(
   falhas === 0
-    ? '\n  Tag trancada: origem, evento, juncao anonima e script.\n'
+    ? '\n  Tag trancada: origem, evento, juncao anonima, script e a chave que nao atravessa empresa.\n'
     : `\n  ${falhas} falha(s).\n`
 );
 process.exit(falhas === 0 ? 0 : 1);

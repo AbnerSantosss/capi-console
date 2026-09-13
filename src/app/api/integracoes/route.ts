@@ -9,11 +9,13 @@ import {
   rotuloDaConfig,
   REGRAS_SEMENTE,
   novaChaveTag,
+  listarMarcas,
   type Integracoes,
   type RegraRoteamento,
   type DestinoRelay,
 } from '@/lib/config-store';
 import { normalizarDominio, erroDoDominio, type DominioTag } from '@/lib/tag-dominios';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
 
@@ -157,7 +159,11 @@ function corpoSeguro(bruto: unknown): Partial<Integracoes> & Record<string, unkn
 export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
-    return NextResponse.json({ integracoes: await lerIntegracoes() });
+    // A sessao autoriza; o header/cookie de empresa so SELECIONA de qual
+    // arquivo de integracoes esta rota fala. Nunca o contrario — ver o bloco
+    // vermelho de `empresa-ativa.ts`.
+    const empresaId = await empresaDaRequisicao(request);
+    return NextResponse.json({ integracoes: await lerIntegracoes(empresaId) });
   } catch (e) {
     // Antes: qualquer falha virava 401. Configuracao ilegivel precisa chegar na
     // tela como 503 com o caminho do arquivo — 401 manda o operador refazer o
@@ -183,7 +189,24 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
     const body = corpoSeguro(await request.json());
+
+    /**
+     * Os Pixels que ESTA empresa pode citar numa regra.
+     *
+     * 🔴 `modo-por-marca.ts` resolve o modo lendo `listarMarcas()` SEM empresa
+     * — a lista global — e confia que o id guardado na regra e da mesma casa.
+     * Esta validacao e o que sustenta essa confianca: sem ela, uma regra da
+     * empresa A citando o Pixel da B mandaria a venda da A para o Pixel da B, e
+     * conversao enviada para o Pixel errado nao volta atras. `listarMarcas` com
+     * empresa filtra por `empresaDaMarca`, a mesma regra que decide a dona de
+     * cada Pixel — nao ha uma segunda definicao de dono aqui.
+     *
+     * Lido FORA do mutador de proposito: o mutador e sincrono e ja roda dentro
+     * da fila do arquivo.
+     */
+    const pixeisDaEmpresa = new Set((await listarMarcas(empresaId)).map((m) => m.id));
 
     const salva = await atualizarIntegracoes((atual) => {
       let regras: RegraRoteamento[] = atual.regras ?? REGRAS_SEMENTE();
@@ -194,6 +217,15 @@ export async function PUT(request: NextRequest) {
           throw respostaErro('Não foi possível salvar as regras — nada foi alterado.', 400, erros);
         }
         regras = r.data as RegraRoteamento[];
+
+        const forasteiros = regras.flatMap((regra) =>
+          regra.marcas
+            .filter((m) => !pixeisDaEmpresa.has(m))
+            .map((m) => `regra ${regra.id}: o Pixel ${m} é de outra empresa`)
+        );
+        if (forasteiros.length) {
+          throw respostaErro('Não foi possível salvar as regras — nada foi alterado.', 400, forasteiros);
+        }
       }
 
       // B12-c — `saida` ausente significa "nao mexi nisso", nao "apague". Antes
@@ -271,7 +303,7 @@ export async function PUT(request: NextRequest) {
         saida,
         tag,
       } satisfies Integracoes;
-    });
+    }, empresaId);
 
     return NextResponse.json({ integracoes: salva });
   } catch (e) {
@@ -295,6 +327,7 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
 
     // Corpo vazio nao e erro: e exatamente a chamada antiga, de antes de a
     // chave da tag existir.
@@ -305,8 +338,10 @@ export async function POST(request: NextRequest) {
       return respostaErro('Alvo inválido.', 400, erros);
     }
 
-    if (a.data.alvo === 'tag') return NextResponse.json({ chave: await novaChaveTag() });
-    return NextResponse.json({ segredo: await novoSegredoEntrada() });
+    // Gira a credencial DA EMPRESA ATIVA. Girar a da `default` por engano
+    // derrubaria a entrega de vendas que ja esta em producao.
+    if (a.data.alvo === 'tag') return NextResponse.json({ chave: await novaChaveTag(empresaId) });
+    return NextResponse.json({ segredo: await novoSegredoEntrada(empresaId) });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível gerar a credencial — nada foi alterado.');
   }

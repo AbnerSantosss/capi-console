@@ -1,6 +1,7 @@
 import { IntegrationsPage } from '@/components/integrations/IntegrationsPage';
 import { ErroConfiguracaoIndisponivel, lerIntegracoes } from '@/lib/config-store';
 import { listarEntregas } from '@/lib/relay';
+import { empresaDaPagina } from '@/lib/empresa-ativa';
 import { Workflow } from 'lucide-react';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
@@ -26,7 +27,19 @@ export default async function Automatico() {
   // modo degradado o histórico é a primeira coisa que o operador quer ver. Por
   // isso `allSettled`: um `Promise.all` faria a falha da configuração levar as
   // entregas embora sem motivo.
-  const [cfg, log] = await Promise.allSettled([lerIntegracoes(), listarEntregas(50)]);
+  //
+  // A empresa ativa vem do cookie — página de servidor não vê header de
+  // aplicação. Uma leitura só, esperada duas vezes: se ela falhar (registro de
+  // empresas ilegível), as DUAS promessas rejeitam e a falha cai no mesmo aviso
+  // de configuração indisponível daqui de baixo, já nomeando o arquivo certo.
+  //
+  // 🔴 Sem fallback para a empresa padrão: mostrar a configuração do Código
+  // Vencedor a quem estava olhando outro cliente é pior que a tela degradada.
+  const empresa = empresaDaPagina();
+  const [cfg, log] = await Promise.allSettled([
+    empresa.then((id) => lerIntegracoes(id)),
+    empresa.then((id) => listarEntregas(50, id)),
+  ]);
 
   // B1-e: configuração ilegível NÃO cai no error boundary do Next. O boundary
   // mostraria "algo deu errado" numa tela em branco, que é exatamente a

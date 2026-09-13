@@ -33,7 +33,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { SeletorDePixel } from '@/components/pixels/SeletorDePixel';
+import { Insignia } from '@/components/empresa/SeletorDeEmpresa';
 import { useBrandStore } from '@/stores/useBrandStore';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import type { MotivoInelegivel } from '@/lib/inbox-lote';
 
 /**
@@ -91,6 +93,7 @@ export function DialogoLote({
   // consentimento da vez passada: o consentimento é sobre estes N eventos.
   const [ciente, setCiente] = useState(false);
   const marcas = useBrandStore((s) => s.marcas);
+  const empresa = useEmpresaStore((s) => s.ativa());
 
   const escolhidasEmProducao = marcas.filter(
     (m) => marcasEscolhidas.includes(m.id) && !m.testCode?.trim()
@@ -127,6 +130,24 @@ export function DialogoLote({
             travas do botão &ldquo;Disparar direto&rdquo;.
           </DialogDescription>
         </DialogHeader>
+
+        {/* De QUEM e o disparo, com a mesma logo do cabecalho. O console passou
+            a ter mais de uma empresa e a lista filtrada nao diz de quem ela e:
+            confirmar dezenas de conversoes acreditando estar noutro cliente e
+            exatamente o erro que nao volta atras. */}
+        {empresa && (
+          <div className="flex items-center gap-2.5 rounded-control border border-line-strong bg-surface-2 p-2.5">
+            <Insignia empresa={empresa} className="size-8 overflow-hidden" />
+            <div className="min-w-0">
+              <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+                Disparando pela empresa
+              </p>
+              <p className="truncate text-label font-semibold text-fg-strong">
+                {empresa.nome}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-control border border-line-strong bg-surface-2 p-2.5">
           <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">

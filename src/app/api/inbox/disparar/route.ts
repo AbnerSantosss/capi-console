@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acharEntrada } from '@/lib/inbox';
 import { parseWebhook } from '@/lib/parser';
-import { lerIntegracoes, acharRegra } from '@/lib/config-store';
+import { EMPRESA_DEFAULT_ID, lerIntegracoes, acharRegra } from '@/lib/config-store';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { exigirSessao } from '@/lib/sessao';
 import { ehNomePadraoMeta } from '@/lib/meta-events';
@@ -18,12 +19,22 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
+    const empresaId = await empresaDaRequisicao(request);
     const body = (await request.json()) as { id?: string; marcas?: string[]; eventoMeta?: string };
     const item = await acharEntrada(String(body.id || ''));
-    if (!item) return NextResponse.json({ erro: 'Entrada não encontrada.' }, { status: 404 });
+    // Defesa em profundidade do disparo em lote: a tela ja so mostra itens da
+    // empresa ativa, mas o lote manda um POST por id, e id de outra empresa nao
+    // pode virar evento. 404 — e nao 403 — para nao revelar que o item existe.
+    if (!item || (item.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) {
+      return NextResponse.json({ erro: 'Entrada não encontrada.' }, { status: 404 });
+    }
 
     const r = parseWebhook(JSON.stringify(item.payload));
-    const cfg = await lerIntegracoes();
+    // As regras — e os Pixels que elas citam — sao as DA EMPRESA DO ITEM, que a
+    // linha acima garante ser a da requisicao. Ler as da `default` aqui faria o
+    // fallback `regra.marcas` disparar o item de um cliente no Pixel de outro.
+    // O resto da rota nao muda: travas, dedupe e `anotarResultado` intactos.
+    const cfg = await lerIntegracoes(empresaId);
     const regra = r.eventoOrigem ? acharRegra(cfg, r.eventoOrigem) : undefined;
     // Trava 1: regra em Ignorar nao dispara nem por clique. A tela ja esconde o
     // botao; isto fecha a porta para requisicao repetida, aba velha e curl.

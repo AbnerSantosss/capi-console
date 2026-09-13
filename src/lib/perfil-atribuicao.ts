@@ -1,6 +1,7 @@
 import 'server-only';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { EMPRESA_DEFAULT_ID } from './config-store';
 
 /**
  * Perfis de atribuicao por comprador.
@@ -112,7 +113,7 @@ const RE_FBP = /^fb\.1\.\d{10,}\.\d+$/;
  * tag e a venda; 'fbp:' identifica so o NAVEGADOR e e rede de seguranca para
  * quando o visitId se perde (visitante limpou o storage, trocou de aba).
  */
-function chaves(f: Record<string, unknown>): string[] {
+function chaves(f: Record<string, unknown>, empresaId: string = EMPRESA_DEFAULT_ID): string[] {
   const out: string[] = [];
   const email = String(f.email || '').trim().toLowerCase();
   if (email.includes('@')) out.push(`email:${email}`);
@@ -122,12 +123,28 @@ function chaves(f: Record<string, unknown>): string[] {
   if (RE_VISIT_ID.test(visita)) out.push(`visita:${visita}`);
   const fbp = String(f.fbp || '').trim();
   if (RE_FBP.test(fbp)) out.push(`fbp:${fbp}`);
-  return out;
+  // A empresa entra como PREFIXO porque o mesmo e-mail comprando de dois
+  // clientes deste console sao duas atribuicoes diferentes: sem separar, uma
+  // venda herdaria o fbc da visita feita no site do outro cliente e seria
+  // creditada a uma campanha que nao vendeu nada.
+  //
+  // 🔴 A `default` fica SEM prefixo de proposito: e isso que mantem valendo
+  // cada perfil ja gravado em logs/perfis-atribuicao.jsonl. Zero migracao.
+  if (empresaId === EMPRESA_DEFAULT_ID) return out;
+  return out.map((c) => `${empresaId}|${c}`);
 }
 
-/** Quanto tempo o perfil desta chave continua valendo. */
+/**
+ * Quanto tempo o perfil desta chave continua valendo.
+ *
+ * O prefixo de empresa (`emp_x|visita:...`) e roteamento, nao tipo de chave:
+ * sem descarta-lo, `startsWith` erraria e o hit anonimo da tag de uma empresa
+ * nao-padrao passaria a durar 30 dias em vez de 7. Chave sem `|` cai no
+ * `indexOf === -1` e sobra inteira — a `default` continua exatamente como era.
+ */
 function validadeDe(chave: string): number {
-  return chave.startsWith('visita:') || chave.startsWith('fbp:')
+  const tipo = chave.slice(chave.indexOf('|') + 1);
+  return tipo.startsWith('visita:') || tipo.startsWith('fbp:')
     ? VALIDADE_ANONIMA_MS
     : VALIDADE_MS;
 }
@@ -202,7 +219,10 @@ function mesmosDados(a: Perfil['dados'], b: Perfil['dados']): boolean {
   return true;
 }
 
-export async function guardarPerfil(f: Record<string, string | boolean>) {
+export async function guardarPerfil(
+  f: Record<string, string | boolean>,
+  empresaId: string = EMPRESA_DEFAULT_ID
+) {
   if (!f.fbc && !f.fbp && !f.ip && !f.userAgent && !f.visitId) return;
   const m = await carregar();
   const dados: Perfil['dados'] = {};
@@ -210,7 +230,7 @@ export async function guardarPerfil(f: Record<string, string | boolean>) {
 
   const agora = Date.now();
   const novos: Perfil[] = [];
-  for (const chave of chaves(f)) {
+  for (const chave of chaves(f, empresaId)) {
     const anterior = m.get(chave);
     const juncao = { ...(anterior?.dados ?? {}), ...dados };
     // Nada de novo e o registro ainda esta fresco: escrever de novo so gastaria
@@ -243,12 +263,13 @@ export async function guardarPerfil(f: Record<string, string | boolean>) {
  * consegue preencher o que ninguem antes preencheu.
  */
 export async function enriquecer(
-  f: Record<string, string | boolean>
+  f: Record<string, string | boolean>,
+  empresaId: string = EMPRESA_DEFAULT_ID
 ): Promise<{ campos: Record<string, string | boolean>; herdados: string[] }> {
   const m = await carregar();
   const saida = { ...f };
   const herdados: string[] = [];
-  for (const chave of chaves(f)) {
+  for (const chave of chaves(f, empresaId)) {
     const p = m.get(chave);
     if (!p) continue;
     if (vencido(p, Date.now())) continue;

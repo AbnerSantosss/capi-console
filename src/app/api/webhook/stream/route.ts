@@ -1,4 +1,6 @@
 import { assinar, listarEntradas, type ItemInbox } from '@/lib/inbox';
+import { EMPRESA_DEFAULT_ID } from '@/lib/config-store';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota } from '@/lib/erro-api';
 
@@ -27,8 +29,13 @@ const PREAMBULO = `:${' '.repeat(2048)}\n\n`;
  * morrer no 401, nunca ficar aberta batendo pulso a cada 20 s.
  */
 export async function GET(request: Request) {
+  let empresaId: string;
   try {
     exigirSessao(request);
+    // A empresa e resolvida ANTES de o stream abrir: uma vez dentro do
+    // ReadableStream nao ha mais para onde devolver 401 ou 503 — os headers da
+    // resposta ja foram enviados.
+    empresaId = await empresaDaRequisicao(request);
   } catch (e) {
     return erroDeRota(e, 'Não foi possível abrir o canal de eventos ao vivo.', 401);
   }
@@ -79,6 +86,9 @@ export async function GET(request: Request) {
       const pendentes: Array<{ item: ItemInbox; tipo: 'novo' | 'atualizado' }> = [];
       let inicialEnviada = false;
       cancelarAssinatura = assinar((item, tipo) => {
+        // O ouvinte e global: recebe o que chega de QUALQUER empresa. Sem este
+        // filtro a venda de um cliente apareceria, ao vivo, na tela de outro.
+        if ((item.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) return;
         if (!inicialEnviada) {
           pendentes.push({ item, tipo });
           return;
@@ -88,7 +98,7 @@ export async function GET(request: Request) {
 
       let inicial: ItemInbox[] = [];
       try {
-        inicial = await listarEntradas(50);
+        inicial = await listarEntradas(50, empresaId);
       } catch {
         /* sem historico legivel: a conexao continua valendo para o que vier */
       }

@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, Eye, EyeOff, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
 
 import {
   useEmpresaStore,
@@ -541,6 +541,16 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
                 <span className="font-mono text-caption text-fg-muted">{form.cor}</span>
               </div>
             </Field>
+
+            {/* So na CRIACAO. Na edicao isto ja aconteceu ha tempos e viraria
+                ruido permanente. O aviso existe porque a empresa nova nasce com
+                credencial propria de recebimento, e quem nao sabe disso tenta
+                cadastrar na plataforma do cliente novo a URL do cliente antigo
+                — o evento chega, mas na caixa da empresa errada. */}
+            <Callout tone="info" icon={KeyRound}>
+              Cada empresa tem o próprio segredo de webhook e a própria chave de
+              tag. Eles aparecem em Instalação.
+            </Callout>
           </div>
         ) : (
           <div className="flex flex-col gap-4">

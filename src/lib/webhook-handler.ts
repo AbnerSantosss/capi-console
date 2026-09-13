@@ -3,13 +3,12 @@ import 'server-only';
 import { NextRequest, NextResponse, after } from 'next/server';
 import {
   lerIntegracoes,
-  segredoConfere,
   acharRegra,
   rotuloDaConfig,
   listarMarcas,
   ErroConfiguracaoIndisponivel,
-  type Integracoes,
 } from '@/lib/config-store';
+import { acharEmpresaPorSegredo } from '@/lib/empresas';
 import { respostaConfigIndisponivel } from '@/lib/erro-api';
 import { registrarEntrada, mascararEmail } from '@/lib/inbox';
 import { sinaisDoPayload } from '@/lib/inbox-sinais';
@@ -128,17 +127,30 @@ export async function processarWebhook(
   // entrega dela retoma sozinha quando a configuração voltar.
   //
   // Nada é regenerado aqui: o segredo continua o mesmo quando o arquivo voltar.
-  let cfg: Integracoes;
+  //
+  // 🔴 Esta leitura de guarda continua ANTES da busca por empresa, e continua
+  // olhando a PADRÃO. `acharEmpresaPorSegredo` PULA a empresa cujo arquivo não
+  // pôde ser lido (uma cliente corrompida não pode derrubar as outras) — sem a
+  // guarda, uma `default` ilegível voltaria a virar 401 e a plataforma pararia
+  // de reentregar, que é exatamente o defeito B1 que este portão fecha.
   try {
-    cfg = await lerIntegracoes();
+    await lerIntegracoes();
   } catch (e) {
     if (e instanceof ErroConfiguracaoIndisponivel) return respostaConfigIndisponivel(e);
     throw e;
   }
 
-  // 1. O segredo decide sozinho, antes de qualquer olhar no rótulo.
+  // 1. O segredo decide sozinho, antes de qualquer olhar no rótulo — e é ele
+  // que diz de QUAL empresa é esta entrega. Nunca a empresa ativa do console:
+  // do outro lado de um webhook não há navegador nenhum, e resolver pelo que
+  // está aberto na aba mandaria a venda de um cliente para o Pixel de outro.
+  //
+  // A resposta de recusa é a MESMA de sempre (mesmo corpo, mesmo 401) e a busca
+  // percorre a lista inteira sem parar no acerto: é assim que o tempo de
+  // resposta não conta quantas empresas foram testadas antes.
   const enviado = segredoDaUrl ?? request.headers.get('x-capi-secret') ?? '';
-  if (!segredoConfere(enviado, cfg.entrada.segredo)) {
+  const achado = await acharEmpresaPorSegredo(enviado);
+  if (!achado) {
     segredosRecusados++;
     return NextResponse.json(
       {
@@ -149,6 +161,8 @@ export async function processarWebhook(
       { status: 401 }
     );
   }
+
+  const { empresaId, cfg } = achado;
 
   // 2. Só depois o rótulo, com comparação comum: ele é cosmético, não decide
   // nada, então tempo constante aqui seria teatro.
@@ -165,6 +179,7 @@ export async function processarWebhook(
   if (tamanho > LIMITE_CORPO) {
     await registrarNaoLido({
       origem,
+      empresaId,
       motivo: 'acima de 1 MB',
       amostra: '',
       rotuloRecebido,
@@ -178,6 +193,7 @@ export async function processarWebhook(
   if (texto_cru.length > LIMITE_CORPO) {
     await registrarNaoLido({
       origem,
+      empresaId,
       motivo: 'acima de 1 MB',
       amostra: texto_cru.slice(0, 2000),
       rotuloRecebido,
@@ -192,6 +208,7 @@ export async function processarWebhook(
   } catch {
     await registrarNaoLido({
       origem,
+      empresaId,
       motivo: 'corpo não é JSON',
       amostra: texto_cru.slice(0, 2000),
       rotuloRecebido,
@@ -302,7 +319,7 @@ export async function processarWebhook(
 
   // Qualquer evento que traga fbc/fbp/ip/ua alimenta o perfil do comprador.
   // É isso que salva o Purchase do PIX, que chega sem atribuição nenhuma.
-  await guardarPerfil(campos).catch(() => {});
+  await guardarPerfil(campos, empresaId).catch(() => {});
 
   // Sinais de leitura da caixa de entrada (nome, fbclid, gclid).
   //
@@ -320,6 +337,7 @@ export async function processarWebhook(
 
   const item = await registrarEntrada({
     origem,
+    empresaId,
     evento: eventoFinal ?? nomeOriginal,
     eventoOrigem: nomeOriginal,
     eventoMeta: eventoFinal,
@@ -368,7 +386,7 @@ export async function processarWebhook(
       orderId: item.orderId,
       emq: item.emq,
     },
-  }).catch(() => {});
+  }, empresaId).catch(() => {});
 
   // A plataforma espera resposta rápida e tenta de novo se demorar. O disparo
   // roda depois da resposta, com after(), para o 202 sair em menos de 1 s.
@@ -426,6 +444,7 @@ export async function processarWebhook(
  */
 async function registrarNaoLido(params: {
   origem: string;
+  empresaId: string;
   motivo: string;
   amostra: string;
   rotuloRecebido: string | null;
@@ -433,6 +452,7 @@ async function registrarNaoLido(params: {
 }) {
   await registrarEntrada({
     origem: params.origem,
+    empresaId: params.empresaId,
     temFbc: false,
     temFbp: false,
     // Explicitos, e nao ausentes: corpo que nao deu para ler nao tem sinal

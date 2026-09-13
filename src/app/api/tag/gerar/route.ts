@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { lerIntegracoes } from '@/lib/config-store';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { hostDaTag, type DominioTag } from '@/lib/tag-dominios';
 import { gerarTodasAsTags } from '@/lib/tag-script';
@@ -81,7 +82,10 @@ export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
 
-    const { tag } = await lerIntegracoes();
+    // Cada empresa tem chave de tag e lista de dominios proprias: a tag gerada
+    // aqui tem de ser a da empresa que o operador esta olhando, ou o cliente
+    // instala no site dele uma tag que o coletor recusa por Origin.
+    const { tag } = await lerIntegracoes(await empresaDaRequisicao(request));
     const base = baseDaRequisicao(request);
     const pedido = request.nextUrl.searchParams.get('dominio')?.trim() ?? '';
     const dominio = pedido

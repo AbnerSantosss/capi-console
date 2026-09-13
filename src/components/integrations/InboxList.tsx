@@ -47,6 +47,8 @@ import { cn } from '@/lib/utils';
 import { ItemDeLista, AnimatePresence } from '@/components/common/motion';
 import { SeletorDePixel, nomeDoPixel } from '@/components/pixels/SeletorDePixel';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { nomeDaPlataforma } from '@/lib/produto';
 import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis';
 // Fonte UNICA da elegibilidade do lote (regras 1 e 4 do CLAUDE.md). A tela nao
 // reimplementa nada disto: ela pergunta e obedece. Modulo neutro, sem
@@ -269,6 +271,12 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
   // mesma sessao, e destino errado num disparo real e venda no pixel errado.
   const marcas = useBrandStore((s) => s.marcas);
   const carregarMarcas = useBrandStore((s) => s.carregar);
+
+  // O rotulo de origem da linha. Ate a primeira carga da lista de empresas
+  // `nomeDaPlataforma(undefined)` devolve "a plataforma" — texto verdadeiro
+  // enquanto nao se sabe qual e, e igual ao que o servidor renderiza.
+  const empresaAtiva = useEmpresaStore((s) => s.ativa());
+  const rotuloWebhook = nomeDaPlataforma(empresaAtiva?.plataforma);
 
   const carregarDoParser = useEventStore((s) => s.carregarDoParser);
   /**
@@ -963,6 +971,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
                 <LinhaEntrada
                   item={item}
                   marcas={marcas}
+                  rotuloWebhook={rotuloWebhook}
                   aoCarregar={() => carregarNoFormulario(item)}
                   aoDisparar={() => abrirDisparo(item)}
                   aoVerPayload={() => setPayloadAberto(item)}
@@ -1120,12 +1129,15 @@ function SeloConexao({
 function LinhaEntrada({
   item,
   marcas,
+  rotuloWebhook,
   aoCarregar,
   aoDisparar,
   aoVerPayload,
 }: {
   item: ItemInbox;
   marcas: MarcaPublica[];
+  /** Nome da plataforma de vendas da empresa ativa, para a origem "webhook". */
+  rotuloWebhook: string;
   aoCarregar: () => void;
   aoDisparar: () => void;
   aoVerPayload: () => void;
@@ -1158,9 +1170,15 @@ function LinhaEntrada({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {/* Por onde o evento entrou. Era "xWinner" fixo aqui: a caixa passou
               a receber também a tag do site, e nome de plataforma fixo no
-              código mente em metade das linhas. */}
-          <span className="text-caption text-fg-muted uppercase">
-            {item.origem === 'tag' ? 'Tag' : 'Webhook'}
+              código mente em metade das linhas. Agora o nome vem da empresa
+              ativa — é dela que o webhook chegou. */}
+          {/* Sem `uppercase`: aqui dentro agora entra NOME PROPRIO. "WEBHOOK"
+              em caixa alta era rotulo generico e nao tinha dono; "XWINNER" e o
+              nome de uma empresa escrito errado, e o proximo cliente pode se
+              chamar "xPay" ou "e-Com". Grafia de marca nao e decoracao de
+              interface. */}
+          <span className="text-caption text-fg-muted">
+            {item.origem === 'tag' ? 'Tag' : rotuloWebhook}
           </span>
           <span className="font-mono text-label text-fg-body">
             {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}

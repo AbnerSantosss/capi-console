@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { acharMarca } from './config-store';
+import { acharMarca, EMPRESA_DEFAULT_ID } from './config-store';
 import { montarEvento, validar, enviarParaMeta, type EventInput } from './meta-capi';
 import { calcularEmq } from './emq';
 import { extrairAtribuicao, registrarDisparo } from './attribution-log';
@@ -66,6 +66,26 @@ export async function dispararItem(params: {
 }): Promise<ResultadoDisparoAuto[]> {
   const { item, eventoMeta } = params;
   const alvos = params.marcas.length ? params.marcas : ['default'];
+
+  /**
+   * 🔴 A empresa deste disparo sai do ITEM, e e a UNICA autoridade aqui.
+   *
+   * O item foi carimbado na entrada, pela credencial que a plataforma
+   * apresentou — webhook ou chave da tag. E disso que "de quem e este evento"
+   * depende: quem pagou, pagou para aquele cliente.
+   *
+   * Derivar do Pixel de destino seria uma segunda resposta para a mesma
+   * pergunta, e duas respostas so coincidem enquanto nada da errado: quando
+   * `acharMarca` nao acha o Pixel (id apagado no meio do caminho), a resposta
+   * pelo Pixel vira "empresa padrao" e o resultado da venda de um cliente
+   * sairia pelos destinos de relay do Codigo Vencedor. Pelo item nao existe
+   * essa borda — item sem o campo e anterior a FASE E, e ai `default` e mesmo
+   * a resposta certa, porque so existia ela.
+   *
+   * A regra so referencia Pixel da propria empresa (validado no PUT de
+   * /api/integracoes), entao nos casos sadios as duas leituras dao o mesmo.
+   */
+  const empresaDoItem = item.empresaId ?? EMPRESA_DEFAULT_ID;
   const texto = (k: string) => (typeof params.campos[k] === 'string' ? (params.campos[k] as string) : undefined);
 
   // 1. Teste interno nunca vai para a Meta.
@@ -90,7 +110,15 @@ export async function dispararItem(params: {
   }
 
   // 2. Enriquecimento pelo perfil guardado no pre-checkout.
-  const { campos, herdados } = await enriquecer(params.campos);
+  //
+  // 🔴 A empresa sai do ITEM, e isso nao e detalhe: desde a FASE E os perfis de
+  // empresa nao-padrao ficam guardados com a chave prefixada (`emp_x|fbp:...`).
+  // Sem o `empresaId` aqui, `enriquecer` procuraria no bolo da `default` e a
+  // venda de um cliente herdaria o fbc/fbp de OUTRO — ou, no melhor caso, nao
+  // herdaria nada, jogando fora justamente o sinal que a tag daquela empresa
+  // coletou. Item gravado antes desta fase nao tem o campo e cai na `default`,
+  // que e de onde ele veio: zero migracao, herança identica a de hoje.
+  const { campos, herdados } = await enriquecer(params.campos, empresaDoItem);
   const t = (k: string) => (typeof campos[k] === 'string' ? (campos[k] as string) : undefined);
 
   const eventInput: EventInput = {
@@ -245,7 +273,7 @@ export async function dispararItem(params: {
         },
         emq: { nota: emq.nota, herdados },
         atribuicao,
-      }).catch(() => {});
+      }, empresaDoItem).catch(() => {});
     } catch (e) {
       resultados.push({ ...base, status: 'erro', erro: e instanceof Error ? e.message : String(e) });
     }

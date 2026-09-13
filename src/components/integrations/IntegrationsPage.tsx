@@ -42,6 +42,7 @@ import { RulesSection } from './RulesSection';
 import type { Entrega, EventoRelay, Integracoes } from './tipos';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import {
   IntegrationFlow,
   type IntegrationTab,
@@ -188,6 +189,9 @@ export function IntegrationsPage({
   const [entregas, setEntregas] = useState<Entrega[]>(inicial.entregas);
   const [salvando, setSalvando] = useState(false);
 
+  // So para batizar o destino novo com o nome de quem o esta criando.
+  const empresaAtiva = useEmpresaStore((s) => s.ativa());
+
   // A aba ativa mora na URL, nao em estado local (IA-R3): `?aba=regras` abre
   // Regras direto, inclusive em aba nova do navegador e ja no HTML que vem do
   // servidor. O hash antigo entra como segunda opcao e nunca ganha do `?aba=`.
@@ -309,14 +313,21 @@ export function IntegrationsPage({
    */
   const novoDestino = async () => {
     const id = novoIdDeDestino();
+    const nomeEmpresa = empresaAtiva?.nome?.trim();
     await salvar({
       ...cfg,
       saida: [
         ...cfg.saida,
         {
           id,
-          nome: 'n8n — Código Vencedor',
-          url: 'https://n8n.proxserverabner.site/webhook/codigo-vencedor-capi',
+          // 🔴 Nome e URL saem da empresa ativa, e a URL nasce VAZIA. Antes os
+          // dois eram literais do n8n de um cliente especifico: num console com
+          // mais de uma empresa, o destino novo da empresa B nascia apontando
+          // para o n8n da empresa A — e bastava alguem ligar o Ativo para os
+          // retornos de B irem parar no fluxo de A. Nao ha URL padrao possivel
+          // aqui: so o operador sabe qual e a desta empresa.
+          nome: nomeEmpresa ? `n8n — ${nomeEmpresa}` : 'Destino de retorno',
+          url: '',
           headers: {},
           eventos: ['dispatch.success', 'dispatch.error'],
           ativo: false,
@@ -328,13 +339,38 @@ export function IntegrationsPage({
   const salvar = async (novo: Integracoes) => {
     setSalvando(true);
     setCfg(novo);
+
+    // 🔴 Destino sem URL fica NA TELA e fora do disco. O esquema do servidor
+    // exige URL http(s) — e o destino novo nasce vazio de proposito, porque so
+    // o operador sabe qual e a desta empresa. Mandar o destino pela metade
+    // faria TODA gravacao desta pagina responder 400 enquanto ele nao colasse o
+    // endereco, inclusive as gravacoes de regra e de dominio da tag, que nao
+    // tem nada a ver com retornos.
+    const pendentes = novo.saida.filter((d) => !d.url.trim());
+    const paraGravar: Integracoes =
+      pendentes.length > 0
+        ? { ...novo, saida: novo.saida.filter((d) => d.url.trim()) }
+        : novo;
+
     try {
       await pedir('/api/integracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(novo),
+        body: JSON.stringify(paraGravar),
       });
-      toast.success('Integrações salvas.');
+      // O que NAO foi salvo e dito em voz alta: um destino que some na proxima
+      // recarga sem ninguem avisar e a definicao de tela que mente.
+      toast.success(
+        'Integrações salvas.',
+        pendentes.length > 0
+          ? {
+              description:
+                pendentes.length === 1
+                  ? 'Um destino de retorno ainda está sem URL e não foi salvo.'
+                  : `${pendentes.length} destinos de retorno ainda estão sem URL e não foram salvos.`,
+            }
+          : undefined
+      );
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
       toast.error('Não foi possível salvar.');
@@ -606,11 +642,13 @@ export function IntegrationsPage({
                     <Field
                       id={`url-${d.id}`}
                       label="URL"
-                      helper="Recebe POST com corpo JSON."
+                      helper="Recebe POST com corpo JSON. O destino novo nasce sem URL: cole aqui a desta empresa."
                     >
                       <Input
                         id={`url-${d.id}`}
                         value={d.url}
+                        placeholder="https://exemplo.com/webhook/…"
+                        spellCheck={false}
                         onChange={(e) => {
                           const saida = [...cfg.saida];
                           saida[i] = { ...d, url: e.target.value };

@@ -22,6 +22,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Info,
   RefreshCw,
   Send,
   Terminal,
@@ -42,6 +43,72 @@ import {
   ROTULO_PADRAO,
 } from '@/components/integrations/rotulo';
 import type { Integracoes } from '@/components/integrations/tipos';
+import { nomeDaPlataforma } from '@/lib/produto';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+
+/**
+ * Os cinco passos do backoffice do xWinner, na ordem em que se faz.
+ *
+ * 🔴 Isto e FATO sobre UMA plataforma, e por isso so aparece para a empresa que
+ * declarou usar xWinner (`plataforma === 'xwinner'`). Para as outras, o bloco
+ * inteiro nao renderiza: mandar um cliente de Hotmart procurar
+ * `admin.codigovencedor.com` e errar na primeira tela da instalacao.
+ */
+const passosXWinner: Array<{ id: string; conteudo: React.ReactNode }> = [
+  {
+    id: 'onde',
+    conteudo: (
+      <>
+        Entre em <code className="font-mono">admin.codigovencedor.com</code> →
+        Integrações → aba <strong>Webhooks</strong> → Novo endpoint.
+      </>
+    ),
+  },
+  {
+    id: 'formulario',
+    conteudo: (
+      <>
+        O formulário tem só <strong>URL (https)</strong>, os eventos e Ativo —
+        não existe campo de cabeçalho. É por isso que a URL acima leva o segredo
+        no próprio endereço.
+      </>
+    ),
+  },
+  {
+    id: 'eventos',
+    conteudo: (
+      <>
+        Assine só os eventos que viram conversão:{' '}
+        <code className="font-mono">precheckout_opened</code>,{' '}
+        <code className="font-mono">checkout_session_opened</code>,{' '}
+        <code className="font-mono">payment_generated</code>,{' '}
+        <code className="font-mono">checkout_card_attempted</code> e{' '}
+        <code className="font-mono">purchase_approved</code>.
+      </>
+    ),
+  },
+  {
+    id: 'testar',
+    conteudo: (
+      <>
+        O botão <strong>Testar</strong> do xWinner manda um evento{' '}
+        <code className="font-mono">ping</code>, e não uma compra: ele prova o
+        canal, não o mapeamento. O ping aparece na caixa de entrada como
+        ignorado, e é esse o resultado certo.
+      </>
+    ),
+  },
+  {
+    id: 'assinatura',
+    conteudo: (
+      <>
+        Ao salvar, o xWinner mostra uma única vez um segredo de assinatura dele.
+        Este console não usa esse valor — quem autentica aqui é o segredo da URL
+        acima.
+      </>
+    ),
+  },
+];
 
 export interface WebhookInstalacaoPropriedades {
   /** Bloco `entrada` da configuração: segredo e apelido da URL pública. */
@@ -75,6 +142,20 @@ export function WebhookInstalacao({
   const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
   const [salvandoRotulo, setSalvandoRotulo] = useState(false);
+
+  // De onde sai o nome da plataforma desta tela. A empresa vem do store e nao
+  // de uma propriedade porque `InstalacaoPage` nao a tem: ela recebe do
+  // servidor a configuracao, nao a empresa. Ate a primeira carga a lista esta
+  // vazia e `nomeDaPlataforma(undefined)` devolve "a plataforma" — o mesmo
+  // texto que o servidor renderiza, entao nao ha divergencia de hidratacao.
+  const empresa = useEmpresaStore((s) => s.ativa());
+  const plataforma = empresa?.plataforma?.trim();
+  const nomePlataforma = nomeDaPlataforma(plataforma);
+  // 🔴 O bloco do xWinner so aparece para quem usa xWinner. Ele descreve UM
+  // backoffice — o menu, o formulario sem campo de cabecalho e o botao
+  // "Testar" que manda `ping`. Mostrar isso a um cliente de Hotmart e mandar
+  // procurar uma tela que nao existe, logo na instalacao.
+  const ehXWinner = plataforma?.toLowerCase() === 'xwinner';
 
   // Apelido só para dar nome à URL no backoffice da plataforma. O segredo
   // continua sendo o ÚLTIMO segmento — o apelido não autentica nada.
@@ -142,7 +223,7 @@ export function WebhookInstalacao({
 
         <Field
           id="endpoint-rotulado"
-          label="URL para a plataforma"
+          label={`URL para ${nomePlataforma}`}
           helper="Cole esta URL no cadastro de webhooks da plataforma de vendas. O apelido é só para você reconhecer a linha no backoffice; quem autentica é o segredo, sempre o último pedaço do endereço."
           className="rounded-lg border border-line bg-surface-2/55 p-4"
           action={
@@ -182,6 +263,34 @@ export function WebhookInstalacao({
             className="wrap-token font-mono"
           />
         </Field>
+
+        {ehXWinner && (
+          <div className="rounded-lg border border-line bg-surface-2/55 p-4">
+            <p className="flex items-center gap-2 text-label font-semibold text-fg-strong">
+              <Info className="size-4 shrink-0 text-fg-muted" aria-hidden />
+              Como cadastrar esta URL no xWinner
+            </p>
+            {/* O numero e um selo escrito, e nao o marcador de `list-decimal`:
+                a lista de passos de `OndeInstalarTag` ja e assim, e marcador de
+                lista some quando o `li` vira item de flex. */}
+            <ol className="mt-3 flex flex-col gap-2.5">
+              {passosXWinner.map((passo, indice) => (
+                <li
+                  key={passo.id}
+                  className="flex min-w-0 gap-2.5 text-caption text-fg-body"
+                >
+                  <span
+                    aria-hidden
+                    className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full border border-line-control bg-surface-2 font-mono text-caption font-semibold tabular text-fg-muted"
+                  >
+                    {indice + 1}
+                  </span>
+                  <span className="min-w-0">{passo.conteudo}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
         <Field
           id="rotulo-endpoint"

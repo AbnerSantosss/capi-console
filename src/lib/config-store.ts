@@ -40,10 +40,6 @@ export { ErroConfiguracaoIndisponivel } from './arquivo-atomico';
  * A pasta `config/` esta no .gitignore.
  */
 
-const DIR = path.join(process.cwd(), 'config');
-const ARQ_MARCAS = path.join(DIR, 'marcas.json');
-const ARQ_INTEGRACOES = path.join(DIR, 'integracoes.json');
-
 /* ------------------------------------------------------------------ */
 /* Empresa dona do Pixel (FASE D)                                      */
 /* ------------------------------------------------------------------ */
@@ -75,6 +71,30 @@ const RE_ID_EMPRESA = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
 
 export function idDeEmpresaValido(id: unknown): id is string {
   return typeof id === 'string' && RE_ID_EMPRESA.test(id);
+}
+
+
+const DIR = path.join(process.cwd(), 'config');
+const ARQ_MARCAS = path.join(DIR, 'marcas.json');
+
+/**
+ * 🔴 O arquivo da empresa PADRÃO continua sendo `config/integracoes.json`.
+ *
+ * Não é detalhe de nomenclatura: é a regra E-4 do plano. Aquele arquivo guarda
+ * o segredo com que a plataforma de vendas entrega HOJE, e a URL derivada dele
+ * já está cadastrada num backoffice que ninguém deste lado controla. Renomeá-lo
+ * para `integracoes.default.json` derrubaria a entrada de venda no primeiro
+ * redeploy — e a plataforma não avisa, ela só para de conseguir entregar.
+ *
+ * Empresa nova ganha `config/integracoes.<id>.json`. O `<id>` passou pela cerca
+ * `RE_ID_EMPRESA` (letras, números, `_`, `-`), e é ela que impede um `../` de
+ * transformar este `path.join` em escrita por cima do arquivo de cima.
+ */
+export function arquivoIntegracoes(empresaId: string = EMPRESA_DEFAULT_ID): string {
+  if (empresaId === EMPRESA_DEFAULT_ID || !idDeEmpresaValido(empresaId)) {
+    return path.join(DIR, 'integracoes.json');
+  }
+  return path.join(DIR, `integracoes.${empresaId}.json`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -614,15 +634,34 @@ export const REGRAS_SEMENTE = (): RegraRoteamento[] => [
 ];
 
 /**
- * As sementes do webhook mais as da tag do navegador, numa lista so.
+ * As sementes de UMA empresa (D-14).
  *
+ * Para a empresa padrao: as sementes do webhook mais as da tag, numa lista so.
  * Existe para a mesclagem de `lerIntegracoes` enxergar as duas origens de uma
  * vez. Se a tag ficasse de fora, a instalacao que ja roda na VPS receberia
  * 'tag.pageview' sem regra nenhuma: o evento cairia no fallback invisivel e o
  * operador nao teria onde ver, na tela, por que o PageView nao chega na Meta.
+ *
+ * 🔴 Para QUALQUER OUTRA empresa, `REGRAS_SEMENTE()` fica de fora, e o motivo
+ * e o proprio conteudo dela: 'precheckout_opened', 'purchase_approved',
+ * 'commission_reversed' sao o vocabulario de UMA plataforma de vendas, o
+ * xWinner. Semear isso no console de um cliente que usa outra plataforma
+ * entrega 40 regras para eventos que nunca vao chegar — o operador abre a tela
+ * de Integracoes e tem que decidir, uma a uma, sobre nomes que nao existem no
+ * sistema dele. A tag do navegador e o `ping` ficam porque sao deste console,
+ * nao da plataforma: a tag e o nosso proprio script, e `ping` e o que quase
+ * todo backoffice manda no botao "Testar" — nao e conversao e nao pode virar
+ * evento ficticio (regra 1 do CLAUDE.md).
+ *
+ * Sem este parametro, `resolverIntegracoes` reinjetava as 40 regras do xWinner
+ * na PRIMEIRA leitura de uma empresa nova, desfazendo em silencio o que
+ * `criarIntegracoesDaEmpresa` tinha acabado de gravar.
  */
-function todasSementes(): RegraRoteamento[] {
-  return [...REGRAS_SEMENTE(), ...regrasSementeTag()];
+function todasSementes(empresaId: string = EMPRESA_DEFAULT_ID): RegraRoteamento[] {
+  if (empresaId === EMPRESA_DEFAULT_ID) {
+    return [...REGRAS_SEMENTE(), ...regrasSementeTag()];
+  }
+  return [...regrasSementeTag(), regra('r-ping', 'ping', '', 'ignorar')];
 }
 
 /* ------------------------------------------------------------------ */
@@ -642,9 +681,17 @@ function gerarChaveTag(): string {
   return PREFIXO_CHAVE_TAG + crypto.randomBytes(24).toString('base64url');
 }
 
-const INTEGRACOES_PADRAO = (): Integracoes => ({
-  entrada: { segredo: crypto.randomUUID(), modo: 'fila', rotulo: ROTULO_PADRAO },
-  regras: todasSementes(),
+/**
+ * Configuração de estreia. `rotulo` é parâmetro porque ele vira o CAMINHO da
+ * URL de webhook (`/api/webhook/in/<rotulo>`): duas empresas nascendo com
+ * `xwinner-codigo-vencedor` dariam a mesma URL para clientes diferentes.
+ */
+const INTEGRACOES_PADRAO = (
+  rotulo: string = ROTULO_PADRAO,
+  empresaId: string = EMPRESA_DEFAULT_ID
+): Integracoes => ({
+  entrada: { segredo: crypto.randomUUID(), modo: 'fila', rotulo },
+  regras: todasSementes(empresaId),
   saida: [],
   tag: { chave: gerarChaveTag(), dominios: [] },
 });
@@ -672,18 +719,30 @@ function integracoesUtil(d: Integracoes | null): boolean {
  * tabela (B1-f). O segredo de entrada nunca é regenerado por falha de leitura;
  * só por clique humano, em `novoSegredoEntrada()` (B1-g).
  */
-async function resolverIntegracoes(): Promise<Integracoes> {
-  const leitura = await lerComBackup<Integracoes>(ARQ_INTEGRACOES, integracoesUtil);
+async function resolverIntegracoes(
+  empresaId: string = EMPRESA_DEFAULT_ID
+): Promise<Integracoes> {
+  const arquivo = arquivoIntegracoes(empresaId);
+  /**
+   * O apelido de reserva é o ID DA EMPRESA, nunca `ROTULO_PADRAO`.
+   *
+   * `ROTULO_PADRAO` é o apelido do endpoint que a plataforma do dono já tem
+   * cadastrado. Dá-lo a uma empresa nova faria duas empresas responderem na
+   * mesma URL — e a única coisa que as separaria seria o segredo, que é
+   * justamente o que não se quer depender por engano.
+   */
+  const rotuloPadrao = empresaId === EMPRESA_DEFAULT_ID ? ROTULO_PADRAO : empresaId;
+  const leitura = await lerComBackup<Integracoes>(arquivo, integracoesUtil);
 
   if (leitura.estado === 'indisponivel') {
     // NADA é gravado aqui. Regenerar seria trocar o segredo de entrada em
     // silêncio e derrubar a entrada de vendas (defeito B1).
-    throw new ErroConfiguracaoIndisponivel(ARQ_INTEGRACOES, leitura.motivo);
+    throw new ErroConfiguracaoIndisponivel(arquivo, leitura.motivo);
   }
 
   if (leitura.estado === 'ausente') {
-    const nova = INTEGRACOES_PADRAO();
-    await gravarJson(ARQ_INTEGRACOES, nova);
+    const nova = INTEGRACOES_PADRAO(rotuloPadrao, empresaId);
+    await gravarJson(arquivo, nova);
     return nova;
   }
 
@@ -696,7 +755,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
 
     // Migracao: arquivo criado antes das regras existirem.
     if (!Array.isArray(atual.regras)) {
-      atual.regras = todasSementes();
+      atual.regras = todasSementes(empresaId);
       mudou = true;
     } else {
       // A semente so roda em instalacao nova; em producao o arquivo ja existe.
@@ -704,7 +763,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
       // que falta, por eventoOrigem: NUNCA sobrescreve regra existente — o
       // operador pode ter editado o modo a mao e a decisao dele vale mais.
       const existentes = new Set(atual.regras.map((r) => r.eventoOrigem));
-      const novas = todasSementes().filter((r) => !existentes.has(r.eventoOrigem));
+      const novas = todasSementes(empresaId).filter((r) => !existentes.has(r.eventoOrigem));
       if (novas.length) {
         atual.regras.push(...novas);
         mudou = true;
@@ -714,7 +773,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
     // Migracao do apelido do endpoint. Nao toca no segredo: a URL de um
     // segmento ja cadastrada na plataforma continua entregando igual.
     if (!atual.entrada.rotulo) {
-      atual.entrada.rotulo = ROTULO_PADRAO;
+      atual.entrada.rotulo = rotuloPadrao;
       mudou = true;
     }
 
@@ -735,7 +794,7 @@ async function resolverIntegracoes(): Promise<Integracoes> {
     }
 
     if (!Array.isArray(atual.saida)) atual.saida = [];
-    if (mudou) await gravarJson(ARQ_INTEGRACOES, atual, { backup: !restaurado });
+    if (mudou) await gravarJson(arquivo, atual, { backup: !restaurado });
     return atual;
   }
 }
@@ -748,8 +807,11 @@ async function resolverIntegracoes(): Promise<Integracoes> {
  * `.bak` puderam ser lidos. Quem chama de uma rota deve devolver **503** (via
  * `erroDeRota`), nunca 401 — 401 faz a plataforma desistir da entrega.
  */
-export async function lerIntegracoes(): Promise<Integracoes> {
-  return naFila(ARQ_INTEGRACOES, resolverIntegracoes);
+export async function lerIntegracoes(
+  empresaId: string = EMPRESA_DEFAULT_ID
+): Promise<Integracoes> {
+  const arquivo = arquivoIntegracoes(empresaId);
+  return naFila(arquivo, () => resolverIntegracoes(empresaId));
 }
 
 /**
@@ -766,13 +828,17 @@ export async function lerIntegracoes(): Promise<Integracoes> {
  *  - LANÇAR — e aí nada é gravado. É como a validação da rota aborta um save.
  */
 export async function atualizarIntegracoes(
-  mutador: (atual: Integracoes) => Integracoes | void | Promise<Integracoes | void>
+  mutador: (atual: Integracoes) => Integracoes | void | Promise<Integracoes | void>,
+  empresaId: string = EMPRESA_DEFAULT_ID
 ): Promise<Integracoes> {
-  return naFila(ARQ_INTEGRACOES, async () => {
-    const atual = await resolverIntegracoes();
+  const arquivo = arquivoIntegracoes(empresaId);
+  // `naFila` é POR ARQUIVO: empresas diferentes não disputam fila entre si, e
+  // duas escritas na mesma empresa continuam serializadas (defeito B2).
+  return naFila(arquivo, async () => {
+    const atual = await resolverIntegracoes(empresaId);
     const proposta = await mutador(atual);
     const nova = proposta ?? atual;
-    await gravarJson(ARQ_INTEGRACOES, nova);
+    await gravarJson(arquivo, nova);
     return nova;
   });
 }
@@ -793,8 +859,12 @@ export function acharRegra(cfg: Integracoes, eventoOrigem: string): RegraRoteame
  * final a partir de uma leitura feita na MESMA fila. Para qualquer
  * read-modify-write use `atualizarIntegracoes` — senão o defeito B2 volta.
  */
-export async function salvarIntegracoes(dados: Integracoes) {
-  await naFila(ARQ_INTEGRACOES, () => gravarJson(ARQ_INTEGRACOES, dados));
+export async function salvarIntegracoes(
+  dados: Integracoes,
+  empresaId: string = EMPRESA_DEFAULT_ID
+) {
+  const arquivo = arquivoIntegracoes(empresaId);
+  await naFila(arquivo, () => gravarJson(arquivo, dados));
   return dados;
 }
 
@@ -805,10 +875,12 @@ export async function salvarIntegracoes(dados: Integracoes) {
  * botão do console. Nenhum caminho de leitura, de falha ou de restauração
  * chega aqui.
  */
-export async function novoSegredoEntrada(): Promise<string> {
+export async function novoSegredoEntrada(
+  empresaId: string = EMPRESA_DEFAULT_ID
+): Promise<string> {
   const salva = await atualizarIntegracoes((atual) => {
     atual.entrada.segredo = crypto.randomUUID();
-  });
+  }, empresaId);
   return salva.entrada.segredo;
 }
 
@@ -820,11 +892,91 @@ export async function novoSegredoEntrada(): Promise<string> {
  * O custo de girar e o cliente precisar colar o codigo novo no site — ate la a
  * tag dele para de coletar navegacao, mas nenhum Purchase se perde.
  */
-export async function novaChaveTag(): Promise<string> {
+export async function novaChaveTag(empresaId: string = EMPRESA_DEFAULT_ID): Promise<string> {
   const salva = await atualizarIntegracoes((atual) => {
     atual.tag.chave = gerarChaveTag();
-  });
+  }, empresaId);
   return salva.tag.chave;
+}
+
+/**
+ * Dá a uma empresa nova o próprio webhook, a própria tag e as próprias regras.
+ *
+ * 🔴 Recusa `default` e é IDEMPOTENTE: se o arquivo já existe, não encosta
+ * nele. As duas travas apontam para o mesmo perigo — este é o único código novo
+ * da FASE E que GRAVA um `integracoes.*`, e um erro aqui é um segredo de
+ * entrada trocado em silêncio, que é a família do defeito B1. Chamar duas vezes
+ * (o `PUT /api/empresas` é idempotente por id) não pode girar segredo nenhum.
+ *
+ * As sementes são só as da TAG mais o `ping` ignorado, e não as 50 do webhook:
+ * aquelas nomeiam eventos do xWinner (`order.paid`, `pix.generated`…), e uma
+ * empresa de Hotmart não deve nascer com 50 regras que nunca vão casar. A tag,
+ * essa sim, é igual em qualquer site — e sem `tag.pageview` o PageView cairia
+ * num fallback invisível.
+ *
+ * `rotulo: slug` porque o apelido vira o caminho da URL de webhook que o
+ * operador vai copiar em Instalação (D-15).
+ */
+export async function criarIntegracoesDaEmpresa(e: {
+  id: string;
+  slug?: string;
+}): Promise<Integracoes | null> {
+  if (e.id === EMPRESA_DEFAULT_ID || !idDeEmpresaValido(e.id)) return null;
+
+  const arquivo = arquivoIntegracoes(e.id);
+  return naFila(arquivo, async () => {
+    // Existência é checada DENTRO da fila: fora dela, duas criações simultâneas
+    // passariam as duas pelo `catch` e a segunda giraria o segredo da primeira.
+    try {
+      await fs.access(arquivo);
+      return null;
+    } catch {
+      /* não existe — é o caso que este método serve */
+    }
+
+    const nova: Integracoes = {
+      entrada: {
+        segredo: crypto.randomUUID(),
+        modo: 'fila',
+        rotulo: normalizarRotulo(e.slug?.trim() || e.id) || e.id,
+      },
+      // Mesma lista que a primeira leitura vai mesclar: duas definicoes de
+      // "com o que a empresa nova nasce" divergem no primeiro dia em que
+      // alguem mexer so numa delas.
+      regras: todasSementes(e.id),
+      saida: [],
+      tag: { chave: gerarChaveTag(), dominios: [] },
+    };
+    await garantirDir();
+    await gravarJson(arquivo, nova);
+    return nova;
+  });
+}
+
+/**
+ * Aposenta o arquivo de integrações de uma empresa apagada (D-17).
+ *
+ * RENOMEIA para `.removido-<ts>` em vez de apagar. O arquivo carrega o segredo
+ * de entrada e o histórico de regras de um cliente; se a remoção foi um clique
+ * errado, o operador tem o arquivo ali para o dono restaurar à mão. Apagar de
+ * verdade é irreversível e não devolve nada em troca — espaço em disco não é o
+ * problema deste sistema.
+ *
+ * Ausência não é erro: uma empresa criada antes da FASE E (ou que nunca teve
+ * arquivo) simplesmente não tem o que aposentar.
+ */
+export async function aposentarIntegracoesDaEmpresa(empresaId: string): Promise<boolean> {
+  if (empresaId === EMPRESA_DEFAULT_ID || !idDeEmpresaValido(empresaId)) return false;
+
+  const arquivo = arquivoIntegracoes(empresaId);
+  return naFila(arquivo, async () => {
+    try {
+      await fs.rename(arquivo, `${arquivo}.removido-${Date.now()}`);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Comparacao em tempo constante — evita vazar o segredo por timing. */

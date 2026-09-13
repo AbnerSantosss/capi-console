@@ -6,6 +6,8 @@ import crypto from 'node:crypto';
 
 import type { ClassificacaoEvento, MotivoIgnorar } from './parser';
 import { sinaisDoPayload } from './inbox-sinais';
+import { gravarAtomico, naFila } from './arquivo-atomico';
+import { EMPRESA_DEFAULT_ID } from './config-store';
 
 /**
  * Caixa de entrada de webhooks.
@@ -62,6 +64,16 @@ export interface ItemInbox {
   id: string;
   recebidoEm: string;
   origem: string;
+  /**
+   * Empresa dona da entrega, resolvida pela CREDENCIAL que chegou (o segredo
+   * do webhook, a chave da tag) — nunca pela empresa aberta no navegador: do
+   * outro lado de um webhook nao ha navegador nenhum.
+   *
+   * Opcional porque item gravado antes desta fase nao tem o campo, e a
+   * ausencia significa `default`. A ausencia e resolvida na LEITURA, como a
+   * de `nomeCliente`: nenhuma linha antiga e reescrita.
+   */
+  empresaId?: string;
   /** Nome do evento detectado pelo parser. */
   evento?: string;
   valor?: number;
@@ -280,9 +292,20 @@ export async function registrarEntrada(
   return item;
 }
 
-export async function listarEntradas(limite = 50): Promise<ItemInbox[]> {
+/**
+ * A caixa, do mais novo para o mais velho.
+ *
+ * SEM `empresaId` devolve TUDO, de proposito: o disparo automatico e os testes
+ * leem a caixa inteira, e filtrar por padrao esconderia item deles. Quem
+ * desenha tela passa o `empresaId` e ve so o que e da empresa aberta.
+ */
+export async function listarEntradas(limite = 50, empresaId?: string): Promise<ItemInbox[]> {
   await carregarDoDisco();
-  return [...memoria].reverse().slice(0, limite);
+  const base =
+    empresaId === undefined
+      ? memoria
+      : memoria.filter((i) => (i.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId);
+  return [...base].reverse().slice(0, limite);
 }
 
 export async function acharEntrada(id: string): Promise<ItemInbox | undefined> {
@@ -311,13 +334,101 @@ export async function anotarResultado(id: string, resultados: ResultadoPorPixel[
   return item;
 }
 
-export async function limparEntradas() {
+/**
+ * Esvazia a caixa.
+ *
+ * SEM `empresaId` e o comportamento de sempre: os dois arquivos somem.
+ *
+ * COM `empresaId` saem so as linhas daquela empresa. Aqui a reescrita e
+ * inevitavel (o append-only nao sabe apagar), entao ela passa por
+ * `gravarAtomico`: tmp + fsync + rename. Ou fica o arquivo velho inteiro ou o
+ * novo inteiro — um restart no meio nunca deixa o historico de venda pela
+ * metade, que e o motivo pelo qual `inbox.jsonl` evita reescrita no resto do
+ * modulo.
+ *
+ * `inbox-resultados.jsonl` nao carrega `empresaId` (cada linha so referencia o
+ * id do item), por isso a limpeza dele e pelos ids que sairam.
+ *
+ * 🔴 Linha corrompida NUNCA e descartada: sem conseguir ler o dono, apagar
+ * seria apostar que ela era desta empresa — e o historico de outra empresa nao
+ * pode pagar por um palpite.
+ */
+export async function limparEntradas(empresaId?: string) {
   await carregarDoDisco();
-  memoria = [];
-  try {
-    await fs.rm(ARQ, { force: true });
-    await fs.rm(ARQ_EVENTOS, { force: true });
-  } catch {
-    /* arquivo pode nem existir */
+
+  if (empresaId === undefined) {
+    memoria = [];
+    try {
+      await fs.rm(ARQ, { force: true });
+      await fs.rm(ARQ_EVENTOS, { force: true });
+    } catch {
+      /* arquivo pode nem existir */
+    }
+    return;
   }
+
+  await naFila(ARQ, async () => {
+    // Le do DISCO, nao de `memoria`: a memoria guarda so os ultimos 100 itens,
+    // e reescrever o arquivo a partir dela apagaria todo o resto do historico.
+    let linhas: string[];
+    try {
+      linhas = (await fs.readFile(ARQ, 'utf8')).split('\n').filter(Boolean);
+    } catch {
+      return; // nada gravado ainda
+    }
+
+    const apagados = new Set<string>();
+    const mantidas: string[] = [];
+    for (const l of linhas) {
+      let item: ItemInbox | null = null;
+      try {
+        item = JSON.parse(l) as ItemInbox;
+      } catch {
+        item = null;
+      }
+      if (item && (item.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId) {
+        apagados.add(item.id);
+        continue;
+      }
+      mantidas.push(l);
+    }
+    if (!apagados.size) return;
+
+    /**
+     * Nao sobrou linha nenhuma: o arquivo SAI do disco, nao fica com zero byte.
+     *
+     * E o contrato que a tela e o teste C20 ja tinham antes desta fase — "e ai
+     * sim os dois .jsonl foram apagados" —, e enquanto existir so a empresa
+     * padrao (que e o caso da producao hoje) este e exatamente o caminho que o
+     * botao de limpar percorre. Escopar a limpeza por empresa nao pode mudar,
+     * de lambuja, o que o operador ve depois de confirmar.
+     */
+    if (!mantidas.length) {
+      await fs.rm(ARQ, { force: true });
+    } else {
+      await gravarAtomico(ARQ, mantidas.map((l) => l + '\n').join(''));
+    }
+
+    try {
+      const eventos = (await fs.readFile(ARQ_EVENTOS, 'utf8')).split('\n').filter(Boolean);
+      const sobrou = eventos.filter((l) => {
+        try {
+          return !apagados.has((JSON.parse(l) as { id?: string }).id ?? '');
+        } catch {
+          return true;
+        }
+      });
+      if (sobrou.length !== eventos.length) {
+        if (!sobrou.length) {
+          await fs.rm(ARQ_EVENTOS, { force: true });
+        } else {
+          await gravarAtomico(ARQ_EVENTOS, sobrou.map((l) => l + '\n').join(''));
+        }
+      }
+    } catch {
+      /* ainda nao houve disparo nenhum */
+    }
+
+    memoria = memoria.filter((i) => !apagados.has(i.id));
+  });
 }

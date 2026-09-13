@@ -3,7 +3,12 @@ import 'server-only';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { lerIntegracoes, type DestinoRelay, type EventoRelay } from './config-store';
+import {
+  lerIntegracoes,
+  EMPRESA_DEFAULT_ID,
+  type DestinoRelay,
+  type EventoRelay,
+} from './config-store';
 
 /**
  * Relay de saida: devolve ao n8n / Bitrix / CRM o que aconteceu com o disparo.
@@ -57,6 +62,14 @@ export function limparSegredos<T>(valor: T): T {
 export interface Entrega {
   id: string;
   em: string;
+  /**
+   * Empresa dona desta entrega. Opcional: entrega gravada antes desta fase nao
+   * tem o campo e e da `default` — a ausencia e resolvida na leitura.
+   *
+   * Fica so no registro em disco. Nao entra no corpo que vai para o destino:
+   * o corpo continua sendo `limparSegredos(payload)` e nada mais.
+   */
+  empresaId?: string;
   destinoId: string;
   destinoNome: string;
   url: string;
@@ -104,7 +117,8 @@ async function postar(
 export async function enviarRelay(
   destino: DestinoRelay,
   evento: EventoRelay | 'teste',
-  payload: unknown
+  payload: unknown,
+  empresaId: string = EMPRESA_DEFAULT_ID
 ): Promise<Entrega> {
   const corpo = limparSegredos({
     tipo: evento,
@@ -121,6 +135,7 @@ export async function enviarRelay(
       const e: Entrega = {
         id: crypto.randomUUID(),
         em: new Date().toISOString(),
+        empresaId,
         destinoId: destino.id,
         destinoNome: destino.nome,
         url: destino.url,
@@ -140,6 +155,7 @@ export async function enviarRelay(
   const falha: Entrega = {
     id: crypto.randomUUID(),
     em: new Date().toISOString(),
+    empresaId,
     destinoId: destino.id,
     destinoNome: destino.nome,
     url: destino.url,
@@ -155,15 +171,28 @@ export async function enviarRelay(
   return falha;
 }
 
-/** Dispara para todos os destinos ativos inscritos neste evento. */
-export async function transmitir(evento: EventoRelay, payload: unknown) {
-  const cfg = await lerIntegracoes();
+/**
+ * Dispara para todos os destinos ativos inscritos neste evento, NA EMPRESA DADA.
+ *
+ * O `empresaId` vem pronto de quem chama (o webhook o tira do segredo; o
+ * disparo, do Pixel). Este modulo nao consulta `empresas.ts` de proposito: o
+ * relay so precisa saber de qual arquivo de integracoes sair, e manter a busca
+ * de empresa fora daqui e o que impede logo/nome/credencial de empresa de
+ * chegarem perto do payload de saida.
+ */
+export async function transmitir(
+  evento: EventoRelay,
+  payload: unknown,
+  empresaId: string = EMPRESA_DEFAULT_ID
+) {
+  const cfg = await lerIntegracoes(empresaId);
   const alvos = cfg.saida.filter((d) => d.ativo && d.eventos.includes(evento));
   if (!alvos.length) return [];
-  return Promise.all(alvos.map((d) => enviarRelay(d, evento, payload)));
+  return Promise.all(alvos.map((d) => enviarRelay(d, evento, payload, empresaId)));
 }
 
-export async function listarEntregas(limite = 50): Promise<Entrega[]> {
+/** SEM `empresaId` devolve tudo; COM, so as entregas daquela empresa. */
+export async function listarEntregas(limite = 50, empresaId?: string): Promise<Entrega[]> {
   try {
     const txt = await fs.readFile(ARQ_ENTREGAS, 'utf8');
     return txt
@@ -177,6 +206,7 @@ export async function listarEntregas(limite = 50): Promise<Entrega[]> {
         }
       })
       .filter((x): x is Entrega => x !== null)
+      .filter((e) => empresaId === undefined || (e.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId)
       .reverse()
       .slice(0, limite);
   } catch {
