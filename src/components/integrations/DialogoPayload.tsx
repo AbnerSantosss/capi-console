@@ -82,7 +82,7 @@ export function DialogoPayload({
     <Dialog open={item !== null} onOpenChange={(v) => !v && onFechar()}>
       <DialogContent
         variant="console"
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl"
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
@@ -106,7 +106,8 @@ export function DialogoPayload({
           </DialogDescription>
         </DialogHeader>
 
-        <pre className="max-h-[60vh] overflow-auto rounded-control border border-line bg-surface-2 p-3 font-mono text-caption text-fg-body">
+        {/* Linha longa (URL com fbclid) quebra em vez de rolar; overflow-auto fica de rede de segurança. */}
+        <pre className="wrap-token max-h-[60vh] overflow-auto rounded-control border border-line bg-surface-2 p-3 font-mono text-caption whitespace-pre-wrap break-all text-fg-body">
           {texto}
         </pre>
 
