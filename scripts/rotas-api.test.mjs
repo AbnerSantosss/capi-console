@@ -8,7 +8,9 @@
  *
  * O que cada bloco prova:
  *
- *   C19  os 8 handlers de §14.8.2 respondem 401 sem cookie de sessão
+ *   C19  os 8 handlers de §14.8.2 respondem 401 sem cookie de sessão — e junto
+ *        deles o `GET /api/inbox/resumo`, que nasceu depois (FASE 4 do painel):
+ *        handler que fica de fora desta lista é handler que ninguém confere
  *   D33  401 é SEMPRE falta de sessão; 503 é SEMPRE arquivo indisponível.
  *        Trocar os dois custa venda: o xWinner lê 401 como "segredo errado" e
  *        desiste da entrega; 503 ele reentrega sozinho depois.
@@ -63,6 +65,9 @@ const { assinarSessao, COOKIE_SESSAO } = await import(
 );
 
 const rotaInbox = await import(new URL('../src/app/api/inbox/route.ts', import.meta.url).href);
+const rotaResumo = await import(
+  new URL('../src/app/api/inbox/resumo/route.ts', import.meta.url).href
+);
 const rotaRelay = await import(new URL('../src/app/api/relay/route.ts', import.meta.url).href);
 const rotaMarcas = await import(new URL('../src/app/api/marcas/route.ts', import.meta.url).href);
 const rotaConfig = await import(new URL('../src/app/api/config/route.ts', import.meta.url).href);
@@ -132,7 +137,7 @@ console.log('\n  Rotas de API: sessão, confirmação, preservação e formato d
 /* ================================================================== */
 /* C19 / B-11 — os 8 handlers de §14.8.2                               */
 /* ================================================================== */
-console.log('  -- C19: 401 sem cookie de sessão (os 8 handlers de §14.8.2) --');
+console.log('  -- C19: 401 sem cookie de sessão (os 8 handlers de §14.8.2 + o resumo do painel) --');
 
 const OITO = [
   ['GET    /api/inbox', (s) => rotaInbox.GET(req('/api/inbox', { sessao: s }))],
@@ -154,7 +159,20 @@ const OITO = [
   ['GET    /api/webhook/stream', (s) => rotaStream.GET(req('/api/webhook/stream', { sessao: s }))],
 ];
 
-for (const [nome, chamar] of OITO) {
+/**
+ * O resumo do Painel (FASE 4) entra na MESMA lista, não numa checagem à parte.
+ *
+ * `OITO` continua sendo exatamente os oito handlers de §14.8.2 — mexer no nome
+ * dele apagaria a referência à seção. O que a lista de baixo diz é outra coisa:
+ * TODA rota de console protegida passa pelas duas voltas abaixo, e uma rota nova
+ * que não apareça aqui é uma rota que ninguém confere.
+ */
+const PROTEGIDAS = [
+  ...OITO,
+  ['GET    /api/inbox/resumo', (s) => rotaResumo.GET(req('/api/inbox/resumo', { sessao: s }))],
+];
+
+for (const [nome, chamar] of PROTEGIDAS) {
   const res = await chamar(false);
   const corpo = await corpoDe(res);
   ok(
@@ -165,7 +183,7 @@ for (const [nome, chamar] of OITO) {
 }
 
 console.log('\n  -- e com cookie válido nenhum deles responde 401 --');
-for (const [nome, chamar] of OITO) {
+for (const [nome, chamar] of PROTEGIDAS) {
   const res = await chamar(true);
   await corpoDe(res);
   ok(res.status !== 401, `${nome} → ${res.status} com sessão válida`);
@@ -177,6 +195,58 @@ const resAdulterado = await rotaInbox.GET(
   req('/api/inbox', { cabecalhos: { cookie: adulterado } })
 );
 ok(resAdulterado.status === 401, 'GET /api/inbox com cookie adulterado → 401');
+
+/* ------------------------------------------------------------------ */
+/* `?limite=` é clampado, nunca erro: lixo cai no padrão 50 e número    */
+/* absurdo cai no teto. Uma URL montada à mão não pode virar 500 nem    */
+/* arrastar a caixa inteira para a resposta.                            */
+/* ------------------------------------------------------------------ */
+const limiteLixo = await rotaInbox.GET(req('/api/inbox?limite=abc', { sessao: true }));
+const corpoLimiteLixo = await corpoDe(limiteLixo);
+ok(
+  limiteLixo.status === 200 && (corpoLimiteLixo?.itens?.length ?? 0) <= 50,
+  'GET /api/inbox?limite=abc → 200 e no máximo 50 itens (padrão)',
+  `status=${limiteLixo.status}`
+);
+
+const limiteEnorme = await rotaInbox.GET(req('/api/inbox?limite=99999', { sessao: true }));
+await corpoDe(limiteEnorme);
+ok(
+  limiteEnorme.status === 200,
+  'GET /api/inbox?limite=99999 → 200 (clampado no teto, não é erro)',
+  `status=${limiteEnorme.status}`
+);
+
+/* ------------------------------------------------------------------ */
+/* FASE 4 — GET /api/inbox/resumo: `?dias=` cai no padrão, nunca erra,  */
+/* e o corpo é CONTAGEM.                                                */
+/*                                                                      */
+/* 🔴 O resumo NÃO pode trazer a chave `payload`. A caixa guarda o JSON  */
+/* inteiro que o comprador gerou (nome, e-mail, pedido) e o painel só    */
+/* precisa de número. No dia em que alguém devolver o item junto com a   */
+/* contagem — "já que estou aqui" —, esta asserção reprova antes de a    */
+/* PII chegar à tela.                                                    */
+/* ------------------------------------------------------------------ */
+const resumo30 = await rotaResumo.GET(req('/api/inbox/resumo?dias=30', { sessao: true }));
+const corpoResumo30 = await corpoDe(resumo30);
+ok(
+  resumo30.status === 200 && corpoResumo30?.resumo?.periodoDias === 30,
+  'GET /api/inbox/resumo?dias=30 → 200 e resumo.periodoDias = 30',
+  `status=${resumo30.status}`
+);
+
+const resumo5 = await rotaResumo.GET(req('/api/inbox/resumo?dias=5', { sessao: true }));
+const corpoResumo5 = await corpoDe(resumo5);
+ok(
+  resumo5.status === 200 && corpoResumo5?.resumo?.periodoDias === 30,
+  'GET /api/inbox/resumo?dias=5 → 200 e período inválido cai no padrão 30',
+  `status=${resumo5.status}`
+);
+
+ok(
+  JSON.stringify(corpoResumo30).includes('"payload"') === false,
+  '🔴 o corpo do resumo NÃO traz a chave `payload`: contagem não carrega dado de cliente'
+);
 
 /* ================================================================== */
 /* D.1.6 — /api/empresas nasce com a mesma trava                       */
@@ -523,6 +593,33 @@ ok(
   '🔴 D32: passados todos os erros acima, o segredo em disco é o original'
 );
 
+// 6) O resumo do painel também sai em JSON quando a configuração some.
+//    `config/empresas.json` ilegível é o erro que dá para forçar nesta rota: ela
+//    só lê, e `empresaDaRequisicao` se recusa a cair na empresa padrão nesse
+//    estado — contar a caixa do cliente A como se fosse do B seria pior do que
+//    não responder. O que está sob teste é o FORMATO da recusa: JSON com `erro`,
+//    nunca o 500 do Next em HTML, que quebra o `.json()` da tela.
+const EMPRESAS_ARQ = path.join(tmp, 'config', 'empresas.json');
+fs.writeFileSync(EMPRESAS_ARQ, 'isto nao e json', 'utf8');
+fs.writeFileSync(EMPRESAS_ARQ + '.bak', '{"empresas":[', 'utf8');
+
+const resResumoDegradado = await rotaResumo.GET(req('/api/inbox/resumo', { sessao: true }));
+const corpoResumoDegradado = await corpoDe(resResumoDegradado);
+ok(
+  resResumoDegradado.status === 503 &&
+    ehJson(resResumoDegradado) &&
+    typeof corpoResumoDegradado.erro === 'string',
+  '🔴 C32/D33: GET /api/inbox/resumo com empresas.json ilegível → 503 JSON (não 401, não HTML)',
+  `status=${resResumoDegradado.status}`
+);
+ok(
+  !(corpoResumoDegradado.erro ?? '').includes(tmp),
+  'regra 2: o caminho absoluto não aparece na mensagem do resumo'
+);
+
+fs.rmSync(EMPRESAS_ARQ, { force: true });
+fs.rmSync(EMPRESAS_ARQ + '.bak', { force: true });
+
 /* ================================================================== */
 
 process.chdir(raizAnterior);
@@ -530,7 +627,7 @@ fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(
   falhas === 0
-    ? '\n  Rotas trancadas: sessão, confirmação, preservação de campo e erro em JSON.\n'
+    ? '\n  Rotas trancadas: sessão, confirmação, preservação de campo, erro em JSON e resumo sem PII.\n'
     : `\n  ${falhas} falha(s).\n`
 );
 process.exit(falhas === 0 ? 0 : 1);
