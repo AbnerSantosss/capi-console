@@ -362,7 +362,10 @@ export const TOPICOS: Topico[] = [
         icone: MapTrifoldIcon,
         oQue:
           'A URL já vem com o segredo no caminho. Quem tiver essa URL consegue inserir eventos na sua caixa de entrada — trate como senha.',
-        onde: 'Disparo automático → aba Recebimento → "URL para o xWinner" → Copiar.',
+        // O recebimento saiu das abas de Disparo automático e virou o bloco 1
+        // de Instalação. O ponteiro precisa levar ao lugar certo: passo com
+        // endereco errado e o tipo de erro que faz o operador desistir do Guia.
+        onde: 'Instalação → Webhook da plataforma de vendas → "URL para a plataforma" → Copiar.',
       },
       {
         id: 'endpoint',

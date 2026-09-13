@@ -10,16 +10,13 @@ import {
 } from 'lucide-react';
 
 /**
- * As cinco abas de `/automatico`. `historico` saiu daqui porque deixou de ser
- * aba: virou secao dentro de Retornos (§7.3.3). O hash antigo `#historico`
- * continua valendo e e traduzido em `IntegrationsPage`.
+ * As abas que sobraram em `/automatico`. `historico` saiu porque deixou de ser
+ * aba: virou secao dentro de Retornos (§7.3.3). `recebimento` e `tag` sairam
+ * depois, na FASE A do plano multi-empresa: as duas eram INSTALACAO, e nao
+ * disparo automatico, e viraram a rota `/instalacao`. Os dois `?aba=` antigos
+ * continuam valendo — `IntegrationsPage` os traduz em redirecionamento.
  */
-export type IntegrationTab =
-  | 'recebimento'
-  | 'tag'
-  | 'inbox'
-  | 'regras'
-  | 'retornos';
+export type IntegrationTab = 'inbox' | 'regras' | 'retornos';
 
 /**
  * Um passo do mapa ou leva a uma aba desta tela, ou leva a outra rota. Os dois
@@ -40,10 +37,10 @@ type PassoDoFluxo = {
 const STEPS: PassoDoFluxo[] = [
   {
     id: 'origem',
-    tipo: 'aba',
-    tab: 'recebimento',
-    title: 'Origem',
-    description: 'Webhook da xWinner e Tag do site',
+    tipo: 'rota',
+    href: '/instalacao',
+    title: 'Instalação',
+    description: 'Webhook da plataforma e tag do site',
     icon: Webhook,
   },
   {
@@ -113,7 +110,10 @@ export function IntegrationFlow({
       className="rounded-panel border border-line-strong bg-surface-1/95 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.14)] sm:p-5"
     >
       {/* Cinco passos so cabem lado a lado a partir de `lg`. Abaixo disso a
-          fileira vira coluna com seta para baixo — nenhum passo some. */}
+          fileira vira coluna com seta para baixo — nenhum passo some. O
+          primeiro e o unico que sai desta tela: instalar e outra etapa, e
+          mistura-la com o que acontece DEPOIS foi o que escondeu a instalacao
+          por tanto tempo. */}
       <div className="grid gap-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-center">
         {STEPS.map((passo, index) => (
           <div key={passo.id} className="contents">

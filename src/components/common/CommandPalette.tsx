@@ -13,6 +13,7 @@ import {
   Plug,
   Target,
   Wand2,
+  Workflow,
 } from 'lucide-react';
 
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
@@ -121,6 +122,14 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             heading="Ir para"
             className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
           >
+            {/* Primeiro da lista porque e a primeira tela do fluxo: sem
+                webhook e sem tag nao ha o que disparar, nem manual nem
+                automatico. A tomada (`Plug`) e dela; o automatico ficou com o
+                fluxo (`Workflow`), que e o que ele virou depois que o
+                recebimento saiu de la. */}
+            <Item icone={Plug} onSelect={() => { fechar(); router.push('/instalacao'); }}>
+              Instalação (webhook e tag do site)
+            </Item>
             <Item icone={Target} onSelect={() => { fechar(); onAbrirMarcas(); }}>
               Pixel e token
             </Item>
@@ -143,8 +152,8 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             >
               Caixa de entrada
             </Item>
-            <Item icone={Plug} onSelect={() => { fechar(); router.push('/automatico'); }}>
-              Disparo automático (Integrações)
+            <Item icone={Workflow} onSelect={() => { fechar(); router.push('/automatico'); }}>
+              Disparo automático (regras e retornos)
             </Item>
             <Item icone={BookOpen} onSelect={() => { fechar(); router.push('/guia'); }}>
               Guia

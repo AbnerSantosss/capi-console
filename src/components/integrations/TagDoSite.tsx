@@ -95,6 +95,15 @@ export interface TagDoSitePropriedades {
   onTrocarChave: () => Promise<boolean>;
   /** true enquanto um PUT de integrações está em voo. */
   salvando: boolean;
+  /**
+   * Bloco livre inserido ENTRE o DNS e as tags geradas.
+   *
+   * Existe para a tela de Instalação encaixar o "onde colar o código" no ponto
+   * exato em que ele é lido: depois de o domínio estar autorizado, antes de o
+   * código aparecer. Opcional de propósito — em `/automatico` a aba nunca
+   * mostrou isto, e não passa a mostrar.
+   */
+  antesDasTags?: React.ReactNode;
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,6 +216,7 @@ export function TagDoSite({
   onSalvarDominios,
   onTrocarChave,
   salvando,
+  antesDasTags,
 }: TagDoSitePropriedades) {
   const dominios = tag.dominios;
 
@@ -617,6 +627,8 @@ export function TagDoSite({
           </div>
         )}
       </Panel>
+
+      {antesDasTags}
 
       {/* 4 — tags geradas ------------------------------------------- */}
       <Panel title="Tags geradas automaticamente" icon={Code2}>

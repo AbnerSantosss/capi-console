@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FlaskConical,
   LogOut,
+  Plug,
   Settings,
   Command,
   Send,
@@ -32,27 +33,26 @@ import { cn } from '@/lib/utils';
  * quem abre o console tem que ver que existe um manual e um automatico, e
  * qual dos dois esta ligado. A sublinha so aparece em tela larga.
  *
- * O terceiro item e novo e e o que corrige IA-1: o Pixel era o assunto central
+ * O item Pixels e o que corrige IA-1: o Pixel era o assunto central
  * do produto e o unico sem lugar na navegacao — vivia atras de um botao do
  * cabecalho. Quatro itens e o teto (IA-R1): um quinto significa que algo virou
  * aba de um dos quatro.
+ *
+ * A ordem agora e a do trabalho real, e nao a da ordem em que as telas
+ * nasceram: primeiro instalar (webhook e tag), depois dizer para qual Pixel
+ * vai, depois disparar na mao e so entao deixar a regra disparar sozinha.
+ * Quem chega numa empresa nova le a navegacao de cima para baixo e ja tem o
+ * roteiro. O Guia saiu daqui: ele nao e uma etapa do trabalho, e a consulta —
+ * virou icone do cabecalho e a quarta vaga voltou a ser de uma etapa.
  */
 const NAV = [
   {
-    href: '/',
-    rotulo: 'Disparo manual',
-    curto: 'Manual',
-    sub: 'você monta e envia',
-    icon: Send,
+    href: '/instalacao',
+    rotulo: 'Instalação',
+    curto: 'Instalação',
+    sub: 'webhook e tag do site',
+    icon: Plug,
     estado: false,
-  },
-  {
-    href: '/automatico',
-    rotulo: 'Disparo automático',
-    curto: 'Auto',
-    sub: 'webhook xWinner → regras',
-    icon: Workflow,
-    estado: true,
   },
   {
     href: '/pixels',
@@ -63,12 +63,23 @@ const NAV = [
     estado: false,
   },
   {
-    href: '/guia',
-    rotulo: 'Guia',
-    curto: 'Guia',
-    sub: 'como operar',
-    icon: BookOpen,
+    href: '/',
+    rotulo: 'Disparo manual',
+    curto: 'Manual',
+    sub: 'você monta e envia',
+    icon: Send,
     estado: false,
+  },
+  {
+    // A sublinha nao cita mais a xWinner: o recebimento deixou de ser de uma
+    // plataforma so, e prometer "webhook xWinner" numa instalacao de outra
+    // empresa seria mentira na primeira tela.
+    href: '/automatico',
+    rotulo: 'Disparo automático',
+    curto: 'Auto',
+    sub: 'regras → Meta, sem você digitar',
+    icon: Workflow,
+    estado: true,
   },
 ];
 
@@ -263,6 +274,19 @@ export function Header() {
           <span className="font-mono text-caption">K</span>
         </Button>
 
+        {/* O Guia saiu da navegacao porque ele nao e uma etapa do trabalho: e
+            consulta, do mesmo naipe das preferencias e do sair. Aqui ele fica
+            visivel em qualquer largura — inclusive no celular, onde a grade de
+            quatro nao tinha vaga para ele. */}
+        <Link
+          href="/guia"
+          className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }))}
+          aria-label="Guia"
+          title="Guia"
+        >
+          <BookOpen className="size-4" aria-hidden />
+        </Link>
+
         <Button
           variant="ghost"
           size="icon"
@@ -316,9 +340,10 @@ export function Header() {
             </Link>
           );
         })}
-        {/* Aqui havia um quinto botao, "Pixel", que abria o modal. Ele saiu
-            porque virou o item 3 da propria navegacao — a grade continua em
-            quatro colunas e nenhum assunto foi escondido. */}
+        {/* A grade continua em quatro colunas e nenhum assunto foi escondido:
+            o "Pixel" que abria modal virou item da propria navegacao, e agora
+            o Guia cedeu a vaga para Instalacao — ele continua a um toque, como
+            icone do cabecalho, que aparece em qualquer largura. */}
       </nav>
 
       {/* Estado do automatico por escrito. Em tela estreita ele so existia

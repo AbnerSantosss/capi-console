@@ -8,6 +8,18 @@ import consoleStyles from '@/components/layout/console.module.css';
 
 export const dynamic = 'force-dynamic';
 
+// Os três textos ficam em constantes porque o cabeçalho aparece DUAS vezes
+// nesta função — uma no modo degradado, outra no normal. Duas cópias literais
+// já saíram de sincronia uma vez.
+//
+// O nome da plataforma saiu daqui na FASE A: o produto mede qualquer
+// plataforma de vendas que entregue webhook, e o console citava uma só. O que
+// esta tela faz não depende de quem manda o evento.
+const EYEBROW = 'Recebido → regras → Meta';
+const TITULO = 'Disparo automático';
+const DESCRICAO =
+  'Os eventos que já chegaram passam pelas regras e vão para a Meta sem você digitar nada. Aqui você liga, desliga e confere o que passou. Quem faz o evento chegar é a tela de Instalação.';
+
 export default async function Automatico() {
   // As duas leituras são independentes de propósito. `listarEntregas` lê o log
   // de relay, que nunca fica indisponível junto com a configuração — e mesmo em
@@ -24,9 +36,9 @@ export default async function Automatico() {
     return (
       <main className={consoleStyles.page}>
         <ConsolePageHeader
-          eyebrow="Webhook xWinner → regras → Meta"
-          title="Disparo automático"
-          description="Os eventos chegam sozinhos do xWinner, passam pelas regras e vão para a Meta sem você digitar nada. Aqui você liga, desliga e confere o que passou."
+          eyebrow={EYEBROW}
+          title={TITULO}
+          description={DESCRICAO}
           icon={Workflow}
         />
         <AvisoConfigIndisponivel arquivo={cfg.reason.arquivo} />
@@ -37,17 +49,19 @@ export default async function Automatico() {
   return (
     <main className={consoleStyles.page}>
       <ConsolePageHeader
-        eyebrow="Webhook xWinner → regras → Meta"
-        title="Disparo automático"
-        description="Os eventos chegam sozinhos do xWinner, passam pelas regras e vão para a Meta sem você digitar nada. Aqui você liga, desliga e confere o que passou."
+        eyebrow={EYEBROW}
+        title={TITULO}
+        description={DESCRICAO}
         icon={Workflow}
       />
+      {/* `publicBaseUrl` saiu daqui na FASE A: a unica coisa que precisava da
+          URL publica era a aba de Recebimento, que agora mora em
+          `/instalacao` — e e de la que a rota le a variavel. */}
       <IntegrationsPage
         inicial={{
           integracoes: cfg.value,
           entregas: log.status === 'fulfilled' ? log.value : [],
         }}
-        publicBaseUrl={process.env.PUBLIC_BASE_URL}
       />
     </main>
   );

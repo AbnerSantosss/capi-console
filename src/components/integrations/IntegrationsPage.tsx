@@ -7,31 +7,25 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import {
-  AlertTriangle,
   ArrowUpRight,
-  Check,
-  Code2,
-  Copy,
-  Eye,
-  EyeOff,
   GitBranch,
   History,
   Inbox,
   KeyRound,
+  Plug,
   Plus,
   RefreshCw,
   Send,
   ShieldAlert,
-  Terminal,
   Trash2,
-  Webhook,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -45,55 +39,13 @@ import {
 } from '@/components/common/primitives';
 import { InboxList } from './InboxList';
 import { RulesSection } from './RulesSection';
-import type { RegraRoteamento } from '@/lib/config-store';
-import { TagDoSite } from './TagDoSite';
-import type { ConfigTag, DominioTag } from '@/lib/tag-dominios';
-import { erroDoRotulo, normalizarRotulo, ROTULO_PADRAO } from './rotulo';
+import type { Entrega, EventoRelay, Integracoes } from './tipos';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   IntegrationFlow,
   type IntegrationTab,
 } from './IntegrationFlow';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-
-type EventoRelay = 'dispatch.success' | 'dispatch.error' | 'inbox.received';
-
-interface Destino {
-  id: string;
-  nome: string;
-  url: string;
-  headers: Record<string, string>;
-  eventos: EventoRelay[];
-  ativo: boolean;
-}
-
-interface Integracoes {
-  /** `rotulo` é o apelido público da URL; o segredo continua sendo o último segmento. */
-  entrada: { segredo: string; modo: 'fila' | 'auto'; rotulo?: string };
-  regras: RegraRoteamento[];
-  saida: Destino[];
-  /** Chave publica da tag do site e dominios autorizados a usa-la. */
-  tag: ConfigTag;
-}
-
-interface Entrega {
-  id: string;
-  em: string;
-  destinoNome: string;
-  evento: string;
-  httpStatus: number;
-  duracaoMs: number;
-  tentativas: number;
-  ok: boolean;
-  erro?: string;
-}
-
 const ROTULO_EVENTO: Record<EventoRelay, string> = {
   'dispatch.success': 'Disparo aceito pela Meta',
   'dispatch.error': 'Disparo recusado',
@@ -101,25 +53,21 @@ const ROTULO_EVENTO: Record<EventoRelay, string> = {
 };
 
 /**
- * Cinco abas em tres grupos rotulados. Os ROTULOS das abas nao mudaram: o que
- * mudou foi a companhia de cada uma (§7.6). O grupo responde "em que parte do
- * caminho do evento isto acontece", que e a pergunta que a lista plana de seis
- * abas nao respondia — e tira "Tag do site" da ultima posicao, onde parecia
- * apendice sendo uma das duas origens de evento do produto.
+ * Tres abas em dois grupos rotulados. O grupo responde "em que parte do caminho
+ * do evento isto acontece", que e a pergunta que a lista plana de seis abas nao
+ * respondia (§7.6).
+ *
+ * O grupo "O que entra" — Recebimento e Tag do site — saiu inteiro daqui na
+ * FASE A do plano multi-empresa e virou a rota `/instalacao`. As duas abas nao
+ * eram "o que acontece com o evento": eram o que se faz UMA vez, antes de
+ * qualquer evento existir. Enquanto moravam dentro de uma tela chamada "Disparo
+ * automatico", a primeira tarefa do produto era tambem a mais escondida.
  */
 const GRUPOS: Array<{
   id: string;
   label: string;
-  abas: Array<{ value: IntegrationTab; label: string; icon: typeof Webhook }>;
+  abas: Array<{ value: IntegrationTab; label: string; icon: typeof Inbox }>;
 }> = [
-  {
-    id: 'entra',
-    label: 'O que entra',
-    abas: [
-      { value: 'recebimento', label: 'Recebimento', icon: Webhook },
-      { value: 'tag', label: 'Tag do site', icon: Code2 },
-    ],
-  },
   {
     id: 'acontece',
     label: 'O que acontece',
@@ -137,7 +85,7 @@ const GRUPOS: Array<{
 
 const ABAS = GRUPOS.flatMap((grupo) => grupo.abas);
 
-const ABA_PADRAO: IntegrationTab = 'recebimento';
+const ABA_PADRAO: IntegrationTab = 'inbox';
 
 /** `?aba=` so aceita o que existe; qualquer outra coisa cai no padrao. */
 function abaDaConsulta(valor: string | null): IntegrationTab | null {
@@ -161,12 +109,26 @@ function abaDaConsulta(valor: string | null): IntegrationTab | null {
  * como estado de aba vinha roubando (IA-R4).
  */
 const HASH_LEGADO: Record<string, IntegrationTab> = {
-  recebimento: 'recebimento',
-  tag: 'tag',
   inbox: 'inbox',
   regras: 'regras',
   retornos: 'retornos',
   historico: 'retornos',
+};
+
+/**
+ * 🔴 COMPATIBILIDADE PERMANENTE COM AS DUAS ABAS QUE MUDARAM DE ROTA.
+ *
+ * `?aba=recebimento` e `?aba=tag` (e os hashes `#recebimento`/`#tag`) sao links
+ * que ja existem em favorito, em anotacao e em conversa com cliente. Eles nao
+ * podem morrer so porque o conteudo mudou de endereco: levam para `/instalacao`
+ * na ancora certa, que e exatamente onde a pessoa esperava cair.
+ *
+ * Vale o mesmo principio da decisao irreversivel #10 — endereco publicado
+ * responde para sempre. Isto nao tem prazo de validade.
+ */
+const ROTA_LEGADA: Record<string, string> = {
+  recebimento: '/instalacao#webhook',
+  tag: '/instalacao#tag',
 };
 
 /** Unica ancora de conteudo que sobrevive a traducao do hash. */
@@ -217,25 +179,14 @@ function novoIdDeDestino(): string {
 
 export function IntegrationsPage({
   inicial,
-  publicBaseUrl,
 }: {
   inicial: { integracoes: Integracoes; entregas: Entrega[] };
-  /** URL publica (tunel). Vem do servidor para a URL copiada ser sempre a certa,
-   *  mesmo quando o operador abre o console por localhost dentro da VPS. */
-  publicBaseUrl?: string;
 }) {
   // Os dados chegam prontos do Server Component: sem efeito de mount, sem
   // primeiro paint vazio. `carregar` fica so para o botao de atualizar.
   const [cfg, setCfg] = useState<Integracoes>(inicial.integracoes);
   const [entregas, setEntregas] = useState<Entrega[]>(inicial.entregas);
-  const [copiado, setCopiado] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
-  const [mostrarSegredo, setMostrarSegredo] = useState(false);
-  const [rotuloRascunho, setRotuloRascunho] = useState(
-    inicial.integracoes.entrada.rotulo?.trim() || ROTULO_PADRAO
-  );
-  const [salvandoRotulo, setSalvandoRotulo] = useState(false);
 
   // A aba ativa mora na URL, nao em estado local (IA-R3): `?aba=regras` abre
   // Regras direto, inclusive em aba nova do navegador e ja no HTML que vem do
@@ -243,6 +194,7 @@ export function IntegrationsPage({
   // Filtro e busca continuam FORA da URL de proposito (IA-R5): sao efemeros e
   // so poluiriam o historico.
   const parametros = useSearchParams();
+  const router = useRouter();
   const hash = useSyncExternalStore(assinarHash, lerHash, lerHashNoServidor);
   const aba: IntegrationTab =
     abaDaConsulta(parametros.get('aba')) ?? abaDoHashLegado(hash) ?? ABA_PADRAO;
@@ -265,6 +217,22 @@ export function IntegrationsPage({
     novos.set('aba', value);
     window.history.replaceState(null, '', `?${novos.toString()}`);
   };
+
+  // As duas abas que viraram `/instalacao` precisam LEVAR o visitante para la,
+  // e nao apenas cair no padrao: quem abriu `?aba=tag` queria a tag do site, e
+  // aterrissar calado na caixa de entrada e pior do que um 404 — parece que o
+  // recurso sumiu. `useRef` porque `router.replace` remonta esta tela: sem a
+  // trava, o efeito reentraria e o historico viraria um laco.
+  const jaRedirecionou = useRef(false);
+  useEffect(() => {
+    if (jaRedirecionou.current) return;
+    const daConsulta = parametros.get('aba') ?? '';
+    const doHash = window.location.hash.replace(/^#/, '');
+    const destino = ROTA_LEGADA[daConsulta] ?? ROTA_LEGADA[doHash];
+    if (!destino) return;
+    jaRedirecionou.current = true;
+    router.replace(destino);
+  }, [parametros, router]);
 
   // Traduz o hash antigo em `?aba=` uma unica vez, por higiene da URL — quem ja
   // mostrou a aba certa foi a derivacao acima, entao esta limpeza nunca pode
@@ -327,20 +295,12 @@ export function IntegrationsPage({
         pedir<{ entregas?: Entrega[] }>('/api/relay', { cache: 'no-store' }),
       ]);
       setCfg(a.integracoes);
-      setRotuloRascunho(a.integracoes.entrada.rotulo?.trim() || ROTULO_PADRAO);
       setEntregas(b.entregas ?? []);
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
       /* servidor pode estar reiniciando */
     }
   }, []);
-
-  const copiar = async (texto: string, chave: string) => {
-    await navigator.clipboard.writeText(texto);
-    setCopiado(chave);
-    setTimeout(() => setCopiado(null), 2000);
-    toast.success('Copiado.');
-  };
 
   /**
    * Acrescenta um destino de retorno. Extraido do `onClick` do cabecalho porque
@@ -384,118 +344,6 @@ export function IntegrationsPage({
     }
   };
 
-  const novoSegredo = async () => {
-    try {
-      const d = await pedir<{ segredo: string }>('/api/integracoes', { method: 'POST' });
-      setCfg({ ...cfg, entrada: { ...cfg.entrada, segredo: d.segredo } });
-      toast.warning('Segredo trocado', {
-        description: 'O segredo anterior parou de funcionar agora. Atualize o n8n.',
-      });
-    } catch (e) {
-      if (e instanceof SessaoExpirada) return;
-      toast.error('Não foi possível trocar o segredo.');
-    }
-  };
-
-  /**
-   * Grava a lista de domínios da tag.
-   *
-   * O servidor é quem manda: ele preserva a chave, os contadores e o último hit
-   * de cada domínio. Adotar a resposta evita a tela zerar o histórico de acesso
-   * de um cliente só porque o navegador mandou o objeto sem esses campos.
-   */
-  const salvarDominios = async (dominios: DominioTag[]): Promise<boolean> => {
-    setSalvando(true);
-    try {
-      const d = await pedir<{ integracoes: Integracoes }>('/api/integracoes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cfg, tag: { ...cfg.tag, dominios } }),
-      });
-      setCfg(d.integracoes);
-      toast.success('Domínios da tag salvos.');
-      return true;
-    } catch (e) {
-      if (e instanceof SessaoExpirada) return false;
-      toast.error('Não foi possível salvar os domínios.', {
-        description: e instanceof Error ? e.message : 'Erro desconhecido.',
-      });
-      return false;
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  /**
-   * Gira só a chave pública da tag. O segredo do xWinner não é tocado: a
-   * entrega de vendas continua funcionando, o que para é a coleta do navegador
-   * até o cliente recolar o código novo no site.
-   */
-  const novaChaveDaTag = async (): Promise<boolean> => {
-    try {
-      const d = await pedir<{ chave: string }>('/api/integracoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alvo: 'tag' }),
-      });
-      setCfg({ ...cfg, tag: { ...cfg.tag, chave: d.chave } });
-      toast.warning('Chave da tag trocada', {
-        description:
-          'Toda tag já instalada parou de enviar. Mande o código novo para o cliente colar no site.',
-      });
-      return true;
-    } catch (e) {
-      if (e instanceof SessaoExpirada) return false;
-      toast.error('Não foi possível gerar a chave nova.');
-      return false;
-    }
-  };
-
-  const simular = async () => {
-    const exemplo = {
-      event: 'order_approved',
-      data: {
-        order_id: `sim_${Date.now().toString(36)}`,
-        amountMinor: 19700,
-        currency: 'BRL',
-        occurred_at: new Date().toISOString(),
-        lead: {
-          name: 'Simulação Teste',
-          email: 'simulacao@exemplo.com.br',
-          phone: '11987654321',
-        },
-        product: { name: 'Acesso Código Vencedor' },
-        attribution: {
-          event_source_url:
-            'https://codigovencedor.com/checkout?utm_source=ig&utm_campaign=52666977144600&ad_id=52667052465200&fbclid=IwARsimulacao',
-          ip_address: '187.54.12.89',
-          user_agent: 'Mozilla/5.0 (simulação do console)',
-          cookies: { fbc: 'fb.1.1712345678000.IwARsimulacao' },
-        },
-      },
-    };
-
-    try {
-      await pedir('/api/webhook/in', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CAPI-Secret': cfg.entrada.segredo,
-        },
-        body: JSON.stringify(exemplo),
-      });
-
-      toast.success('Webhook simulado recebido', {
-        description: 'Ele aparece na caixa de entrada abaixo.',
-      });
-    } catch (e) {
-      if (e instanceof SessaoExpirada) return;
-      toast.error('A simulação falhou.', {
-        description: e instanceof Error ? e.message : 'Erro desconhecido.',
-      });
-    }
-  };
-
   const testarDestino = async (id: string) => {
     toast.info('Enviando ping…');
     try {
@@ -522,69 +370,6 @@ export function IntegrationsPage({
     }
     void carregar();
   };
-
-  const base =
-    publicBaseUrl?.replace(/\/+$/, '') ||
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3333');
-  // Duas formas de autenticar o recebimento. A do caminho existe porque o
-  // backoffice do xWinner so oferece o campo "URL (https)" — nao ha onde
-  // colocar um header customizado.
-  const endpointCaminho = `${base}/api/webhook/in/${cfg.entrada.segredo}`;
-  const endpointHeader = `${base}/api/webhook/in`;
-  const ehLocal = base.includes('localhost') || base.includes('127.0.0.1');
-
-  // Apelido só para dar nome à URL no backoffice do xWinner. O segredo continua
-  // sendo o ÚLTIMO segmento — o apelido não autentica nada.
-  const rotuloSalvo = cfg.entrada.rotulo?.trim() || ROTULO_PADRAO;
-  const rotuloLimpo = normalizarRotulo(rotuloRascunho);
-  const erroRotulo = erroDoRotulo(rotuloLimpo);
-  const rotuloMudou = rotuloLimpo !== rotuloSalvo;
-  const endpointRotulado = `${base}/api/webhook/in/${rotuloSalvo}/${cfg.entrada.segredo}`;
-
-  const salvarRotulo = async () => {
-    if (erroRotulo || !rotuloMudou) return;
-    const novo: Integracoes = { ...cfg, entrada: { ...cfg.entrada, rotulo: rotuloLimpo } };
-    setSalvandoRotulo(true);
-    try {
-      // PUT próprio em vez de `salvar`: aqui o aviso de "recadastre no xWinner"
-      // só pode aparecer se a gravação realmente deu certo.
-      await pedir('/api/integracoes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(novo),
-      });
-      setCfg(novo);
-      setRotuloRascunho(rotuloLimpo);
-      toast.warning('Apelido salvo — a URL mudou', {
-        description:
-          'Cadastre a URL nova no xWinner. A anterior continua funcionando, mas o apelido antigo aparece marcado na caixa de entrada.',
-      });
-    } catch (e) {
-      if (e instanceof SessaoExpirada) return;
-      toast.error('Não foi possível salvar o apelido.', {
-        description: e instanceof Error ? e.message : 'Erro desconhecido.',
-      });
-    } finally {
-      setSalvandoRotulo(false);
-    }
-  };
-
-  const curl = `curl -X POST ${endpointHeader} \
-  -H "Content-Type: application/json" \
-  -H "X-CAPI-Secret: ${cfg.entrada.segredo}" \
-  -d '{"event":"purchase_approved","data":{...}}'`;
-  const mascara = '••••••••••••';
-  const ocultarSegredo = (texto: string) =>
-    cfg.entrada.segredo ? texto.replace(cfg.entrada.segredo, mascara) : texto;
-  const endpointRotuladoVisivel = mostrarUrlSensivel
-    ? endpointRotulado
-    : ocultarSegredo(endpointRotulado);
-  const endpointCaminhoVisivel = mostrarUrlSensivel
-    ? endpointCaminho
-    : ocultarSegredo(endpointCaminho);
-  const curlVisivel = mostrarSegredo
-    ? curl
-    : ocultarSegredo(curl);
 
   return (
     <div className="min-w-0">
@@ -630,9 +415,7 @@ export function IntegrationsPage({
                         ? cfg.regras.length
                         : item.value === 'retornos'
                           ? cfg.saida.length
-                          : item.value === 'tag'
-                            ? cfg.tag.dominios.length
-                            : undefined;
+                          : undefined;
                     return (
                       <TabsTrigger
                         key={item.value}
@@ -654,203 +437,13 @@ export function IntegrationsPage({
           </TabsList>
         </div>
 
-        <TabsContent value="recebimento" className="min-w-0 outline-none">
-      {/* ---------------------------------------------------------- */}
-      <Section
-        icon={Webhook}
-        variant="card"
-        title="Receber webhooks"
-        description="Aponte a plataforma de vendas ou o n8n para este endereço e o payload chega pronto para revisão."
-      >
-        <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {ehLocal && (
-              <Callout tone="warning" icon={AlertTriangle} title="O xWinner exige https">
-                O campo do backoffice é <strong>URL (https)</strong> e este
-                console está em <code className="font-mono">{base}</code>. Abra o
-                acesso público nas instruções desta aba e use a URL gerada no lugar de{' '}
-                <code className="font-mono">localhost:3333</code>.
-              </Callout>
-            )}
-
-            <Field
-              id="endpoint-rotulado"
-              label="URL para o xWinner"
-              helper="Cole esta URL em Integrações → Webhooks → Novo endpoint. O apelido é só para você reconhecer a linha no backoffice; quem autentica é o segredo, sempre o último pedaço do endereço."
-              className="rounded-lg border border-line bg-surface-2/55 p-4"
-              action={<div className="flex gap-1">
-                <Button size="sm" variant="ghost" aria-pressed={mostrarUrlSensivel} onClick={() => setMostrarUrlSensivel((value) => !value)}>
-                  {mostrarUrlSensivel ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
-                  {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => copiar(endpointRotulado, 'ep-rotulado')}>
-                  {copiado === 'ep-rotulado' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-                  Copiar
-                </Button>
-              </div>}
-            >
-              <Input
-                id="endpoint-rotulado"
-                readOnly
-                value={endpointRotuladoVisivel}
-                className="wrap-token font-mono"
-              />
-            </Field>
-
-            <Field
-              id="rotulo-endpoint"
-              label="Apelido desta URL"
-              helper={`Minúsculas, dígitos e hífen. Aparece no endereço como /api/webhook/in/${rotuloLimpo || 'apelido'}/…`}
-              error={erroRotulo ?? undefined}
-              className="rounded-lg border border-line bg-surface-2/55 p-4"
-              action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={salvarRotulo}
-                  disabled={salvandoRotulo || Boolean(erroRotulo) || !rotuloMudou}
-                >
-                  {salvandoRotulo ? 'Salvando…' : 'Salvar apelido'}
-                </Button>
-              }
-            >
-              <Input
-                id="rotulo-endpoint"
-                value={rotuloRascunho}
-                onChange={(e) => setRotuloRascunho(e.target.value)}
-                onBlur={() => setRotuloRascunho(normalizarRotulo(rotuloRascunho))}
-                placeholder={ROTULO_PADRAO}
-                className="wrap-token font-mono"
-              />
-            </Field>
-
-            {rotuloMudou && !erroRotulo && (
-              <Callout tone="warning" icon={AlertTriangle} title="Trocar o apelido muda a URL">
-                Depois de salvar você precisa <strong>cadastrar a URL nova no xWinner</strong>.
-                Enquanto o backoffice apontar para o apelido antigo, as entregas continuam
-                chegando — o segredo é o mesmo —, mas aparecem marcadas como{' '}
-                <em>apelido antigo</em> na caixa de entrada.
-              </Callout>
-            )}
-
-            <Accordion className="rounded-lg border border-line bg-surface-2/45">
-              <AccordionItem value="url-antiga" className="last:border-b-0">
-                <AccordionTrigger className="px-4 hover:no-underline">
-                  <span className="text-label font-semibold text-fg-body">
-                    URL antiga, sem apelido (continua valendo)
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
-                  <p className="mb-2 text-caption text-fg-muted">
-                    É o formato que está cadastrado hoje no xWinner. Não precisa trocar: o
-                    endpoint aceita os dois. Serve de saída se algo der errado com o apelido.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      readOnly
-                      value={endpointCaminhoVisivel}
-                      aria-label="URL antiga sem apelido"
-                      className="wrap-token font-mono"
-                    />
-                    <Button size="sm" variant="ghost" onClick={() => copiar(endpointCaminho, 'ep-caminho')}>
-                      {copiado === 'ep-caminho' ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-                      Copiar
-                    </Button>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-
-            <Field
-              id="endpoint-header"
-              label="URL para o n8n"
-              helper="Quando o remetente aceita header customizado, prefira este formato: a URL fica limpa e o segredo não aparece nela."
-              className="rounded-lg border border-line bg-surface-2/55 p-4"
-              action={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copiar(endpointHeader, 'ep-header')}
-                >
-                  {copiado === 'ep-header' ? (
-                    <Check className="size-3.5 text-success" aria-hidden />
-                  ) : (
-                    <Copy className="size-3.5" aria-hidden />
-                  )}
-                  Copiar
-                </Button>
-              }
-            >
-              <Input
-                id="endpoint-header"
-                readOnly
-                value={endpointHeader}
-                className="wrap-token font-mono"
-              />
-            </Field>
-
-            <Field
-              id="segredo"
-              label="Segredo"
-              param="X-CAPI-Secret"
-              helper="Vale para as duas URLs acima. Sem o segredo correto o endpoint responde 401."
-              className="rounded-lg border border-line bg-surface-2/55 p-4"
-              action={
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" aria-pressed={mostrarSegredo} onClick={() => setMostrarSegredo((value) => !value)}>
-                    {mostrarSegredo ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
-                    {mostrarSegredo ? 'Ocultar' : 'Mostrar'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => copiar(cfg.entrada.segredo, 'seg')}
-                  >
-                    {copiado === 'seg' ? (
-                      <Check className="size-3.5 text-success" aria-hidden />
-                    ) : (
-                      <Copy className="size-3.5" aria-hidden />
-                    )}
-                    Copiar
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={novoSegredo}>
-                    <RefreshCw className="size-3.5" aria-hidden />
-                    Trocar
-                  </Button>
-                </div>
-              }
-            >
-              <Input
-                id="segredo"
-                readOnly
-                value={mostrarSegredo ? cfg.entrada.segredo : mascara}
-                className="wrap-token font-mono"
-              />
-            </Field>
-
-            <Accordion className="rounded-lg border border-line bg-surface-2/45">
-              <AccordionItem value="instrucoes" className="last:border-b-0">
-                <AccordionTrigger className="px-4 hover:no-underline">
-                  <span className="flex items-center gap-2 text-label font-semibold text-fg-body">
-                    <Terminal className="size-4 text-fg-muted" strokeWidth={1.75} aria-hidden />
-                    Instruções técnicas
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
-                  <p className="mb-2 text-caption text-fg-muted">Teste pela linha de comando somente em um ambiente isolado.</p>
-                  <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-muted">
-                    {curlVisivel}
-                  </pre>
-                  <Button variant="outline" className="mt-3" onClick={simular}>
-                    <Send className="size-4" aria-hidden />
-                    Simular recebimento
-                  </Button>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-4">
+        <TabsContent value="inbox" className="min-w-0 outline-none">
+          <div className="flex min-w-0 flex-col gap-5">
+            {/* Este painel vivia na aba Recebimento, que virou `/instalacao`. Ele
+                NAO foi junto: a pergunta que ele responde — "por que este evento
+                parou aqui em vez de ir para a Meta?" — so aparece olhando a
+                caixa de entrada. Em `/instalacao` seria um aviso sobre uma tela
+                que o operador ainda nem abriu. */}
             <Panel title="Modo de recebimento" icon={Inbox}>
               <p className="text-caption text-fg-muted">
                 Quem decide o que acontece com cada webhook é a tabela de{' '}
@@ -864,47 +457,31 @@ export function IntegrationsPage({
                 são barrados antes da Meta, mesmo em modo automático.
               </Callout>
 
-              <Button variant="outline" className="mt-3 w-full" onClick={() => selecionarAba('regras')}>
-                <GitBranch className="size-4" aria-hidden />
-                Ver regras
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => selecionarAba('regras')}>
+                  <GitBranch className="size-4" aria-hidden />
+                  Ver regras
+                </Button>
+                <Link
+                  href="/instalacao#webhook"
+                  className={buttonVariants({ variant: 'ghost' })}
+                >
+                  <Plug className="size-4" aria-hidden />
+                  Onde a URL do webhook é gerada
+                </Link>
+              </div>
             </Panel>
 
-            <Panel title="Expor para a internet" icon={ArrowUpRight}>
-              <p className="text-caption text-fg-muted">
-                Este console roda em <code className="font-mono">localhost</code>{' '}
-                e não é alcançável de fora. Para receber webhooks reais, abra um
-                túnel:
-              </p>
-              <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-2 p-2.5 font-mono text-caption text-fg-muted">
-                cloudflared tunnel --url http://localhost:3333
-              </pre>
-              <p className="mt-2 text-caption text-fg-muted">
-                Na VPS o console roda em <code className="font-mono">3334</code>{' '}
-                (a 3333 já é de outro container) e o hostname fixo do túnel é{' '}
-                <code className="font-mono">capi.proxserverabner.site</code>.
-              </p>
-              <p className="mt-2 text-caption text-fg-muted">
-                Use a URL gerada + <code className="font-mono">/api/webhook/in</code>.
-                O segredo é a única proteção — não o compartilhe.
-              </p>
-            </Panel>
+            <Section
+              id="inbox"
+              icon={Inbox}
+              variant="card"
+              title="Caixa de entrada"
+              description="Eventos recebidos das plataformas. Carregue no formulário para revisar ou use o disparo direto."
+            >
+              <InboxList />
+            </Section>
           </div>
-        </div>
-
-      </Section>
-        </TabsContent>
-
-        <TabsContent value="inbox" className="min-w-0 outline-none">
-          <Section
-            id="inbox"
-            icon={Inbox}
-            variant="card"
-            title="Caixa de entrada"
-            description="Eventos recebidos das plataformas. Carregue no formulário para revisar ou use o disparo direto."
-          >
-            <InboxList />
-          </Section>
         </TabsContent>
 
       {/* ---------------------------------------------------------- */}
@@ -1184,24 +761,6 @@ export function IntegrationsPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="tag" className="min-w-0 outline-none">
-          <Section
-            icon={Code2}
-            variant="card"
-            title="Tag do site"
-            description="O código que mede a visita no site do cliente e guarda a atribuição antes de a venda por PIX acontecer fora do navegador."
-          >
-            <TagDoSite
-              tag={cfg.tag}
-              regras={cfg.regras}
-              base={base}
-              ehLocal={ehLocal}
-              onSalvarDominios={salvarDominios}
-              onTrocarChave={novaChaveDaTag}
-              salvando={salvando}
-            />
-          </Section>
-        </TabsContent>
       </Tabs>
     </div>
   );

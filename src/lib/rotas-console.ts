@@ -23,6 +23,7 @@
 /** Destinos permitidos após o login (D5). */
 export const DESTINOS_PERMITIDOS = [
   '/',
+  '/instalacao',
   '/pixels',
   '/automatico',
   '/integracoes',
