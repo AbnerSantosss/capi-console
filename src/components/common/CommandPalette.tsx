@@ -10,6 +10,7 @@ import {
   Building2,
   Clock,
   Eraser,
+  Gauge,
   Inbox,
   Plug,
   Plus,
@@ -160,11 +161,17 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             heading="Ir para"
             className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
           >
-            {/* Primeiro da lista porque e a primeira tela do fluxo: sem
-                webhook e sem tag nao ha o que disparar, nem manual nem
-                automatico. A tomada (`Plug`) e dela; o automatico ficou com o
-                fluxo (`Workflow`), que e o que ele virou depois que o
-                recebimento saiu de la. */}
+            {/* O Painel abre a lista porque e a tela de chegada do console
+                (D-2') e a mesma primeira posicao que ele ocupa na navegacao:
+                quem digita ⌘K sem saber onde olhar deve cair no numero, nao
+                numa tela de trabalho. */}
+            <Item icone={Gauge} onSelect={() => { fechar(); router.push('/painel'); }}>
+              Painel de eventos (o que chegou e de onde veio)
+            </Item>
+            {/* Depois dele vem a primeira tela do fluxo: sem webhook e sem tag
+                nao ha o que disparar, nem manual nem automatico. A tomada
+                (`Plug`) e dela; o automatico ficou com o fluxo (`Workflow`),
+                que e o que ele virou depois que o recebimento saiu de la. */}
             <Item icone={Plug} onSelect={() => { fechar(); router.push('/instalacao'); }}>
               Instalação (webhook e tag do site)
             </Item>

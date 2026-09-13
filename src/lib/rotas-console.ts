@@ -22,6 +22,7 @@
 
 /** Destinos permitidos após o login (D5). */
 export const DESTINOS_PERMITIDOS = [
+  '/painel',
   '/',
   '/instalacao',
   '/pixels',
@@ -31,6 +32,18 @@ export const DESTINOS_PERMITIDOS = [
 ] as const;
 
 export type DestinoPermitido = (typeof DESTINOS_PERMITIDOS)[number];
+
+/**
+ * Onde alguém cai quando entra no console sem ter pedido uma tela específica (D-2').
+ *
+ * 🔴 Não confundir com o `/` devolvido por `validarDestino` e por
+ * `destinoSeguroDoPathname`: aquele é a rede de segurança de um destino RECUSADO
+ * (open redirect, rota desconhecida) e continua sendo `/` de propósito. Este aqui
+ * é a primeira tela de quem chegou sem destino — o Painel, porque a primeira
+ * pergunta de quem abre o console é "está entrando venda e está saindo para a
+ * Meta?", e o disparo manual não responde isso.
+ */
+export const DESTINO_INICIAL: DestinoPermitido = '/painel';
 
 /**
  * Versão de navegador: recebe um `location.pathname` já confiável (veio do próprio

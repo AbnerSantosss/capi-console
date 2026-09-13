@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { LoginForm } from '@/components/auth/LoginForm';
+import { DESTINO_INICIAL } from '@/lib/rotas-console';
 import {
   COOKIE_SESSAO,
   SENHA_MIN,
@@ -31,7 +32,10 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const bruto = typeof params.destino === 'string' ? params.destino : '';
-  const destino = validarDestino(bruto);
+  // Sem `?destino=` na URL, ninguém pediu tela nenhuma: a primeira é o Painel (D-2').
+  // Com `?destino=`, quem manda é `validarDestino` — e o que ela recusar continua
+  // caindo em `/`, que é a rede de segurança contra open redirect (D5).
+  const destino = bruto ? validarDestino(bruto) : DESTINO_INICIAL;
   const preview = params.preview === '1';
 
   const jar = await cookies();

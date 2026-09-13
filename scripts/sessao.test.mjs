@@ -92,8 +92,9 @@ ok(credenciaisConferem('admin'.repeat(10), 'senha'.repeat(20)) === false, 'compr
 ok(credenciaisConferem('', '') === false, 'credenciais vazias falham');
 
 /* ---------------- 8. validarDestino ---------------- */
-ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 6, 'DESTINOS_PERMITIDOS possui 6 rotas');
+ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 7, 'DESTINOS_PERMITIDOS possui 7 rotas');
 ok(validarDestino('/') === '/', 'destino / permitido');
+ok(validarDestino('/painel') === '/painel', 'destino /painel permitido');
 ok(validarDestino('/instalacao') === '/instalacao', 'destino /instalacao permitido');
 ok(validarDestino('/pixels') === '/pixels', 'destino /pixels permitido');
 ok(validarDestino('/automatico') === '/automatico', 'destino /automatico permitido');
@@ -113,6 +114,22 @@ ok(validarDestino('https://evil.com') === '/', 'origem externa rejeitada -> /');
 ok(validarDestino('') === '/', 'string vazia -> /');
 ok(validarDestino(null) === '/', 'null -> /');
 ok(validarDestino(undefined) === '/', 'undefined -> /');
+
+/* ---------------- 9. DESTINO_INICIAL (D-2') ---------------- */
+// A tela de chegada e o Painel, mas a rede de seguranca de um destino RECUSADO
+// continua sendo `/`. Se alguem trocar o fallback de `validarDestino` por
+// `/painel`, um open redirect barrado passaria a mandar o usuario para outra
+// tela que nao a do disparo manual — e os tres casos acima (barra dupla,
+// javascript:, origem externa) deixariam de provar o que provam.
+const { DESTINO_INICIAL } = await import(
+  new URL('../src/lib/rotas-console.ts', import.meta.url).href
+);
+ok(DESTINO_INICIAL === '/painel', 'quem entra sem pedir tela cai no Painel');
+ok(
+  DESTINOS_PERMITIDOS.includes(DESTINO_INICIAL),
+  'a tela de chegada esta na allowlist (senao o proxy faria laco)'
+);
+ok(validarDestino('') === '/', 'e o fallback de destino recusado continua sendo /');
 
 console.log(falhas === 0 ? '\n  Autenticação e sessão com 100% de cobertura e funcionando.\n' : `\n  ${falhas} falha(s).\n`);
 process.exit(falhas === 0 ? 0 : 1);
