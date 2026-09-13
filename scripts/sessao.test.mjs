@@ -92,10 +92,13 @@ ok(credenciaisConferem('admin'.repeat(10), 'senha'.repeat(20)) === false, 'compr
 ok(credenciaisConferem('', '') === false, 'credenciais vazias falham');
 
 /* ---------------- 8. validarDestino ---------------- */
-ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 3, 'DESTINOS_PERMITIDOS possui 3 rotas');
+ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 5, 'DESTINOS_PERMITIDOS possui 5 rotas');
 ok(validarDestino('/') === '/', 'destino / permitido');
-ok(validarDestino('/integracoes') === '/integracoes', 'destino /integracoes permitido');
+ok(validarDestino('/pixels') === '/pixels', 'destino /pixels permitido');
+ok(validarDestino('/automatico') === '/automatico', 'destino /automatico permitido');
+ok(validarDestino('/integracoes') === '/integracoes', 'destino /integracoes permitido (308, decisao #10)');
 ok(validarDestino('/guia') === '/guia', 'destino /guia permitido');
+ok(!DESTINOS_PERMITIDOS.includes('/login'), '/login fora da allowlist (evita laco de redirecionamento)');
 
 ok(validarDestino('/\\evil.com') === '/', 'barra invertida rejeitada -> /');
 ok(validarDestino('//evil.com') === '/', 'barra dupla rejeitada -> /');

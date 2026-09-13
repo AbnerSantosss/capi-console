@@ -1,6 +1,7 @@
 import 'server-only';
 import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { DESTINOS_PERMITIDOS, type DestinoPermitido } from './rotas-console';
 
 /**
  * Sessão do console — cookie assinado com HMAC-SHA256 e chave derivada.
@@ -25,9 +26,15 @@ export const SESSAO_LONGA_H = 24 * 30;
 /** Mínimo de caracteres da senha do console. */
 export const SENHA_MIN = 12;
 
-/** Destinos permitidos após o login (D5). */
-export const DESTINOS_PERMITIDOS = ['/', '/integracoes', '/guia'] as const;
-export type DestinoPermitido = (typeof DESTINOS_PERMITIDOS)[number];
+/**
+ * Destinos permitidos após o login (D5).
+ *
+ * A lista mora em `rotas-console.ts` porque este arquivo é `server-only` e o
+ * `cliente-api.ts` (navegador) precisa da mesma allowlist no tratamento do 401.
+ * Re-exportado aqui para não quebrar quem já importava de `sessao`.
+ */
+export { DESTINOS_PERMITIDOS } from './rotas-console';
+export type { DestinoPermitido } from './rotas-console';
 
 export interface SessaoValida {
   usuario: string;

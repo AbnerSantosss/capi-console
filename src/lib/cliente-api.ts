@@ -7,6 +7,8 @@
  * - Em sucesso (2xx): retorna o payload JSON tipado `T`.
  */
 
+import { destinoSeguroDoPathname } from './rotas-console';
+
 export class SessaoExpirada extends Error {
   constructor(mensagem = 'Sessão expirada. Entre novamente.') {
     super(mensagem);
@@ -37,7 +39,7 @@ export async function pedir<T = unknown>(
   if (resposta.status === 401) {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
-      const destino = ['/', '/integracoes', '/guia'].includes(pathname) ? pathname : '/';
+      const destino = destinoSeguroDoPathname(pathname);
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign(`/login?destino=${encodeURIComponent(destino)}`);
     }

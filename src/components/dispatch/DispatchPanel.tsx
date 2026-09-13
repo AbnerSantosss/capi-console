@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { AlertTriangle, Eraser, FlaskConical, Target } from 'lucide-react';
 
@@ -11,7 +12,7 @@ import { useEmq } from '@/components/quality/QualityPanel';
 import { Spinner } from '@/components/common/Esqueleto';
 import { janelaRestante } from '@/lib/event-schema';
 import { Panel, StatusDot, Callout } from '@/components/common/primitives';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { MetaMark } from '@/components/ui/brand-icons';
 import { NumeroAnimado } from '@/components/common/motion';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -23,10 +24,20 @@ import { useBrandStore } from '@/stores/useBrandStore';
 
 interface Props {
   onResult: (r: DispatchResult) => void;
+  /**
+   * Chamado quando o disparo para por falta de token: leva para onde o token
+   * se resolve. Desde a criacao de /pixels isso e uma navegacao, e nao a
+   * abertura de um modal — por isso os botoes "Trocar pixel" abaixo viraram
+   * link, e so este caminho, que parte de dentro do `useDisparo`, continua
+   * sendo uma funcao.
+   */
   onAbrirMarcas: () => void;
 }
 
-export function DestinationSummary({ onAbrirMarcas }: { onAbrirMarcas: () => void }) {
+/** Um so destino, um so link: "Trocar pixel" leva para a pagina dos Pixels. */
+const LINK_TROCAR_PIXEL = '/pixels';
+
+export function DestinationSummary() {
   const marcas = useBrandStore((state) => state.marcas);
   const marcaAtivaId = useBrandStore((state) => state.marcaAtivaId);
   const ativa = marcas.find((marca) => marca.id === marcaAtivaId) ?? marcas[0];
@@ -38,9 +49,12 @@ export function DestinationSummary({ onAbrirMarcas }: { onAbrirMarcas: () => voi
       icon={Target}
       tone={emTeste ? 'default' : 'warning'}
       action={
-        <Button size="sm" variant="ghost" onClick={onAbrirMarcas}>
+        <Link
+          href={LINK_TROCAR_PIXEL}
+          className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+        >
           Trocar pixel
-        </Button>
+        </Link>
       }
     >
       <dl className="grid gap-3 text-caption sm:grid-cols-3">
@@ -220,9 +234,8 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={onAbrirMarcas}
+          <Link
+            href={LINK_TROCAR_PIXEL}
             className={cn(
               'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-caption font-semibold tracking-wide uppercase',
               d.emTeste
@@ -238,7 +251,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
             <span>
               {d.emTeste ? 'Teste' : 'Produção'}
             </span>
-          </button>
+          </Link>
 
           <div className="min-w-0 flex-1">
             <p className={cn('text-label font-bold tabular', cor.texto)}>

@@ -137,13 +137,13 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
                         : 'smooth',
                     });
                 } else {
-                  router.push('/integracoes#inbox');
+                  router.push('/automatico?aba=inbox');
                 }
               }}
             >
               Caixa de entrada
             </Item>
-            <Item icone={Plug} onSelect={() => { fechar(); router.push('/integracoes'); }}>
+            <Item icone={Plug} onSelect={() => { fechar(); router.push('/automatico'); }}>
               Disparo automático (Integrações)
             </Item>
             <Item icone={BookOpen} onSelect={() => { fechar(); router.push('/guia'); }}>

@@ -128,7 +128,7 @@ export const TAREFAS: Tarefa[] = [
       'Ache a venda pelo e-mail, pelo valor ou pelo número do pedido.',
       'Leia a situação do item: Enviado à Meta, Na fila ou Ignorado.',
     ],
-    cta: { rotulo: 'Abrir a caixa de entrada', href: '/integracoes#inbox' },
+    cta: { rotulo: 'Abrir a caixa de entrada', href: '/automatico?aba=inbox' },
     naoConfundir:
       'A aba Histórico de retornos não responde isso — ela conta as entregas para n8n e CRM, não os envios para a Meta.',
   },
@@ -194,7 +194,7 @@ export const CAMINHOS: Caminho[] = [
     quandoUsar:
       'Depois de um disparo manual bem-sucedido e da conferência no Testar eventos.',
     quemAperta: 'Ninguém aperta nada. Por isso a rede de segurança importa.',
-    cta: { rotulo: 'Ver as regras', href: '/integracoes#regras' },
+    cta: { rotulo: 'Ver as regras', href: '/automatico?aba=regras' },
   },
 ];
 

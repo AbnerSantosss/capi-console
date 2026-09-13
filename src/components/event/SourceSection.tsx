@@ -85,7 +85,7 @@ export function SourceSection() {
           </p>
           <InboxList compacto />
           <Link
-            href="/integracoes#inbox"
+            href="/automatico?aba=inbox"
             className="mt-3 inline-flex min-h-10 items-center text-label font-medium text-accent-text underline-offset-4 hover:underline"
           >
             Ver caixa de entrada completa

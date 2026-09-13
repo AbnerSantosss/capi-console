@@ -588,7 +588,7 @@ export function InboxList({ compacto = false }: { compacto?: boolean }) {
             </>
           }
           acao={
-            <Button variant="outline" render={<Link href="/integracoes" />}>
+            <Button variant="outline" render={<Link href="/automatico" />}>
               <Workflow className="size-4" aria-hidden />
               Configurar o endpoint
             </Button>

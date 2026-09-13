@@ -1,6 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import {
@@ -93,24 +100,113 @@ const ROTULO_EVENTO: Record<EventoRelay, string> = {
   'inbox.received': 'Webhook recebido',
 };
 
-const ABAS: Array<{
-  value: IntegrationTab;
+/**
+ * Cinco abas em tres grupos rotulados. Os ROTULOS das abas nao mudaram: o que
+ * mudou foi a companhia de cada uma (§7.6). O grupo responde "em que parte do
+ * caminho do evento isto acontece", que e a pergunta que a lista plana de seis
+ * abas nao respondia — e tira "Tag do site" da ultima posicao, onde parecia
+ * apendice sendo uma das duas origens de evento do produto.
+ */
+const GRUPOS: Array<{
+  id: string;
   label: string;
-  icon: typeof Webhook;
+  abas: Array<{ value: IntegrationTab; label: string; icon: typeof Webhook }>;
 }> = [
-  { value: 'recebimento', label: 'Recebimento', icon: Webhook },
-  { value: 'inbox', label: 'Caixa de entrada', icon: Inbox },
-  { value: 'regras', label: 'Regras', icon: GitBranch },
-  { value: 'retornos', label: 'Retornos', icon: ArrowUpRight },
-  { value: 'historico', label: 'Histórico', icon: History },
-  { value: 'tag', label: 'Tag do site', icon: Code2 },
+  {
+    id: 'entra',
+    label: 'O que entra',
+    abas: [
+      { value: 'recebimento', label: 'Recebimento', icon: Webhook },
+      { value: 'tag', label: 'Tag do site', icon: Code2 },
+    ],
+  },
+  {
+    id: 'acontece',
+    label: 'O que acontece',
+    abas: [
+      { value: 'inbox', label: 'Caixa de entrada', icon: Inbox },
+      { value: 'regras', label: 'Regras', icon: GitBranch },
+    ],
+  },
+  {
+    id: 'sai',
+    label: 'O que sai',
+    abas: [{ value: 'retornos', label: 'Retornos', icon: ArrowUpRight }],
+  },
 ];
+
+const ABAS = GRUPOS.flatMap((grupo) => grupo.abas);
 
 const ABA_PADRAO: IntegrationTab = 'recebimento';
 
-function abaDoHash(hash: string): IntegrationTab {
-  const value = hash.replace(/^#/, '') as IntegrationTab;
-  return ABAS.some((item) => item.value === value) ? value : ABA_PADRAO;
+/** `?aba=` so aceita o que existe; qualquer outra coisa cai no padrao. */
+function abaDaConsulta(valor: string | null): IntegrationTab | null {
+  return ABAS.some((item) => item.value === valor)
+    ? (valor as IntegrationTab)
+    : null;
+}
+
+/**
+ * 🔴 COMPATIBILIDADE PERMANENTE COM O HASH ANTIGO — NAO TIRE ESTE MAPA.
+ *
+ * Ate a FASE 4 a aba vivia em `window.location.hash`. Todo `#inbox`, `#regras`
+ * ou `#historico` ja salvo em favorito ou colado numa conversa continua tendo
+ * que abrir a aba certa: link publicado nao expira. Mesmo princípio da decisao
+ * irreversivel #10 (a URL de webhook de um segmento vale para sempre). Isto nao
+ * e uma migracao com prazo — e uma traducao que fica.
+ *
+ * `#historico` e o caso especial: a aba deixou de existir, entao ele aponta
+ * para Retornos, onde o Historico virou secao. O hash sobrevive como ANCORA de
+ * conteudo (`#historico` rola ate a secao), que e a funcao nativa que o uso
+ * como estado de aba vinha roubando (IA-R4).
+ */
+const HASH_LEGADO: Record<string, IntegrationTab> = {
+  recebimento: 'recebimento',
+  tag: 'tag',
+  inbox: 'inbox',
+  regras: 'regras',
+  retornos: 'retornos',
+  historico: 'retornos',
+};
+
+/** Unica ancora de conteudo que sobrevive a traducao do hash. */
+const ANCORA_HISTORICO = 'historico';
+
+function abaDoHashLegado(hash: string): IntegrationTab | null {
+  return HASH_LEGADO[hash.replace(/^#/, '')] ?? null;
+}
+
+/**
+ * O hash como fonte externa, lido por `useSyncExternalStore`. Duas razoes para
+ * nao ser `useState` + efeito: no servidor o hash nao existe (o snapshot de
+ * servidor e string vazia, e a hidratacao nao acusa divergencia), e o valor em
+ * cache so e invalidado por `hashchange`/`popstate` — nunca pelo nosso proprio
+ * `replaceState` de limpeza. Se o cache reagisse a limpeza, a aba escolhida
+ * pelo link antigo sumiria no intervalo entre apagar o hash e o roteador
+ * publicar o `?aba=` equivalente.
+ */
+let hashEmCache: string | null = null;
+
+function lerHash(): string {
+  if (hashEmCache === null) hashEmCache = window.location.hash;
+  return hashEmCache;
+}
+
+function lerHashNoServidor(): string {
+  return '';
+}
+
+function assinarHash(aoMudar: () => void): () => void {
+  const sincronizar = () => {
+    hashEmCache = window.location.hash;
+    aoMudar();
+  };
+  window.addEventListener('hashchange', sincronizar);
+  window.addEventListener('popstate', sincronizar);
+  return () => {
+    window.removeEventListener('hashchange', sincronizar);
+    window.removeEventListener('popstate', sincronizar);
+  };
 }
 
 /** Id de destino de retorno. Fora do componente: o relogio e impuro e o corpo
@@ -134,7 +230,6 @@ export function IntegrationsPage({
   const [entregas, setEntregas] = useState<Entrega[]>(inicial.entregas);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [aba, setAba] = useState<IntegrationTab>(ABA_PADRAO);
   const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
   const [rotuloRascunho, setRotuloRascunho] = useState(
@@ -142,23 +237,88 @@ export function IntegrationsPage({
   );
   const [salvandoRotulo, setSalvandoRotulo] = useState(false);
 
+  // A aba ativa mora na URL, nao em estado local (IA-R3): `?aba=regras` abre
+  // Regras direto, inclusive em aba nova do navegador e ja no HTML que vem do
+  // servidor. O hash antigo entra como segunda opcao e nunca ganha do `?aba=`.
+  // Filtro e busca continuam FORA da URL de proposito (IA-R5): sao efemeros e
+  // so poluiriam o historico.
+  const parametros = useSearchParams();
+  const hash = useSyncExternalStore(assinarHash, lerHash, lerHashNoServidor);
+  const aba: IntegrationTab =
+    abaDaConsulta(parametros.get('aba')) ?? abaDoHashLegado(hash) ?? ABA_PADRAO;
+
+  /**
+   * Troca de aba REESCREVE a entrada atual do historico em vez de empilhar uma
+   * nova. Com `pushState`, sete cliques em aba deixariam sete entradas entre o
+   * operador e a tela de onde ele veio, e o "voltar" do navegador viraria um
+   * "desfazer clique de aba" — o caminho de volta fica inutilizavel. Aba e
+   * ponto de vista, nao destino; a URL continua copiavel e compartilhavel, que
+   * era o objetivo de tirar isto do hash.
+   *
+   * `window.history.replaceState` e nao `router.replace` porque a rota e
+   * `force-dynamic`: uma navegacao do roteador releria a configuracao inteira
+   * no servidor a cada clique. O Next reflete o replaceState nativo em
+   * `useSearchParams`.
+   */
+  const selecionarAba = (value: IntegrationTab) => {
+    const novos = new URLSearchParams(parametros.toString());
+    novos.set('aba', value);
+    window.history.replaceState(null, '', `?${novos.toString()}`);
+  };
+
+  // Traduz o hash antigo em `?aba=` uma unica vez, por higiene da URL — quem ja
+  // mostrou a aba certa foi a derivacao acima, entao esta limpeza nunca pode
+  // ser o que faz o link antigo funcionar.
+  const hashJaTraduzido = useRef(false);
   useEffect(() => {
-    const sincronizar = () => setAba(abaDoHash(window.location.hash));
-    sincronizar();
-    window.addEventListener('hashchange', sincronizar);
-    window.addEventListener('popstate', sincronizar);
-    return () => {
-      window.removeEventListener('hashchange', sincronizar);
-      window.removeEventListener('popstate', sincronizar);
-    };
+    if (hashJaTraduzido.current) return;
+    const legado = abaDoHashLegado(window.location.hash);
+    const jaTemConsulta = new URLSearchParams(window.location.search).has('aba');
+    if (!legado || jaTemConsulta) return;
+    hashJaTraduzido.current = true;
+    const ehAncora = window.location.hash.replace(/^#/, '') === ANCORA_HISTORICO;
+    const novos = new URLSearchParams(window.location.search);
+    novos.set('aba', legado);
+    window.history.replaceState(
+      null,
+      '',
+      `?${novos.toString()}${ehAncora ? `#${ANCORA_HISTORICO}` : ''}`
+    );
   }, []);
 
-  const selecionarAba = (value: IntegrationTab) => {
-    setAba(value);
-    if (window.location.hash !== `#${value}`) {
-      window.history.pushState(null, '', `${window.location.pathname}#${value}`);
+  // `#historico` continua rolando ate a secao — so que agora como ancora de
+  // conteudo dentro de Retornos. O painel so existe depois de a aba virar, por
+  // isso o efeito depende de `aba` e nao roda so na montagem.
+  const historicoJaRolado = useRef(false);
+  useEffect(() => {
+    if (historicoJaRolado.current || aba !== 'retornos') return;
+    if (window.location.hash.replace(/^#/, '') !== ANCORA_HISTORICO) return;
+    const alvo = document.getElementById(ANCORA_HISTORICO);
+    if (!alvo) return;
+    historicoJaRolado.current = true;
+    alvo.scrollIntoView({ block: 'start' });
+  }, [aba]);
+
+  // Em tela estreita as cinco abas passam da largura e a faixa rola na
+  // horizontal — nenhuma aba e escondida. Se a aba ativa veio da URL, ela pode
+  // nascer fora do campo de visao: entao a FAIXA rola ate mostra-la, nunca a
+  // pagina.
+  const faixaDeAbas = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const caixa = faixaDeAbas.current;
+    const alvo = caixa?.querySelector<HTMLElement>(
+      '[data-slot="tabs-trigger"][data-active]'
+    );
+    if (!caixa || !alvo) return;
+    const folga = 12;
+    const limites = caixa.getBoundingClientRect();
+    const item = alvo.getBoundingClientRect();
+    if (item.left < limites.left + folga) {
+      caixa.scrollLeft -= limites.left + folga - item.left;
+    } else if (item.right > limites.right - folga) {
+      caixa.scrollLeft += item.right - (limites.right - folga);
     }
-  };
+  }, [aba]);
 
   const carregar = useCallback(async () => {
     try {
@@ -434,34 +594,63 @@ export function IntegrationsPage({
         onValueChange={(value) => value && selecionarAba(value as IntegrationTab)}
         className="mt-6 min-w-0 gap-5"
       >
-        <div className="max-w-full overflow-x-auto rounded-xl border border-line-strong bg-surface-1/95 p-1.5">
-          <TabsList className="h-auto min-w-max gap-1 bg-transparent p-0">
-            {ABAS.map((item) => {
-              const Icon = item.icon;
-              const count =
-                item.value === 'regras'
-                  ? cfg.regras.length
-                  : item.value === 'retornos'
-                    ? cfg.saida.length
-                    : item.value === 'historico'
-                      ? entregas.length
-                      : item.value === 'tag'
-                        ? cfg.tag.dominios.length
-                        : undefined;
-              return (
-                <TabsTrigger
-                  key={item.value}
-                  value={item.value}
-                  className="h-11 gap-2 rounded-lg px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
+        <div
+          ref={faixaDeAbas}
+          className="max-w-full overflow-x-auto rounded-panel border border-line-strong bg-surface-1/95 p-1.5"
+        >
+          {/* Os grupos sao divisoria visual (P6, proximidade) e nao semantica:
+              `role="presentation"` mantem a `tablist` com abas como unicos
+              filhos reconhecidos, e cada aba aponta o rotulo do seu grupo por
+              `aria-describedby` — quem usa leitor de tela ouve "Recebimento,
+              O que entra", e nao uma lista plana de cinco nomes soltos. */}
+          <TabsList
+            aria-label="Seções do disparo automático"
+            className="h-auto w-max min-w-full items-stretch gap-2 bg-transparent p-0"
+          >
+            {GRUPOS.map((grupo, indice) => (
+              <div
+                key={grupo.id}
+                role="presentation"
+                className={cn(
+                  'flex min-w-0 flex-col gap-1 px-1',
+                  indice > 0 && 'border-l border-line pl-3'
+                )}
+              >
+                <span
+                  id={`grupo-${grupo.id}`}
+                  className="px-1 text-caption font-semibold tracking-wide text-fg-muted uppercase"
                 >
-                  <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
-                  {item.label}
-                  {count !== undefined && (
-                    <Badge className="font-mono tabular">{count}</Badge>
-                  )}
-                </TabsTrigger>
-              );
-            })}
+                  {grupo.label}
+                </span>
+                <div role="presentation" className="flex items-center gap-1">
+                  {grupo.abas.map((item) => {
+                    const Icon = item.icon;
+                    const count =
+                      item.value === 'regras'
+                        ? cfg.regras.length
+                        : item.value === 'retornos'
+                          ? cfg.saida.length
+                          : item.value === 'tag'
+                            ? cfg.tag.dominios.length
+                            : undefined;
+                    return (
+                      <TabsTrigger
+                        key={item.value}
+                        value={item.value}
+                        aria-describedby={`grupo-${grupo.id}`}
+                        className="h-11 gap-2 rounded-control px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
+                      >
+                        <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
+                        {item.label}
+                        {count !== undefined && (
+                          <Badge className="font-mono tabular">{count}</Badge>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </TabsList>
         </div>
 
@@ -737,6 +926,11 @@ export function IntegrationsPage({
 
       {/* ---------------------------------------------------------- */}
         <TabsContent value="retornos" className="min-w-0 outline-none">
+          {/* "Historico" deixou de ser aba e virou secao daqui (§7.3.3): o log
+              de entregas e o resultado DESTE assunto, nao um assunto proprio.
+              Nada foi escondido — as duas secoes dividem o painel e o contador
+              de entregas continua a vista no cabecalho do Historico. */}
+          <div className="flex min-w-0 flex-col gap-5">
       <Section
         icon={ArrowUpRight}
         variant="card"
@@ -892,20 +1086,21 @@ export function IntegrationsPage({
           O retorno contém apenas os dados necessários para o sistema configurado.
         </Callout>
       </Section>
-        </TabsContent>
 
-      {/* ---------------------------------------------------------- */}
-        <TabsContent value="historico" className="min-w-0 outline-none">
       <Section
+        id={ANCORA_HISTORICO}
         icon={History}
         variant="card"
         title="Histórico de retornos"
         description="As últimas 50 tentativas de entrega ao n8n ou CRM."
         action={
-          <Button size="sm" variant="ghost" onClick={carregar} disabled={salvando}>
-            <RefreshCw className="size-3.5" aria-hidden />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Badge className="font-mono tabular">{entregas.length}</Badge>
+            <Button size="sm" variant="ghost" onClick={carregar} disabled={salvando}>
+              <RefreshCw className="size-3.5" aria-hidden />
+              Atualizar
+            </Button>
+          </div>
         }
       >
         {entregas.length === 0 ? (
@@ -986,6 +1181,7 @@ export function IntegrationsPage({
           </div>
         )}
       </Section>
+          </div>
         </TabsContent>
 
         <TabsContent value="tag" className="min-w-0 outline-none">

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { BookOpen, Send, Target } from 'lucide-react';
 
 import { SourceSection } from '@/components/event/SourceSection';
@@ -17,7 +18,6 @@ import { ResultPanel } from '@/components/dispatch/ResultPanel';
 import { ErrorSummary } from '@/components/common/ErrorSummary';
 import { Stepper } from '@/components/common/Stepper';
 import { Section } from '@/components/common/primitives';
-import { BrandDialog } from '@/components/brand/BrandDialog';
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EntraESai, Entrada } from '@/components/common/motion';
 import type { DispatchResult } from '@/components/dispatch/tipos';
@@ -26,8 +26,8 @@ import consoleStyles from '@/components/layout/console.module.css';
 import { buttonVariants } from '@/components/ui/button';
 
 export default function Home() {
+  const router = useRouter();
   const [resultado, setResultado] = useState<DispatchResult | null>(null);
-  const [marcasAbertas, setMarcasAbertas] = useState(false);
 
   const eventTime = useEventStore((s) => s.eventTime);
   const setField = useEventStore((s) => s.setField);
@@ -103,13 +103,13 @@ export default function Home() {
                 <QualityPanel />
               </Entrada>
               <div className="min-[1200px]:hidden">
-                <DestinationSummary onAbrirMarcas={() => setMarcasAbertas(true)} />
+                <DestinationSummary />
               </div>
               {/* Abaixo de xl a ação vive na barra fixa, não aqui. */}
               <div className="hidden flex-col gap-4 min-[1200px]:flex">
                 <DispatchPanel
                   onResult={aoReceberResultado}
-                  onAbrirMarcas={() => setMarcasAbertas(true)}
+                  onAbrirMarcas={() => router.push('/pixels')}
                 />
               </div>
             </Section>
@@ -117,12 +117,13 @@ export default function Home() {
         </div>
       </main>
 
+      {/* O dialogo de Pixel saiu daqui: criar e editar Pixel agora acontecem
+          em /pixels, que e a pagina do assunto. O que sobrou nesta tela e o
+          caminho ate la, para quando o disparo para por falta de token. */}
       <DispatchBar
         onResult={aoReceberResultado}
-        onAbrirMarcas={() => setMarcasAbertas(true)}
+        onAbrirMarcas={() => router.push('/pixels')}
       />
-
-      <BrandDialog open={marcasAbertas} onOpenChange={setMarcasAbertas} />
     </>
   );
 }
