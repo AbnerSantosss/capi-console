@@ -7,10 +7,12 @@ import { usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   BookOpen,
+  Building2,
   Clock,
   Eraser,
   Inbox,
   Plug,
+  Plus,
   Target,
   Wand2,
   Workflow,
@@ -117,6 +119,42 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             </Item>
             </Command.Group>
           )}
+
+          {/* Empresa antes de "Ir para" porque ela nao e um destino: e o
+              escopo de TODO o resto da paleta. Trocar de empresa muda quais
+              Pixels, quais regras e qual caixa de entrada as outras linhas vao
+              encontrar, entao ela vem primeiro.
+
+              Como os dois itens chegam la: por `window.dispatchEvent`, o mesmo
+              recurso que ja abre esta paleta a partir do botao do cabecalho
+              (`capi:abrir-paleta`, no useEffect acima). Quem escuta e o
+              `SeletorDeEmpresa` — ele e dono do menu e do dialogo, e nao
+              aceita props por contrato. A alternativa seria um contexto novo
+              so para dois cliques; o barramento ja existia e ja e o padrao
+              deste arquivo. */}
+          <Command.Group
+            heading="Empresa"
+            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
+          >
+            <Item
+              icone={Building2}
+              onSelect={() => {
+                fechar();
+                window.dispatchEvent(new CustomEvent('capi:trocar-empresa'));
+              }}
+            >
+              Trocar de empresa
+            </Item>
+            <Item
+              icone={Plus}
+              onSelect={() => {
+                fechar();
+                window.dispatchEvent(new CustomEvent('capi:adicionar-empresa'));
+              }}
+            >
+              Adicionar empresa
+            </Item>
+          </Command.Group>
 
           <Command.Group
             heading="Ir para"

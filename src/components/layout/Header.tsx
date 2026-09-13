@@ -7,10 +7,12 @@ import { toast } from 'sonner';
 import {
   AlertTriangle,
   BookOpen,
+  Building2,
   ChevronDown,
   FlaskConical,
   LogOut,
   Plug,
+  Plus,
   Settings,
   Command,
   Send,
@@ -19,15 +21,15 @@ import {
 } from 'lucide-react';
 
 import { useBrandStore, limparLegado } from '@/stores/useBrandStore';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { useEstadoAutomatico, type SituacaoAuto } from '@/hooks/useEstadoAutomatico';
 import { useEventStore } from '@/stores/useEventStore';
 import { Badge } from '@/components/ui/badge';
-import { MetaGlyph } from '@/components/ui/brand-icons';
+import { SeletorDeEmpresa } from '@/components/empresa/SeletorDeEmpresa';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { NOME_PRODUTO } from '@/lib/produto';
 
 /**
  * Os dois caminhos ate a Meta precisam estar ditos aqui, com todas as letras:
@@ -117,10 +119,15 @@ export function Header() {
   const marcaAtivaId = useBrandStore((s) => s.marcaAtivaId);
   const carregado = useBrandStore((s) => s.carregado);
   const carregar = useBrandStore((s) => s.carregar);
+  const carregarEmpresas = useEmpresaStore((s) => s.carregar);
   const automatico = useEstadoAutomatico();
 
   useEffect(() => {
     void carregar();
+    // A lista de empresas entra pelo mesmo caminho das marcas: o cabecalho e o
+    // unico componente presente em toda tela, entao e dele a montagem que
+    // enche os dois stores. O `SeletorDeEmpresa` so le — ele nunca busca.
+    void carregarEmpresas();
     if (limparLegado()) {
       toast.warning('Token removido do navegador', {
         description:
@@ -128,7 +135,7 @@ export function Header() {
         duration: 10000,
       });
     }
-  }, [carregar]);
+  }, [carregar, carregarEmpresas]);
 
   /** Apaga o cookie de sessão e limpa PII do rascunho local (D10). */
   const sair = async () => {
@@ -161,24 +168,12 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface-0/90 backdrop-blur-md">
       <div className="mx-auto flex min-h-16 w-full max-w-[1280px] items-center gap-2 px-4 py-2 sm:px-6 lg:gap-4 lg:px-8">
-        {/* Marca do produto — o unico lugar com o laco colorido em caixa.
-            A segunda linha e o nome da EMPRESA, nao do produto: a FASE D troca
-            este literal pelo nome e pela logo da empresa ativa, que e onde o
-            "Codigo Vencedor" passa a ser uma empresa entre outras. */}
-        <Link
-          href="/"
-          className="flex h-control-sm shrink-0 items-center gap-2.5 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
-        >
-          <MetaGlyph size={28} decorative={false} />
-          <span className="hidden flex-col leading-none sm:flex">
-            <span className="text-label font-semibold text-fg-strong">
-              {NOME_PRODUTO}
-            </span>
-            <span className="mt-0.5 text-caption text-fg-muted">
-              Código Vencedor
-            </span>
-          </span>
-        </Link>
+        {/* Quem e a empresa dona da tela. O literal "Codigo Vencedor" que
+            ficava aqui virou o nome da empresa ATIVA, lido do
+            `useEmpresaStore` — o Codigo Vencedor passou a ser uma empresa
+            entre outras, e a logo dela e o que sinaliza que todo o resto do
+            cabecalho fala dela. O nome do produto desceu para a legenda. */}
+        <SeletorDeEmpresa />
 
         {/* Navegacao */}
         <nav aria-label="Seções" className="hidden items-center gap-1 lg:flex">
@@ -263,6 +258,29 @@ export function Header() {
           <Target className="size-4" strokeWidth={1.75} aria-hidden />
           Pixel e token
         </Link>
+
+        {/* "Adicionar empresa" no canto superior direito, ao lado de "Pixel e
+            token" — pedido explicito do dono. Ele nao abre o dialogo por
+            estado proprio: avisa o `SeletorDeEmpresa`, que e quem tem o
+            `EmpresaDialog`, pelo mesmo barramento de evento de janela que este
+            cabecalho ja usa para abrir a paleta. Assim existe UM dialogo de
+            empresa na arvore, e nao um por botao que o invoca.
+            O rotulo encolhe antes de sumir: em telas estreitas ficam so os
+            icones, e quem le a tela por audio recebe o `aria-label`. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent('capi:adicionar-empresa'))
+          }
+          aria-label="Adicionar empresa"
+          title="Adicionar empresa"
+        >
+          <Building2 className="size-4" strokeWidth={1.75} aria-hidden />
+          <Plus className="-ml-1 size-3" strokeWidth={2.5} aria-hidden />
+          <span className="hidden xl:inline">Adicionar empresa</span>
+          <span className="hidden sm:inline xl:hidden">Empresa</span>
+        </Button>
 
         {/* Paleta de comandos */}
         <Button

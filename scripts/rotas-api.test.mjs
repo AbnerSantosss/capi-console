@@ -72,6 +72,9 @@ const rotaStream = await import(
 const rotaIntegracoes = await import(
   new URL('../src/app/api/integracoes/route.ts', import.meta.url).href
 );
+const rotaEmpresas = await import(
+  new URL('../src/app/api/empresas/route.ts', import.meta.url).href
+);
 const rotaWebhook = await import(new URL('../src/app/api/webhook/in/route.ts', import.meta.url).href);
 
 let falhas = 0;
@@ -174,6 +177,53 @@ const resAdulterado = await rotaInbox.GET(
   req('/api/inbox', { cabecalhos: { cookie: adulterado } })
 );
 ok(resAdulterado.status === 401, 'GET /api/inbox com cookie adulterado → 401');
+
+/* ================================================================== */
+/* D.1.6 — /api/empresas nasce com a mesma trava                       */
+/* ================================================================== */
+/**
+ * A rota de empresas entrou na FASE D, depois de §14.8.2 — e é justamente a
+ * rota que CRIA e APAGA empresa, arrastando os Pixels junto (D-17). Ficar de
+ * fora da tabela de travas é como um handler nasce sem guarda: ninguém lembra
+ * de conferir o que não está na lista.
+ *
+ * Os corpos são de propósito inválidos: o que está sob teste é o 401 chegar
+ * ANTES de qualquer leitura de arquivo. Com sessão válida a resposta é 400 ou
+ * 200 — o que importa é não ser 401.
+ */
+console.log('\n  -- D.1.6: 401 sem cookie de sessão em /api/empresas --');
+
+const EMPRESAS = [
+  ['GET    /api/empresas', (s) => rotaEmpresas.GET(req('/api/empresas', { sessao: s }))],
+  [
+    'PUT    /api/empresas',
+    (s) => rotaEmpresas.PUT(req('/api/empresas', { metodo: 'PUT', sessao: s, corpo: {} })),
+  ],
+  [
+    'DELETE /api/empresas',
+    (s) =>
+      rotaEmpresas.DELETE(
+        req('/api/empresas?id=nao-existe', { metodo: 'DELETE', sessao: s, corpo: { confirmar: true } })
+      ),
+  ],
+];
+
+for (const [nome, chamar] of EMPRESAS) {
+  const res = await chamar(false);
+  const corpo = await corpoDe(res);
+  ok(
+    res.status === 401 && ehJson(res) && typeof corpo?.erro === 'string',
+    `${nome} → 401 JSON sem cookie`,
+    `status=${res.status}`
+  );
+}
+
+console.log('\n  -- e com cookie válido nenhuma delas responde 401 --');
+for (const [nome, chamar] of EMPRESAS) {
+  const res = await chamar(true);
+  await corpoDe(res);
+  ok(res.status !== 401, `${nome} → ${res.status} com sessão válida`);
+}
 
 /* ================================================================== */
 /* C20 / B11-b — o DELETE destrutivo exige confirmação                 */

@@ -7,6 +7,7 @@ import {
   acharMarca,
 } from '@/lib/config-store';
 import { exigirSessao } from '@/lib/sessao';
+import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { erroDeRota } from '@/lib/erro-api';
 
 /**
@@ -15,11 +16,17 @@ import { erroDeRota } from '@/lib/erro-api';
  * B-11 — este GET era o unico handler do arquivo sem guarda: o PUT e o DELETE
  * ja chamavam `exigirSessao()`. `MarcaPublica` nao leva o token, mas leva o
  * `pixelId` de todas as marcas, e a assinatura mudou para receber `request`.
+ *
+ * D.1.5 — a lista agora é a da EMPRESA ATIVA (cabeçalho `x-empresa-id`, senão o
+ * cookie, senão a padrão). Isto é escopo de TELA, não de entrega: quem resolve
+ * um evento que chega pelo webhook continua sendo a credencial apresentada, e
+ * por isso `auto-dispatch`, `modo-por-marca` e os handlers de webhook/tag seguem
+ * chamando `listarMarcas()` sem argumento, enxergando todos os Pixels.
  */
 export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
-    const marcas = await listarMarcas();
+    const marcas = await listarMarcas(await empresaDaRequisicao(request));
     return NextResponse.json({ marcas: marcas.map(publicarMarca) });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível listar os Pixels.');
@@ -61,6 +68,28 @@ export async function PUT(request: NextRequest) {
     const ligando = mudaAuto && body.autoDisparo === true;
 
     /**
+     * A marca já gravada, lida UMA vez e reusada abaixo.
+     *
+     * `listarMarcas()` sem argumento de propósito: a existência de um Pixel não
+     * depende de qual empresa está aberta na aba. `acharMarca()` não serve aqui
+     * porque ele CAI NA PRIMEIRA marca quando o id não existe — e "não existe"
+     * é exatamente a resposta que este trecho precisa distinguir.
+     */
+    const existente = (await listarMarcas()).find((m) => m.id === id);
+
+    /**
+     * D.1.5 — a empresa só é carimbada quando o Pixel é NOVO.
+     *
+     * Pixel que já existe mantém a empresa gravada, mesmo que o operador esteja
+     * com outra aberta na tela: MOVER um Pixel de empresa não está neste plano,
+     * e fazê-lo por efeito colateral de um "Salvar" no formulário de edição
+     * mudaria em silêncio para onde vai a conversão de um cliente.
+     */
+    const daEmpresaAtiva = existente
+      ? {}
+      : { empresaId: await empresaDaRequisicao(request) };
+
+    /**
      * B3-e: LIGAR exige Pixel ID e token. DESLIGAR nunca e recusado.
      *
      * A tela ja impede antes (o Switch nasce desabilitado num Pixel sem
@@ -76,8 +105,9 @@ export async function PUT(request: NextRequest) {
     if (ligando) {
       const limpandoToken = body.accessToken === null;
       const tokenEnviado = limpandoToken ? '' : String(body.accessToken ?? '').trim();
-      const atual = (await listarMarcas()).find((m) => m.id === id);
-      const tokenDepois = limpandoToken ? '' : tokenEnviado || (atual?.accessToken ?? '').trim();
+      const tokenDepois = limpandoToken
+        ? ''
+        : tokenEnviado || (existente?.accessToken ?? '').trim();
 
       if (!tokenDepois) {
         return NextResponse.json(
@@ -99,6 +129,7 @@ export async function PUT(request: NextRequest) {
       testCode: String(body.testCode ?? '').trim(),
       adAccountId: String(body.adAccountId ?? '').trim() || undefined,
       ...(mudaAuto ? { autoDisparo: body.autoDisparo as boolean } : {}),
+      ...daEmpresaAtiva,
     } as Parameters<typeof salvarMarca>[0]);
 
     // Devolve a visao mesclada (config + .env), nao o registro cru: uma marca

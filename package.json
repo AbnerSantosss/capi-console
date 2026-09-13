@@ -19,7 +19,8 @@
     "test:rotas": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/rotas-api.test.mjs",
     "test:inbox-sinais": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/inbox-sinais.test.mjs",
     "test:inbox-lote": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/inbox-lote.test.mjs",
-    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel && npm run test:inbox-sinais && npm run test:inbox-lote"
+    "test:empresas": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/empresas.test.mjs",
+    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel && npm run test:inbox-sinais && npm run test:inbox-lote && npm run test:empresas"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

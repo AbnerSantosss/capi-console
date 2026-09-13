@@ -45,6 +45,39 @@ const ARQ_MARCAS = path.join(DIR, 'marcas.json');
 const ARQ_INTEGRACOES = path.join(DIR, 'integracoes.json');
 
 /* ------------------------------------------------------------------ */
+/* Empresa dona do Pixel (FASE D)                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A empresa que sempre existe: a instalação que já roda hoje.
+ *
+ * O registro de empresas mora em `empresas.ts`, e não aqui — mas o ID da
+ * padrão e a cerca do formato precisam morar NESTE arquivo, porque é ele que
+ * filtra Pixel por empresa e `empresas.ts` já importa daqui. Definir os dois
+ * lá e importar de volta fecharia um ciclo; definir os dois nos DOIS lugares
+ * criaria a segunda fonte de verdade que sempre diverge.
+ *
+ * `empresas.ts` reexporta estes três símbolos para quem lê o registro: quem
+ * trabalha com empresas continua importando de lá.
+ */
+export const EMPRESA_DEFAULT_ID = 'default';
+
+/**
+ * 🔴 Esta expressão é uma CERCA, não uma preferência de estilo.
+ *
+ * O id de empresa vira NOME DE ARQUIVO na FASE E (`integracoes.<id>.json`).
+ * Sem a cerca, um id com `../` viajaria até um `path.join` e passaria perto de
+ * `config/integracoes.json` — o arquivo que guarda o segredo pelo qual a venda
+ * entra hoje (E-4). Letras, números, `_` e `-`, começando por alfanumérico, no
+ * máximo 40 caracteres.
+ */
+const RE_ID_EMPRESA = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
+
+export function idDeEmpresaValido(id: unknown): id is string {
+  return typeof id === 'string' && RE_ID_EMPRESA.test(id);
+}
+
+/* ------------------------------------------------------------------ */
 /* Marcas                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -76,6 +109,32 @@ export interface Marca {
    * Regra 1 de 9.5.1 — item de revisao de codigo, nao preferencia de estilo.
    */
   autoDisparo?: boolean;
+  /**
+   * Empresa dona deste Pixel. OPCIONAL de propósito: ausente = empresa padrão.
+   *
+   * Todo Pixel gravado antes da FASE D não tem o campo, e todos eles são do
+   * dono do console — que é exatamente a empresa padrão. Nunca leia este campo
+   * cru: use `empresaDaMarca(m)`, que aplica a ausência e a cerca de formato.
+   */
+  empresaId?: string;
+}
+
+/**
+ * De qual empresa é este Pixel. ÚNICA leitura aceita de `Marca.empresaId`.
+ *
+ * Três regras, nesta ordem:
+ *
+ *  1. 🔴 a marca `default` (a implícita, vinda do `.env`) é SEMPRE da empresa
+ *     padrão, venha o que vier gravado: ela é o Pixel do dono do console;
+ *  2. id gravado fora do formato é tratado como ausente — um valor estranho
+ *     deixa o Pixel na empresa padrão, que é a direção segura, em vez de criar
+ *     um grupo órfão sem tela que o mostre;
+ *  3. ausente = empresa padrão (E-3: campo novo é sempre opcional na leitura e
+ *     tem valor derivado quando falta).
+ */
+export function empresaDaMarca(m: Marca): string {
+  if (m.id === 'default') return EMPRESA_DEFAULT_ID;
+  return idDeEmpresaValido(m.empresaId) ? m.empresaId : EMPRESA_DEFAULT_ID;
 }
 
 /** A forma que o cliente pode ver. */
@@ -94,6 +153,12 @@ export interface MarcaPublica {
    * a usar `?? true` (9.A, 9.5.1).
    */
   autoDisparo: boolean;
+  /**
+   * Empresa dona, já resolvida por `empresaDaMarca()` — nunca opcional, pelo
+   * mesmo motivo de `autoDisparo`: a normalização acontece na borda, e nenhuma
+   * tela precisa decidir o que fazer com `undefined`.
+   */
+  empresaId: string;
 }
 
 export function publicarMarca(m: Marca): MarcaPublica {
@@ -107,6 +172,7 @@ export function publicarMarca(m: Marca): MarcaPublica {
     doEnv: m.doEnv,
     // === true e o ponto inteiro. Ver o JSDoc de `Marca.autoDisparo`.
     autoDisparo: m.autoDisparo === true,
+    empresaId: empresaDaMarca(m),
   };
 }
 
@@ -158,8 +224,15 @@ async function tentarLer<T>(arquivo: string, valido?: (d: T) => boolean): Promis
   return { estado: 'ok', dados };
 }
 
-/** O que sobrou depois de tentar o arquivo e, se preciso, o `.bak`. */
-type Leitura<T> =
+/**
+ * O que sobrou depois de tentar o arquivo e, se preciso, o `.bak`.
+ *
+ * Exportado (junto de `lerComBackup`) porque `empresas.ts` mantinha uma cópia
+ * privada deste par — e duas cópias da regra "ausente ≠ ilegível" é a forma
+ * mais fácil de uma delas, um dia, voltar a tratar arquivo quebrado como
+ * arquivo novo. Que é o defeito B1 inteiro.
+ */
+export type Leitura<T> =
   | { estado: 'ok'; dados: T }
   /** O arquivo não servia e o `.bak` serviu — restaurar e registrar (B1-e). */
   | { estado: 'restaurado'; dados: T }
@@ -168,7 +241,10 @@ type Leitura<T> =
   /** Existe e está quebrado, e o `.bak` também. Modo degradado (B1-e). */
   | { estado: 'indisponivel'; motivo: string };
 
-async function lerComBackup<T>(arquivo: string, valido?: (d: T) => boolean): Promise<Leitura<T>> {
+export async function lerComBackup<T>(
+  arquivo: string,
+  valido?: (d: T) => boolean
+): Promise<Leitura<T>> {
   const principal = await tentarLer<T>(arquivo, valido);
   if (principal.estado === 'ok') return { estado: 'ok', dados: principal.dados };
 
@@ -231,7 +307,20 @@ function marcaDoEnv(): Marca {
   };
 }
 
-export async function listarMarcas(): Promise<Marca[]> {
+/**
+ * Os Pixels. Com `empresaId`, só os daquela empresa (D.1.2).
+ *
+ * O parâmetro é OPCIONAL e a ausência dele devolve TUDO — e isso é deliberado.
+ * Quem chama sem argumento (`auto-dispatch`, `modo-por-marca`, o handler do
+ * webhook, o de tag) precisa enxergar todos os Pixels: um evento que chega pelo
+ * webhook é resolvido pela CREDENCIAL apresentada, não pela empresa que o
+ * operador está olhando no navegador. Filtrar por padrão faria uma venda de um
+ * cliente sumir só porque a aba estava aberta em outro — e conversão perdida
+ * não volta atrás.
+ *
+ * Quem passa o argumento é a tela: `GET /api/marcas`, com a empresa ativa.
+ */
+export async function listarMarcas(empresaId?: string): Promise<Marca[]> {
   const salvas = await lerJson<Marca[]>(ARQ_MARCAS, []);
   const env = marcaDoEnv();
   const sobrescrita = salvas.find((m) => m.id === 'default');
@@ -246,7 +335,9 @@ export async function listarMarcas(): Promise<Marca[]> {
       }
     : env;
 
-  return [padrao, ...salvas.filter((m) => m.id !== 'default')];
+  const todas = [padrao, ...salvas.filter((m) => m.id !== 'default')];
+  if (empresaId === undefined) return todas;
+  return todas.filter((m) => empresaDaMarca(m) === empresaId);
 }
 
 export async function acharMarca(id: string): Promise<Marca | undefined> {
@@ -276,6 +367,17 @@ export async function salvarMarca(entrada: Partial<Marca> & { id: string }) {
           testCode: '',
         };
 
+    /**
+     * `empresaId` gravado passa pela cerca de formato ANTES do disco.
+     *
+     * Um id fora do formato é IGNORADO, nunca coagido: o Pixel fica onde estava
+     * (ou na empresa padrão, se é novo). O `...entrada` acima já teria copiado
+     * o valor cru, então a atribuição explícita abaixo é o que fecha a porta —
+     * `undefined` some do arquivo no `JSON.stringify`, que é o que queremos
+     * para um Pixel da empresa padrão.
+     */
+    const empresaId = idDeEmpresaValido(entrada.empresaId) ? entrada.empresaId : base.empresaId;
+
     const atualizada: Marca = {
       ...base,
       ...entrada,
@@ -286,6 +388,7 @@ export async function salvarMarca(entrada: Partial<Marca> & { id: string }) {
           : entrada.accessToken?.trim()
             ? entrada.accessToken.trim()
             : base.accessToken,
+      empresaId,
     };
 
     if (i >= 0) salvas[i] = atualizada;
