@@ -26,9 +26,12 @@ export async function GET(request: NextRequest) {
   try {
     exigirSessao(request);
     const empresaId = await empresaDaRequisicao(request);
-    const dias = periodoValido(new URL(request.url).searchParams.get('dias'));
+    const busca = new URL(request.url).searchParams;
+    const periodo = periodoValido(busca.get('dias'), busca.get('de'), busca.get('ate'));
     const itens = await listarEntradas(AMOSTRA, empresaId);
-    const resumo = resumirInbox(itens, new Date().toISOString(), dias);
+    // `AMOSTRA` entra de novo aqui, agora como teto declarado: é assim que o
+    // resumo sabe dizer se a leitura alcançou o começo da janela ou parou antes.
+    const resumo = resumirInbox(itens, new Date().toISOString(), periodo, AMOSTRA);
     return NextResponse.json({ resumo });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível montar o painel.');

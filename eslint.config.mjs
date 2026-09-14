@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Saida gerada pelo Claude Design (ds-bundle e .ds-sync sao ignorados no
+    // git; .design-sync/previews sao previews gerados pelo conversor). Nada
+    // disso entra no build do console nem e importado por src/ — lintar
+    // bundle de terceiros so produz ruido (hooks de dentro do React, regras
+    // inexistentes citadas em comentarios do vendor).
+    "ds-bundle/**",
+    ".ds-sync/**",
+    ".design-sync/**",
   ]),
 ]);
 

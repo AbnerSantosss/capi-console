@@ -225,7 +225,7 @@ export function WebhookInstalacao({
           id="endpoint-rotulado"
           label={`URL para ${nomePlataforma}`}
           helper="Cole esta URL no cadastro de webhooks da plataforma de vendas. O apelido é só para você reconhecer a linha no backoffice; quem autentica é o segredo, sempre o último pedaço do endereço."
-          className="rounded-lg border border-line bg-surface-2/55 p-4"
+          className="rounded-lg border border-line bg-surface-2 p-4"
           action={
             <div className="flex gap-1">
               <Button
@@ -265,7 +265,7 @@ export function WebhookInstalacao({
         </Field>
 
         {ehXWinner && (
-          <div className="rounded-lg border border-line bg-surface-2/55 p-4">
+          <div className="rounded-lg border border-line bg-surface-2 p-4">
             <p className="flex items-center gap-2 text-label font-semibold text-fg-strong">
               <Info className="size-4 shrink-0 text-fg-muted" aria-hidden />
               Como cadastrar esta URL no xWinner
@@ -297,7 +297,7 @@ export function WebhookInstalacao({
           label="Apelido desta URL"
           helper={`Minúsculas, dígitos e hífen. Aparece no endereço como /api/webhook/in/${rotuloLimpo || 'apelido'}/…`}
           error={erroRotulo ?? undefined}
-          className="rounded-lg border border-line bg-surface-2/55 p-4"
+          className="rounded-lg border border-line bg-surface-2 p-4"
           action={
             <Button
               size="sm"
@@ -329,7 +329,7 @@ export function WebhookInstalacao({
           </Callout>
         )}
 
-        <Accordion className="rounded-lg border border-line bg-surface-2/45">
+        <Accordion className="rounded-lg border border-line bg-surface-2">
           <AccordionItem value="url-antiga" className="last:border-b-0">
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="text-label font-semibold text-fg-body">
@@ -370,7 +370,7 @@ export function WebhookInstalacao({
           id="endpoint-header"
           label="URL para o n8n"
           helper="Quando o remetente aceita header customizado, prefira este formato: a URL fica limpa e o segredo não aparece nela."
-          className="rounded-lg border border-line bg-surface-2/55 p-4"
+          className="rounded-lg border border-line bg-surface-2 p-4"
           action={
             <Button
               size="sm"
@@ -399,7 +399,7 @@ export function WebhookInstalacao({
           label="Segredo"
           param="X-CAPI-Secret"
           helper="Vale para as duas URLs acima. Sem o segredo correto o endpoint responde 401."
-          className="rounded-lg border border-line bg-surface-2/55 p-4"
+          className="rounded-lg border border-line bg-surface-2 p-4"
           action={
             <div className="flex gap-1">
               <Button
@@ -442,7 +442,7 @@ export function WebhookInstalacao({
           />
         </Field>
 
-        <Accordion className="rounded-lg border border-line bg-surface-2/45">
+        <Accordion className="rounded-lg border border-line bg-surface-2">
           <AccordionItem value="instrucoes" className="last:border-b-0">
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="flex items-center gap-2 text-label font-semibold text-fg-body">

@@ -4,6 +4,7 @@ import { listarEntregas } from '@/lib/relay';
 import { empresaDaPagina } from '@/lib/empresa-ativa';
 import { Workflow } from 'lucide-react';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
+import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';
 
@@ -16,10 +17,14 @@ export const dynamic = 'force-dynamic';
 // O nome da plataforma saiu daqui na FASE A: o produto mede qualquer
 // plataforma de vendas que entregue webhook, e o console citava uma só. O que
 // esta tela faz não depende de quem manda o evento.
-const EYEBROW = 'Recebido → regras → Meta';
+//
+// A descrição encolheu quando o bloco `ExplicacaoDoDisparo` entrou logo abaixo
+// do cabeçalho: ela dizia, palavra por palavra, o que o bloco agora diz — o
+// que a tela faz e de onde os eventos vêm. Dito duas vezes na mesma dobra,
+// ninguém lê nenhuma das duas. Aqui sobrou o que só o cabeçalho diz: o que o
+// operador vem fazer nesta tela.
 const TITULO = 'Disparo automático';
-const DESCRICAO =
-  'Os eventos que já chegaram passam pelas regras e vão para a Meta sem você digitar nada. Aqui você liga, desliga e confere o que passou. Quem faz o evento chegar é a tela de Instalação.';
+const DESCRICAO = 'Ligue, desligue e confira o que já passou pelas regras.';
 
 export default async function Automatico() {
   // As duas leituras são independentes de propósito. `listarEntregas` lê o log
@@ -47,26 +52,26 @@ export default async function Automatico() {
   if (cfg.status === 'rejected') {
     if (!(cfg.reason instanceof ErroConfiguracaoIndisponivel)) throw cfg.reason;
     return (
-      <main className={consoleStyles.page}>
+      <main className={consoleStyles.page} data-area="automatico">
         <ConsolePageHeader
-          eyebrow={EYEBROW}
           title={TITULO}
           description={DESCRICAO}
           icon={Workflow}
         />
+        <ExplicacaoDoDisparo atual="automatico" className="mb-6" />
         <AvisoConfigIndisponivel arquivo={cfg.reason.arquivo} />
       </main>
     );
   }
 
   return (
-    <main className={consoleStyles.page}>
+    <main className={consoleStyles.page} data-area="automatico">
       <ConsolePageHeader
-        eyebrow={EYEBROW}
         title={TITULO}
         description={DESCRICAO}
         icon={Workflow}
       />
+      <ExplicacaoDoDisparo atual="automatico" className="mb-6" />
       {/* `publicBaseUrl` saiu daqui na FASE A: a unica coisa que precisava da
           URL publica era a aba de Recebimento, que agora mora em
           `/instalacao` — e e de la que a rota le a variavel. */}

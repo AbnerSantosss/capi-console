@@ -31,14 +31,49 @@
   overflow: hidden;
 }
 
+/* O canvas da area. Antes eram tres radiais azul/violeta/ciano fixas: toda
+   tela do produto abria com o mesmo veu azul, que e metade do "generico e
+   azul". Agora as duas radiais saem de --tinta (a cor do assunto, trocada
+   pelo data-area que o ConsoleBackground escreve) e a terceira camada e a
+   subida de luz do topo — navy mais claro nos primeiros 36rem, o degrade da
+   pagina de referencia. Os 250ms sao a troca de area; o bloco global de
+   prefers-reduced-motion (globals.css) ja zera essa transicao. */
 .background::before {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 900px 600px at 10% 0%, rgb(0 100 224 / 14%), transparent 65%),
-    radial-gradient(ellipse 700px 500px at 100% 10%, rgb(167 139 250 / 7%), transparent 65%),
-    radial-gradient(ellipse 600px 420px at 4% 78%, rgb(34 211 238 / 5%), transparent 68%);
+    radial-gradient(
+      70rem 30rem at 15% -8rem,
+      color-mix(in srgb, var(--tinta) 16%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      40rem 20rem at 95% 0,
+      color-mix(in srgb, var(--tinta) 7%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-1) 70%, var(--surface-0)) 0,
+      var(--surface-0) 36rem
+    );
+  transition: background 250ms ease;
   content: '';
+}
+
+/* Grade de 32px, mascarada para morrer antes do conteudo comecar. Fica presa
+   na faixa de cima justamente para nunca passar por tras de tabela ou lista
+   de dado: a partir de 28rem nao ha mais nada desenhado aqui. */
+.grade {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 28rem;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 7%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 7%) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgb(0 0 0 / 60%), transparent 28rem);
 }
 
 /* Camada da grade. O filho (estatico ou animado) e absoluto e herda a
@@ -46,7 +81,7 @@
 .gridLayer {
   position: absolute;
   inset: 0 0 auto;
-  height: 420px;
+  height: 26.25rem;
   overflow: hidden;
   mask-image: linear-gradient(to bottom, black 0%, rgb(0 0 0 / 68%) 50%, transparent 100%);
 }
@@ -68,10 +103,10 @@
 
 .network {
   position: absolute;
-  top: 72px;
-  right: max(24px, calc((100vw - 1280px) / 2));
-  width: min(32vw, 420px);
-  color: var(--accent-text);
+  top: 4.5rem;
+  right: max(1.5rem, calc((100vw - var(--container-pagina)) / 2));
+  width: min(32vw, 26.25rem);
+  color: var(--tinta);
   opacity: 0.12;
 }
 
@@ -79,76 +114,90 @@
   animation: background-drift 36s ease-in-out infinite alternate;
 }
 
+/* A casca da pagina. A largura e o respiro lateral sao tokens, nao numeros:
+   --container-pagina acompanha o zoom de texto do usuario, e o fundo reservado
+   e a altura real da barra de abas mais a area segura do aparelho — os 104px
+   cravados de antes erravam nos dois sentidos, sobrando no desktop e faltando
+   no iPhone. `padding-block` e `padding-inline` ficam SEPARADOS de proposito:
+   um `padding` de tres valores numa media query zeraria a lateral. */
 .page {
   margin-inline: auto;
   width: 100%;
-  max-width: 1280px;
+  max-width: var(--container-pagina);
   min-width: 0;
-  padding: 24px 16px 104px;
+  padding-block: 1.5rem
+    calc(var(--altura-barra-abas) + env(safe-area-inset-bottom) + 1.5rem);
+  padding-inline: 1rem;
 }
 
+/* Cabecalho de pagina. O quadrado de 44px com gradiente 145deg e sombra de
+   36px morreu aqui: era o mesmo selo em todas as telas, so trocando o glifo —
+   a assinatura de IA mais repetida do produto. No lugar entra a linha de
+   sobrancelha da pagina de referencia: chip pequeno com o icone da area,
+   rotulo em caixa alta e, abaixo, o titulo fluido.
+
+   `flex-wrap` com `flex-basis` no lead e o que faz a area de acoes descer
+   sozinha para baixo do titulo quando a linha nao cabe (por volta de 40rem),
+   sem media query e sem estourar largura. */
 .pageHeader {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .pageHeaderLead {
-  display: flex;
   min-width: 0;
-  align-items: flex-start;
-  gap: 14px;
+  flex: 1 1 22rem;
 }
 
-.pageHeaderIcon {
-  display: flex;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(77 166 255 / 28%);
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgb(0 100 224 / 20%), rgb(18 21 26 / 92%));
-  color: var(--accent-text);
-  box-shadow: 0 12px 36px rgb(0 0 0 / 20%);
-}
-
-.eyebrow {
-  margin-bottom: 4px;
-  color: var(--accent-text);
-  font-size: max(11px, 0.6875rem);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  line-height: 16px;
-  text-transform: uppercase;
+/* O icone da area vive DENTRO do h1, alinhado pela linha de base do texto —
+   glifo na tinta do assunto, sem caixa, sem borda, sem fundo. Sem `flex` no
+   proprio h1: o titulo precisa continuar quebrando linha como texto, com o
+   icone correndo junto, e nao virar duas colunas rigidas. */
+.pageTitleMark {
+  display: inline-flex;
+  translate: 0 0.12em;
+  margin-right: 0.5rem;
+  color: var(--tinta);
+  vertical-align: baseline;
 }
 
 .pageTitle {
   color: var(--fg-strong);
-  font-size: max(24px, 1.75rem);
-  font-weight: 750;
+  font-size: var(--text-pagina);
+  font-weight: 600;
   letter-spacing: -0.025em;
-  line-height: 1.25;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .pageDescription {
-  max-width: 680px;
-  margin-top: 6px;
+  max-width: 40rem;
+  margin-top: 0.375rem;
   color: var(--fg-muted);
-  font-size: max(14px, 0.875rem);
+  font-size: var(--text-body);
   line-height: 1.55;
+}
+
+.pageHeaderActions {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .sectionCard {
   min-width: 0;
-  scroll-margin-top: 88px;
+  scroll-margin-top: calc(var(--altura-cabecalho) + 1.5rem);
   border: 1px solid var(--border-default);
   border-radius: 12px;
   background: rgb(18 21 26 / 97%);
-  padding: 16px;
+  padding: 1rem;
   box-shadow: 0 18px 48px rgb(0 0 0 / 14%);
 }
 
@@ -163,7 +212,7 @@
 .mainGrid {
   display: grid;
   min-width: 0;
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .workColumn,
@@ -171,25 +220,25 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .guideGrid {
   display: grid;
   min-width: 0;
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .guideNav {
   border: 1px solid var(--border-default);
   border-radius: 12px;
   background: rgb(18 21 26 / 94%);
-  padding: 12px;
+  padding: 0.75rem;
 }
 
 .guideArticle {
   min-width: 0;
-  max-width: 760px;
+  max-width: 47.5rem;
 }
 
 .tabsViewport {
@@ -199,58 +248,61 @@
   scrollbar-width: thin;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 40rem) {
   .page {
-    padding-inline: 24px;
+    padding-inline: 1.5rem;
   }
 
   .sectionCard {
-    padding: 24px;
+    padding: 1.5rem;
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 64rem) {
   .page {
-    padding: 32px 32px 64px;
+    padding-inline: 2rem;
   }
 
   .gridLayer {
-    height: 760px;
+    height: 47.5rem;
   }
 
   .guideGrid {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 13.75rem minmax(0, 1fr);
   }
 
   .guideNav {
     position: sticky;
-    top: 88px;
+    top: calc(var(--altura-cabecalho) + 1.5rem);
     align-self: start;
   }
 }
 
-@media (min-width: 1200px) {
+/* Acima de 80rem a barra de abas nao existe mais (ela e `xl:hidden`), entao a
+   pagina para de reservar o fundo dela. */
+@media (min-width: 80rem) {
+  .page {
+    padding-bottom: 4rem;
+  }
+}
+
+@media (min-width: 75rem) {
   .mainGrid {
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) 21.25rem;
     align-items: start;
   }
 }
 
-@media (min-width: 1200px) and (min-height: 800px) {
+@media (min-width: 75rem) and (min-height: 50rem) {
   .reviewColumn {
     position: sticky;
-    top: 88px;
+    top: calc(var(--altura-cabecalho) + 1.5rem);
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 47.9375rem) {
   .network {
     display: none;
-  }
-
-  .pageHeader {
-    flex-direction: column;
-    gap: 16px;
   }
 }
 

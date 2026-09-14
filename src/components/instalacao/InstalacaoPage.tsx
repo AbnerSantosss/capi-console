@@ -228,7 +228,7 @@ export function InstalacaoPage({
           instalação está de pé e levar direto ao bloco que falta. */}
       <section
         aria-label="Resumo da instalação"
-        className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-panel border border-line-strong bg-surface-1/95 p-4"
+        className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-panel border border-line-strong bg-surface-1 p-4"
       >
         <StatusDot tone="success" icon={Webhook}>
           Webhook pronto para receber

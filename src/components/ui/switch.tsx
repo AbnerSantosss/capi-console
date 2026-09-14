@@ -103,11 +103,17 @@ export function Switch({
             disabled={disabled || salvando}
             aria-describedby={idDescricao}
             className={cn(
-              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition-colors duration-150 outline-none',
+              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 shadow-realce transition-colors duration-150 outline-none',
               // C-1 — borda nos DOIS estados. Desligado: `line-control`
               // (3.91 sobre o painel). Ligado: `accent-text` (7.09). O
               // preenchimento e o terceiro sinal, nunca o unico.
-              'border-line-control bg-surface-2',
+              //
+              // v3: o trilho desligado subiu de `surface-2` para `surface-3`.
+              // Sobre o cartao (que agora tem rampa a partir de `surface-1`),
+              // o `surface-2` mal se separava do fundo e o switch desligado
+              // sumia — um controle que so aparece quando esta ligado esconde
+              // metade do estado que ele existe para mostrar.
+              'border-line-control bg-surface-3',
               'data-checked:border-accent-text data-checked:bg-accent-fill',
               // C-2 — o alvo de toque de verdade: 44px, 48px em ponteiro
               // grosso. Invisivel, em volta do trilho de 44x24.

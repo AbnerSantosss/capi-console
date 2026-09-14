@@ -19,7 +19,11 @@
  *  9. EMQ médio só dos enviados com nota
  * 10. Top de eventos ordenado e cortado em oito
  * 11. Receita só com moeda única
- * 12. periodoValido aceita três valores e cai em 30 no resto
+ * 12. periodoValido aceita os cinco valores e cai em 30 no resto
+ * 13. Hoje e Ontem são dia de calendário no fuso de Brasília
+ * 14. Período livre: duas datas, inclusivo nas duas pontas, sem futuro
+ * 15. periodoValido com de/ate — data impossível e lixo caem no padrão
+ * 16. A amostra pode ser menor que a janela, e o resumo diz isso
  *
  * Uso: npm run test:inbox-resumo
  */
@@ -61,7 +65,7 @@ console.log('\n  Resumo do Painel de eventos\n');
   ok(r.qualidade.emqMedio === null, 'lista vazia: EMQ medio e null');
   ok(r.porEvento.length === 0, 'lista vazia: nenhum evento no topo');
   ok(r.receitaEnviada === null, 'lista vazia: nenhuma receita');
-  ok(r.periodoDias === 30, 'lista vazia: o periodo pedido volta no resumo');
+  ok(r.periodo === 30, 'lista vazia: o periodo pedido volta no resumo');
 }
 
 /* ---------------- 2. Porcentagem sobre a base ---------------- */
@@ -207,9 +211,122 @@ console.log('\n  Resumo do Painel de eventos\n');
   ok(periodoValido('7') === 7, 'texto "7" vira 7');
   ok(periodoValido(30) === 30, 'numero 30 vira 30');
   ok(periodoValido('90') === 90, 'texto "90" vira 90');
+  ok(periodoValido('hoje') === 'hoje', 'texto "hoje" passa inteiro');
+  ok(periodoValido('ontem') === 'ontem', 'texto "ontem" passa inteiro');
   ok(periodoValido('abc') === 30, 'lixo cai no padrao de 30');
   ok(periodoValido(null) === 30, 'ausente cai no padrao de 30');
-  ok(periodoValido(15) === 30, 'valor fora dos tres tambem cai em 30');
+  ok(periodoValido(15) === 30, 'valor fora dos cinco tambem cai em 30');
+}
+
+/* ---------------- 13. Hoje e Ontem sao dia de calendario ---------------- */
+{
+  // AGORA e 13/09 12:00 UTC = 13/09 09:00 em Brasilia. As horas abaixo sao
+  // escolhidas para cair dos dois lados da meia-noite BRASILEIRA, que e o
+  // ponto do teste: 03:00 UTC ainda e ONTEM aqui.
+  const emUtc = (iso) => item({ recebidoEm: iso });
+  const hojeDeManha = emUtc('2026-09-13T11:00:00.000Z'); // 08:00 BRT de hoje
+  const hojeDeMadrugada = emUtc('2026-09-13T04:00:00.000Z'); // 01:00 BRT de hoje
+  const ontemANoite = emUtc('2026-09-13T02:00:00.000Z'); // 23:00 BRT de ONTEM
+  const ontemDeDia = emUtc('2026-09-12T15:00:00.000Z'); // 12:00 BRT de ontem
+  const anteontem = emUtc('2026-09-11T15:00:00.000Z');
+
+  const hoje = resumirInbox([hojeDeManha, hojeDeMadrugada, ontemANoite, ontemDeDia], AGORA, 'hoje');
+  ok(hoje.base === 2, 'hoje conta so o que entrou depois da meia-noite de Brasilia');
+  ok(hoje.periodo === 'hoje', 'e devolve o periodo pedido, sem virar numero');
+
+  const ontem = resumirInbox([hojeDeManha, ontemANoite, ontemDeDia, anteontem], AGORA, 'ontem');
+  ok(ontem.base === 2, 'ontem e o dia fechado: nao pega hoje nem anteontem');
+
+  ok(
+    resumirInbox([ontemANoite], AGORA, 'hoje').base === 0,
+    '🔴 evento das 23h de ontem (02h UTC de hoje) NAO conta como hoje: o fuso e de Brasilia'
+  );
+}
+
+/* ---------------- 14. Periodo livre: duas datas, inclusivo nas pontas ------ */
+{
+  const emUtc = (iso) => item({ recebidoEm: iso });
+  // Meia-noite de Brasilia do dia 11 e 03:00 UTC do dia 11.
+  const dia10Tarde = emUtc('2026-09-10T20:00:00.000Z'); // 17:00 BRT do dia 10
+  const dia11Comeco = emUtc('2026-09-11T03:00:00.000Z'); // 00:00 BRT do dia 11
+  const dia11Fim = emUtc('2026-09-12T02:59:59.000Z'); // 23:59 BRT do dia 11
+  const dia12 = emUtc('2026-09-12T15:00:00.000Z'); // 12:00 BRT do dia 12
+  const todos = [dia10Tarde, dia11Comeco, dia11Fim, dia12];
+
+  const soDia11 = resumirInbox(todos, AGORA, { de: '2026-09-11', ate: '2026-09-11' });
+  ok(soDia11.base === 2, 'um dia so pega o dia inteiro: da meia-noite as 23h59', String(soDia11.base));
+  ok(
+    soDia11.periodo.de === '2026-09-11' && soDia11.periodo.ate === '2026-09-11',
+    'e devolve o intervalo pedido, para a tela conferir que a resposta e desta janela'
+  );
+
+  ok(
+    resumirInbox(todos, AGORA, { de: '2026-09-10', ate: '2026-09-12' }).base === 4,
+    'o intervalo e INCLUSIVO nas duas pontas'
+  );
+  ok(
+    resumirInbox(todos, AGORA, { de: '2026-09-12', ate: '2026-09-12' }).base === 1,
+    '🔴 evento das 23h59 do dia 11 (02h59 UTC do dia 12) NAO cai no dia 12'
+  );
+
+  // A janela volta em ISO para a lista do recorte filtrar pelo MESMO corte.
+  const j = soDia11.janela;
+  ok(
+    j.inicio === '2026-09-11T03:00:00.000Z' && j.fim === '2026-09-12T02:59:59.999Z',
+    'a janela devolvida e a meia-noite de Brasilia das duas pontas',
+    `${j.inicio} -> ${j.fim}`
+  );
+
+  // Futuro nao existe: pedir ate uma data adiante para em AGORA.
+  ok(
+    resumirInbox([], AGORA, { de: '2026-09-13', ate: '2026-12-31' }).janela.fim === AGORA,
+    'a ponta final nunca passa de agora'
+  );
+}
+
+/* ---------------- 15. periodoValido com de/ate ---------------- */
+{
+  const p = periodoValido(null, '2026-09-01', '2026-09-10');
+  ok(p.de === '2026-09-01' && p.ate === '2026-09-10', 'duas datas validas viram periodo livre');
+
+  const trocado = periodoValido(null, '2026-09-10', '2026-09-01');
+  ok(
+    trocado.de === '2026-09-01' && trocado.ate === '2026-09-10',
+    'ordem invertida e desentortada em vez de virar o padrao de 30'
+  );
+
+  ok(
+    periodoValido('7', '2026-09-01', '2026-09-10').de === '2026-09-01',
+    'as datas mandam mais que o ?dias= que ficou para tras'
+  );
+  ok(periodoValido('7', '2026-09-01', null) === 7, 'uma data so nao faz intervalo: vale o ?dias=');
+  ok(periodoValido(null, '2026-09-01') === 30, 'uma data so e sem dias cai no padrao de 30');
+  ok(periodoValido(null, '2026-02-30', '2026-03-01') === 30, '🔴 30 de fevereiro nao existe: cai no padrao');
+  ok(periodoValido(null, '2026-13-01', '2026-13-02') === 30, 'mes 13 nao existe: cai no padrao');
+  ok(periodoValido(null, '01/09/2026', '10/09/2026') === 30, 'formato brasileiro na URL nao passa');
+  ok(periodoValido(null, "2026-09-01'; DROP", '2026-09-10') === 30, 'lixo com aspas nao vira data');
+}
+
+/* ---------------- 16. A amostra pode ser menor que a janela ---------------- */
+{
+  const dentro = Array.from({ length: 5 }, () => item({ recebidoEm: diasAtras(1) }));
+
+  const folgado = resumirInbox(dentro, AGORA, 30, 1000);
+  ok(folgado.amostraCobreJanela === true, 'amostra longe do teto cobre a janela');
+
+  // Amostra NO teto e o item mais antigo dela ja dentro do periodo: existe
+  // evento na janela que a leitura nao alcancou.
+  const noTeto = resumirInbox(dentro, AGORA, 30, 5);
+  ok(
+    noTeto.amostraCobreJanela === false,
+    '🔴 amostra no teto com o mais antigo dentro do periodo NAO cobre a janela'
+  );
+
+  const alcanca = resumirInbox([...dentro, item({ recebidoEm: diasAtras(40) })], AGORA, 30, 6);
+  ok(
+    alcanca.amostraCobreJanela === true,
+    'se a leitura alcanca algo ANTERIOR ao inicio, a contagem esta fechada'
+  );
 }
 
 /* ---------------- Fechamento ---------------- */

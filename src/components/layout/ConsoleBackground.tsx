@@ -1,23 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 import { useUserStore } from '@/stores/useUserStore';
-import { GridPattern } from '@/components/ui/grid-pattern';
 import { AnimatedGridPattern } from '@/components/ui/animated-grid-pattern';
 import { cn } from '@/lib/utils';
 import styles from './console.module.css';
 
 /**
  * Fundo das rotas internas. Quatro camadas, nesta ordem:
- *   1. malha de gradiente (radiais azul/violeta/ciano)
- *   2. grade — animada so no desktop E com "fundo animado" ligado
+ *   1. canvas da area — duas radiais na tinta do assunto e a subida de luz
+ *      do topo (console.module.css, `.background::before`)
+ *   2. grade de 32px mascarada no topo; com "fundo animado" ligado e no
+ *      desktop, ela vira a grade animada do motion
  *   3. ruido (feTurbulence) para tirar o aspecto chapado
  *   4. rede de eventos em SVG, canto superior direito
  *
+ * A area sai da rota e vai para o `data-area` daqui, e nao do <main>: o fundo
+ * e IRMAO do conteudo na arvore (ConsoleShell), entao a --tinta declarada no
+ * <main> nunca chegaria ate ele. Cada pagina continua declarando a sua para o
+ * cabecalho e o resto do conteudo; aqui a fonte e o caminho.
+ *
  * A grade animada custa timers do motion. Fora do desktop, ou com movimento
- * reduzido, ou com a preferencia desligada, ela vira uma grade estatica —
- * mesma aparencia, zero trabalho continuo.
+ * reduzido, ou com a preferencia desligada, fica a grade em CSS — mesma
+ * aparencia, zero trabalho continuo.
  *
  * O login nao usa este componente: ele vive fora do route group (console).
  */
@@ -25,34 +32,29 @@ export function ConsoleBackground() {
   const fundoAnimado = useUserStore((state) => state.fundoAnimado);
   const podeAnimar = usePodeAnimar();
   const animar = fundoAnimado && podeAnimar;
+  const area = areaDaRota(usePathname());
 
   return (
     <div
       className={cn(styles.background, fundoAnimado && styles.live)}
+      data-area={area}
       aria-hidden="true"
     >
-      <div className={styles.gridLayer}>
-        {animar ? (
+      {animar ? (
+        <div className={styles.gridLayer}>
           <AnimatedGridPattern
-            width={40}
-            height={40}
+            width={32}
+            height={32}
             numSquares={24}
-            maxOpacity={0.08}
+            maxOpacity={0.05}
             duration={4}
             repeatDelay={1}
-            className="inset-x-0 top-0 h-[760px] fill-slate-300/[0.045] stroke-slate-300/[0.045]"
+            className="inset-x-0 top-0 h-160 fill-slate-300/[0.045] stroke-slate-300/[0.045]"
           />
-        ) : (
-          <GridPattern
-            width={40}
-            height={40}
-            style={{
-              fill: 'rgb(147 161 181 / 4%)',
-              stroke: 'rgb(147 161 181 / 4%)',
-            }}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className={styles.grade} />
+      )}
 
       {/* Ruido: 1 filtro SVG, sem requisicao de rede, sem animacao. */}
       <svg className={styles.noise} focusable="false">
@@ -92,6 +94,21 @@ export function ConsoleBackground() {
       </svg>
     </div>
   );
+}
+
+/**
+ * A area do console a partir do caminho. A raiz e o disparo manual. Rota
+ * desconhecida (o Guia, por exemplo) fica sem `data-area` e herda a tinta
+ * padrao do :root — de proposito: o Guia ja pinta por topico com --hue.
+ */
+function areaDaRota(caminho: string | null): string | undefined {
+  if (!caminho) return undefined;
+  if (caminho === '/') return 'manual';
+  if (caminho.startsWith('/painel')) return 'painel';
+  if (caminho.startsWith('/instalacao')) return 'instalacao';
+  if (caminho.startsWith('/pixels')) return 'pixels';
+  if (caminho.startsWith('/automatico')) return 'automatico';
+  return undefined;
 }
 
 /** Desktop largo e sem preferencia por menos movimento. */

@@ -480,7 +480,7 @@ export function TagDoSite({
           </ul>
         )}
 
-        <div className="mt-4 flex flex-col gap-4 rounded-panel border border-line bg-surface-2/55 p-4">
+        <div className="mt-4 flex flex-col gap-4 rounded-panel border border-line bg-surface-2 p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="tag-dominio-novo"
@@ -704,7 +704,7 @@ export function TagDoSite({
                     <AccordionItem
                       key={evento.origem}
                       value={evento.origem}
-                      className="overflow-hidden rounded-xl border border-line-strong bg-surface-2/55 last:border-b"
+                      className="overflow-hidden rounded-panel border border-line-strong bg-surface-2 last:border-b"
                     >
                       <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
                         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-3">

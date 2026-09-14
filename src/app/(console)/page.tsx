@@ -18,6 +18,7 @@ import { ResultPanel } from '@/components/dispatch/ResultPanel';
 import { ErrorSummary } from '@/components/common/ErrorSummary';
 import { Stepper } from '@/components/common/Stepper';
 import { Section } from '@/components/common/primitives';
+import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EntraESai, Entrada } from '@/components/common/motion';
 import type { DispatchResult } from '@/components/dispatch/tipos';
@@ -49,9 +50,8 @@ export default function Home() {
 
   return (
     <>
-      <main className={consoleStyles.page}>
+      <main className={consoleStyles.page} data-area="manual">
         <ConsolePageHeader
-          eyebrow="Você monta e envia"
           title="Disparo manual"
           description="Prepare os dados, confira o pixel e envie o evento à Meta."
           icon={Send}
@@ -65,6 +65,8 @@ export default function Home() {
             </Link>
           }
         />
+
+        <ExplicacaoDoDisparo atual="manual" className="mb-6" />
 
         <Stepper className="mb-8" />
 
@@ -102,11 +104,11 @@ export default function Home() {
               <Entrada atraso={0.06}>
                 <QualityPanel />
               </Entrada>
-              <div className="min-[1200px]:hidden">
+              <div className="xl:hidden">
                 <DestinationSummary />
               </div>
               {/* Abaixo de xl a ação vive na barra fixa, não aqui. */}
-              <div className="hidden flex-col gap-4 min-[1200px]:flex">
+              <div className="hidden flex-col gap-4 xl:flex">
                 <DispatchPanel
                   onResult={aoReceberResultado}
                   onAbrirMarcas={() => router.push('/pixels')}

@@ -230,17 +230,52 @@ ok(
 const resumo30 = await rotaResumo.GET(req('/api/inbox/resumo?dias=30', { sessao: true }));
 const corpoResumo30 = await corpoDe(resumo30);
 ok(
-  resumo30.status === 200 && corpoResumo30?.resumo?.periodoDias === 30,
-  'GET /api/inbox/resumo?dias=30 → 200 e resumo.periodoDias = 30',
+  resumo30.status === 200 && corpoResumo30?.resumo?.periodo === 30,
+  'GET /api/inbox/resumo?dias=30 → 200 e resumo.periodo = 30',
   `status=${resumo30.status}`
 );
 
 const resumo5 = await rotaResumo.GET(req('/api/inbox/resumo?dias=5', { sessao: true }));
 const corpoResumo5 = await corpoDe(resumo5);
 ok(
-  resumo5.status === 200 && corpoResumo5?.resumo?.periodoDias === 30,
+  resumo5.status === 200 && corpoResumo5?.resumo?.periodo === 30,
   'GET /api/inbox/resumo?dias=5 → 200 e período inválido cai no padrão 30',
   `status=${resumo5.status}`
+);
+
+const resumoHoje = await rotaResumo.GET(req('/api/inbox/resumo?dias=hoje', { sessao: true }));
+const corpoResumoHoje = await corpoDe(resumoHoje);
+ok(
+  resumoHoje.status === 200 && corpoResumoHoje?.resumo?.periodo === 'hoje',
+  'GET /api/inbox/resumo?dias=hoje → 200 e o período volta como "hoje", não como número',
+  `status=${resumoHoje.status}`
+);
+
+const resumoLivre = await rotaResumo.GET(
+  req('/api/inbox/resumo?de=2026-09-01&ate=2026-09-10', { sessao: true })
+);
+const corpoResumoLivre = await corpoDe(resumoLivre);
+ok(
+  resumoLivre.status === 200 &&
+    corpoResumoLivre?.resumo?.periodo?.de === '2026-09-01' &&
+    corpoResumoLivre?.resumo?.periodo?.ate === '2026-09-10',
+  'GET /api/inbox/resumo?de=&ate= → 200 e o período livre volta como intervalo',
+  `status=${resumoLivre.status}`
+);
+ok(
+  typeof corpoResumoLivre?.resumo?.janela?.inicio === 'string' &&
+    typeof corpoResumoLivre?.resumo?.janela?.fim === 'string',
+  'e a janela sai em ISO, que é o que a lista do recorte usa para filtrar igual'
+);
+
+const resumoDataPodre = await rotaResumo.GET(
+  req('/api/inbox/resumo?de=2026-02-30&ate=nao-e-data', { sessao: true })
+);
+const corpoDataPodre = await corpoDe(resumoDataPodre);
+ok(
+  resumoDataPodre.status === 200 && corpoDataPodre?.resumo?.periodo === 30,
+  '🔴 data impossível na URL não derruba a rota nem inventa janela: cai no padrão 30',
+  `status=${resumoDataPodre.status}`
 );
 
 ok(

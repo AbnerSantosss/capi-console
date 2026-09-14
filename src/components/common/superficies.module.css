@@ -1,0 +1,82 @@
+/* =========================================================================
+   As três receitas de contêiner (V-01 / DS-2.6)
+
+   Cartão   objeto que o operador manipula
+   Bloco    grupo aninhado dentro de um cartão   (só Tailwind, não precisa daqui)
+   Destaque no máximo um por tela
+
+   Só entra aqui o que classe utilitária não escreve: a rampa de duas paradas
+   do cartão, a linha de tinta de 2px e o halo da tinta no canto. Padding,
+   raio e borda ficam em Tailwind de propósito — assim `Panel tone="warning"`
+   e um `className` de quem chama continuam mandando neles.
+
+   Sem hexadecimal e sem `font-size` (G6/G7). O tom mais claro do topo do
+   cartão sai de `color-mix` sobre `--surface-1`: não existe token de
+   superfície intermediária, e criar um é do dono do `globals.css`.
+   ========================================================================= */
+
+.cartao {
+  background-color: var(--surface-1);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 3.5%, var(--surface-1)),
+    var(--surface-1)
+  );
+  /* Realce interno (aresta iluminada, DS-2.4′) + a sombra curta e fechada de
+     `--sombra-cartao`: o cartão assenta no fundo, não flutua sobre ele. */
+  box-shadow: var(--realce-interno), var(--sombra-cartao);
+}
+
+/* --- Destaque: cartão + linha de tinta + halo --------------------------- */
+
+.destaque {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* A linha de 2px no topo. É a única borda colorida permitida (DS-1.5′): a
+   borda do cartão continua sendo `--border-*`. */
+.destaque::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    var(--tinta),
+    color-mix(in srgb, var(--tinta) 30%, transparent)
+  );
+}
+
+/* O halo da área no canto superior direito. `z-index: -1` dentro do
+   `isolation: isolate` acima o mantém acima do fundo e abaixo do dado — ele
+   não pode passar por cima de número nenhum. */
+.destaque::after {
+  content: '';
+  position: absolute;
+  top: -10rem;
+  right: -8rem;
+  z-index: -1;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 50%;
+  pointer-events: none;
+  background-image: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--tinta) 18%, transparent),
+    transparent
+  );
+}
+
+/* --- Chip de ícone da área --------------------------------------------- */
+
+/* O quadradinho de ícone só é permitido aqui, uma vez por cartão, na tinta da
+   área — nunca como grade de cinco iguais, que é a assinatura de IA que o
+   plano v3 manda apagar. A cor entra em fundo, borda e ícone; nunca em texto. */
+.chip {
+  color: var(--tinta);
+  background-color: color-mix(in srgb, var(--tinta) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tinta) 22%, transparent);
+}

@@ -48,3 +48,10 @@ config/
 
 # segredos de operacao gerados na maquina do operador (nunca versionar)
 *.local
+
+# design-sync (Claude Design): scripts preparados, saida do conversor e estado de maquina
+/.ds-sync/
+/ds-bundle/
+/.design-sync/.cache/
+/.design-sync/learnings/
+/.design-sync/node_modules

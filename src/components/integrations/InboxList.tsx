@@ -20,6 +20,12 @@ import {
   FileJson,
   HelpCircle,
   MousePointerClick,
+  Check,
+  Clock,
+  Zap,
+  Plus,
+  History,
+  MoreHorizontal,
 } from 'lucide-react';
 
 import { useEventStore } from '@/stores/useEventStore';
@@ -169,6 +175,16 @@ const ROTULO_MODO: Record<'auto' | 'fila' | 'ignorar', string> = {
   ignorar: 'não enviar',
 };
 
+/**
+ * Cada modo tem ícone próprio (R-07, regra 4): selo é ícone + texto, nunca só
+ * cor. Sem isto, "fica na fila" e "não enviar" só se distinguiam pela palavra.
+ */
+const ICONE_MODO: Record<'auto' | 'fila' | 'ignorar', React.ElementType> = {
+  auto: Zap,
+  fila: Clock,
+  ignorar: Ban,
+};
+
 const TOM_RESULTADO: Record<ResultadoDisparo['status'], 'success' | 'danger' | 'neutral'> = {
   enviado: 'success',
   duplicado: 'neutral',
@@ -242,6 +258,8 @@ function mesclar(atuais: ItemInbox[], novos: ItemInbox[], limite = 50): ItemInbo
 export function InboxList({
   compacto = false,
   filtrosIniciais,
+  janela,
+  acaoJanelaVazia,
   limite = 50,
 }: {
   compacto?: boolean;
@@ -251,6 +269,21 @@ export function InboxList({
    * colado com `?evento=…` levaria outra pessoa a uma contagem diferente.
    */
   filtrosIniciais?: FiltrosInboxValor;
+  /**
+   * A janela de tempo que o card do Painel usou para contar, em ISO. Quando
+   * vem, a lista só mostra o que caiu dentro dela — inclusive o que chegar ao
+   * vivo pelo SSE enquanto a tela está aberta, que senão apareceria numa lista
+   * de "ontem" só por ter acabado de entrar.
+   *
+   * Ausente na caixa de entrada normal: lá a lista é tudo o que existe.
+   */
+  janela?: { inicio: string; fim: string };
+  /**
+   * A saída do beco quando a janela não pegou nada (C-11 do `EstadoVazio`).
+   * Quem sabe alargar o período é o Painel, não esta lista — então o botão
+   * chega pronto de lá.
+   */
+  acaoJanelaVazia?: React.ReactNode;
   /** Quantos itens pedir a /api/inbox (1..1000). O Painel pede mais para a lista bater com o card. */
   limite?: number;
 }) {
@@ -650,22 +683,38 @@ export function InboxList({
    * lista inteira. Sem esta guarda, um filtro deixado ligado na tela grande
    * apareceria "vazando" para a tela inicial no próximo mount.
    */
+  /**
+   * A janela de tempo vem ANTES de qualquer outro filtro e vale até no modo
+   * compacto: ela não é recorte de tela, é o período que o card do Painel
+   * contou. Item com data ilegível fica de fora, do mesmo jeito que no resumo.
+   */
+  const noPeriodo = useMemo(() => {
+    if (!janela) return itens;
+    const inicio = Date.parse(janela.inicio);
+    const fim = Date.parse(janela.fim);
+    if (!Number.isFinite(inicio) || !Number.isFinite(fim)) return itens;
+    return itens.filter((i) => {
+      const t = Date.parse(i.recebidoEm);
+      return Number.isFinite(t) && t >= inicio && t <= fim;
+    });
+  }, [itens, janela]);
+
   const visiveis = useMemo(
-    () => (compacto ? itens : itens.filter((i) => passaFiltros(i, filtros))),
-    [itens, filtros, compacto]
+    () => (compacto ? noPeriodo : noPeriodo.filter((i) => passaFiltros(i, filtros))),
+    [noPeriodo, filtros, compacto]
   );
 
   /** Os nomes de evento que REALMENTE chegaram, com quantos itens cada um tem. */
   const opcoesEvento = useMemo(() => {
     const contagem = new Map<string, number>();
-    for (const i of itens) {
+    for (const i of noPeriodo) {
       const n = nomeDoEvento(i);
       contagem.set(n, (contagem.get(n) ?? 0) + 1);
     }
     return [...contagem.entries()]
       .map(([valor, total]) => ({ valor, total }))
       .sort((a, b) => a.valor.localeCompare(b.valor, 'pt-BR'));
-  }, [itens]);
+  }, [noPeriodo]);
 
   /* ------------------------------------------------------------------ */
   /* Quem pode entrar no lote                                            */
@@ -807,7 +856,10 @@ export function InboxList({
     (m) => marcasEscolhidas.includes(m.id) && !m.testCode?.trim()
   );
 
-  const aguardando = useMemo(() => itens.filter((i) => i.status === 'novo').length, [itens]);
+  const aguardando = useMemo(
+    () => noPeriodo.filter((i) => i.status === 'novo').length,
+    [noPeriodo]
+  );
   const parDoAlvo = alvo ? parMeta(alvo.eventoMeta) : null;
   const fase = useEscadaDeEspera(carregando);
 
@@ -884,13 +936,16 @@ export function InboxList({
         </div>
       </div>
 
-      {/* 🔴 B.2.11: esta linha conta `itens`, NUNCA `visiveis`. O tamanho da
+      {/* 🔴 B.2.11: esta linha conta a lista, NUNCA `visiveis`. O tamanho da
           fila é um fato do servidor; filtrar a tela não despacha nada, e um
           contador que encolhe com o filtro faria o operador achar que itens
-          sumiram da caixa. */}
-      {itens.length > 0 && (
+          sumiram da caixa.
+          A janela do Painel é a única exceção, e não é filtro de tela: ela
+          define QUAL lista é esta. Contar fora dela daria à lista de "ontem" o
+          tamanho da caixa inteira. */}
+      {noPeriodo.length > 0 && (
         <p className="text-caption text-fg-muted">
-          {itens.length} entrega{itens.length > 1 ? 's' : ''} nesta lista
+          {noPeriodo.length} entrega{noPeriodo.length > 1 ? 's' : ''} nesta lista
           {aguardando > 0 ? ` · ${aguardando} ainda sem tratamento` : ''} · tudo o que chega
           aparece aqui, inclusive o que não vai para a Meta.
         </p>
@@ -899,21 +954,23 @@ export function InboxList({
       {/* E-12: o número da tela não pode parecer mágico. Quando alguém pediu um
           recorte maior que o padrão (o clique num card do Painel pede), a tela
           diz de onde vem a contagem em vez de deixar o operador adivinhar. */}
-      {limite > 50 && itens.length > 0 && (
+      {limite > 50 && noPeriodo.length > 0 && (
         <p className="text-caption text-fg-muted">
-          Mostrando os últimos {itens.length} recebidos desta empresa.
+          {janela
+            ? `Mostrando os ${noPeriodo.length} recebidos dentro do período escolhido no Painel.`
+            : `Mostrando os últimos ${noPeriodo.length} recebidos desta empresa.`}
         </p>
       )}
 
       {/* B.3.21: no modo compacto não há barra de filtros nem lote. Aquela é a
           prévia da tela inicial — quem vai disparar em série abre a caixa
           inteira, onde a confirmação e o relatório cabem na tela. */}
-      {!compacto && itens.length > 0 && (
+      {!compacto && noPeriodo.length > 0 && (
         <FiltrosInbox
           valor={filtros}
           onValor={setFiltros}
           opcoesEvento={opcoesEvento}
-          totalItens={itens.length}
+          totalItens={noPeriodo.length}
           totalVisiveis={visiveis.length}
           totalElegiveis={elegiveis.length}
           lote={lote}
@@ -959,7 +1016,20 @@ export function InboxList({
         </Callout>
       )}
 
-      {itens.length === 0 ? (
+      {noPeriodo.length === 0 && janela && itens.length > 0 ? (
+        // Caixa cheia e janela vazia não é "webhook não instalado" — dizer isso
+        // aqui mandaria o operador reconfigurar um endpoint que funciona.
+        <EstadoVazio
+          titulo="Nenhum evento neste período"
+          motivo={
+            <>
+              As {itens.length} entregas desta empresa continuam na caixa: nenhuma delas caiu
+              dentro da janela escolhida no Painel.
+            </>
+          }
+          acao={acaoJanelaVazia}
+        />
+      ) : noPeriodo.length === 0 ? (
         <EstadoVazio
           titulo="Nenhum webhook recebido"
           motivo={
@@ -984,7 +1054,7 @@ export function InboxList({
           titulo="Nenhum evento com este filtro"
           motivo={
             <>
-              As {itens.length} entregas continuam na caixa — só nenhuma casa com{' '}
+              As {noPeriodo.length} entregas continuam na caixa — só nenhuma casa com{' '}
               <strong>{descreverFiltros(filtros)}</strong>
             </>
           }
@@ -1014,9 +1084,9 @@ export function InboxList({
         </ul>
       )}
 
-      {compacto && itens.length > 5 && (
+      {compacto && noPeriodo.length > 5 && (
         <Callout tone="info">
-          Mostrando os 5 mais recentes de {itens.length}. A lista completa está em Integrações.
+          Mostrando os 5 mais recentes de {noPeriodo.length}. A lista completa está em Integrações.
         </Callout>
       )}
 
@@ -1174,6 +1244,12 @@ function LinhaEntrada({
   aoDisparar: () => void;
   aoVerPayload: () => void;
 }) {
+  /**
+   * Só a gaveta de ações do celular. Nenhuma decisão de disparo depende dela:
+   * os mesmos botões, com os mesmos `disabled`, aparecem abertos em `lg+`.
+   */
+  const [maisAberto, setMaisAberto] = useState(false);
+
   const naoLido = ehNaoLido(item);
   const teste = item.testePlataforma || item.classificacao === 'teste-plataforma';
   const par = parMeta(item.eventoMeta);
@@ -1189,190 +1265,311 @@ function LinhaEntrada({
         testePlataforma: item.testePlataforma,
       });
 
+  const disparavel = podeDisparar(item);
+  const ehNovo = item.status === 'novo';
+  /** Em `lg+` todas as ações ficam à vista; no celular a gaveta guarda o resto. */
+  const secundarias = (disparavel ? 1 : 0) + (naoLido ? 0 : 1);
+
   return (
     <div
       className={cn(
-        'flex flex-wrap items-start gap-x-4 gap-y-2 rounded-control border bg-surface-2 p-3',
-        item.status === 'novo' ? 'border-accent-text/40' : 'border-line-strong',
-        naoLido && 'border-danger/40'
+        /* Grade explícita no lugar do flex-wrap de oito elementos: valor à
+           direita, "vira" e metadados em faixas próprias, ações em coluna
+           própria a partir de 64rem. */
+        'relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5 rounded-control border bg-surface-2 p-3',
+        'lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-x-4',
+        ehNovo
+          ? /* Linha de tinta de 2px na borda esquerda + o gradiente que morre
+               em 40%: o que acabou de chegar se destaca sem virar outra cor. */
+            'border-line-strong bg-linear-to-r from-tinta/10 to-transparent to-40% before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:rounded-l-control before:bg-tinta/70 before:content-[""]'
+          : 'border-line-strong',
+        naoLido && 'border-danger/40',
+        /* Ping da plataforma não é venda: recua um degrau inteiro de atenção. */
+        teste && 'opacity-70'
       )}
     >
-      <div className="min-w-0 flex-1">
-        {/* O par: o que a plataforma mandou → o que a Meta recebe. */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {/* Por onde o evento entrou. Era "xWinner" fixo aqui: a caixa passou
-              a receber também a tag do site, e nome de plataforma fixo no
-              código mente em metade das linhas. Agora o nome vem da empresa
-              ativa — é dela que o webhook chegou. */}
-          {/* Sem `uppercase`: aqui dentro agora entra NOME PROPRIO. "WEBHOOK"
-              em caixa alta era rotulo generico e nao tinha dono; "XWINNER" e o
-              nome de uma empresa escrito errado, e o proximo cliente pode se
-              chamar "xPay" ou "e-Com". Grafia de marca nao e decoracao de
-              interface. */}
-          <span className="text-caption text-fg-muted">
-            {item.origem === 'tag' ? 'Tag' : rotuloWebhook}
-          </span>
-          {/* Nome vindo de fora, sem espaço nenhum e às vezes com 60+ chars
-              ("checkout.session.completed.with.algo"): sem `wrap-token` ele
-              estoura a coluna em 360px em vez de quebrar. */}
-          <span className="wrap-token min-w-0 font-mono text-label text-fg-body">
-            {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
-          </span>
-          <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-          {par ? (
-            <>
-              <span className="text-caption text-fg-muted uppercase">Meta</span>
-              <span className="text-label font-semibold text-fg-strong">{par.pt}</span>
-              <span className="font-mono text-caption text-fg-muted">{par.tecnico}</span>
-              {!par.padrao && <StatusDot tone="warning">fora do padrão da Meta</StatusDot>}
-            </>
-          ) : teste ? (
-            <span className="inline-flex items-center gap-1.5 text-label font-semibold text-accent-text">
-              <FlaskConical className="size-3.5" aria-hidden />
-              teste de conexão — nada a enviar
-            </span>
-          ) : naoLido ? (
-            <span className="inline-flex items-center gap-1.5 text-label font-semibold text-danger">
-              <FileWarning className="size-3.5" aria-hidden />
-              corpo não pôde ser lido
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-label font-semibold text-fg-muted">
-              <Ban className="size-3.5" aria-hidden />
-              não enviar
-            </span>
-          )}
-          <span className="text-label text-fg-body tabular">{dinheiro(item.valor, item.moeda)}</span>
-        </div>
-
-        {/* Selos de estado. */}
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {item.status === 'novo' && (
-            <Badge variant="info">novo</Badge>
-          )}
-          {item.status === 'carregado' && (
-            <Badge>carregado no formulário</Badge>
-          )}
-          {item.status === 'disparado' && (
-            <Badge variant="sucesso">enviado à Meta</Badge>
-          )}
-          {item.modo && (
-            <Badge>{ROTULO_MODO[item.modo]}</Badge>
-          )}
-          {item.testeInterno && (
-            <StatusDot tone="warning" icon={FlaskConical}>
-              teste da equipe
-            </StatusDot>
-          )}
-          {item.classificacao === 'desconhecido' && (
-            <StatusDot tone="warning" icon={HelpCircle}>
-              nome novo, sem regra
-            </StatusDot>
-          )}
-          {item.rotuloDivergente && (
-            <StatusDot tone="warning">
-              chegou por um apelido antigo{item.rotuloRecebido ? `: ${item.rotuloRecebido}` : ''}
-            </StatusDot>
-          )}
-        </div>
-
-        {/* O motivo, com todas as letras: "IGNORAR" sozinho não explica nada. */}
-        {motivo && (
-          <p className="mt-1.5 text-caption text-fg-muted">
-            {classificacao ? <span className="text-fg-body">{classificacao.rotulo}. </span> : null}
-            {motivo}
-          </p>
+      {/* (a) Plataforma + nome do evento + selos de natureza. */}
+      <div className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {/* Por onde o evento entrou. Era "xWinner" fixo aqui: a caixa passou
+            a receber também a tag do site, e nome de plataforma fixo no
+            código mente em metade das linhas. Agora o nome vem da empresa
+            ativa — é dela que o webhook chegou. */}
+        {/* Sem `uppercase`: aqui dentro agora entra NOME PROPRIO. "WEBHOOK"
+            em caixa alta era rotulo generico e nao tinha dono; "XWINNER" e o
+            nome de uma empresa escrito errado, e o proximo cliente pode se
+            chamar "xPay" ou "e-Com". Grafia de marca nao e decoracao de
+            interface. */}
+        <span className="text-caption text-fg-muted">
+          {item.origem === 'tag' ? 'Tag' : rotuloWebhook}
+        </span>
+        {/* Nome vindo de fora, sem espaço nenhum e às vezes com 60+ chars
+            ("checkout.session.completed.with.algo"): sem `wrap-token` ele
+            estoura a coluna em 360px em vez de quebrar. */}
+        <span className="wrap-token min-w-0 font-mono text-label font-semibold text-fg-strong">
+          {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
+        </span>
+        {ehNovo && (
+          <Badge variant="info">
+            <Plus aria-hidden />
+            novo
+          </Badge>
         )}
-
-        {parSugerido && !par && (
-          <p className="mt-1 text-caption text-fg-muted">
-            Palpite: pareceria{' '}
-            <span className="font-mono text-fg-body">{parSugerido.tecnico}</span> ({parSugerido.pt}).
-            Nada é enviado por palpite — crie a regra na aba Regras para valer.
-          </p>
+        {teste && (
+          <Badge variant="aviso">
+            <FlaskConical aria-hidden />
+            teste
+          </Badge>
         )}
-
-        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-muted">
-          <span className="tabular">{hora(item.recebidoEm)}</span>
-          {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono. Dá
-              para reconhecer o cliente sem o endereço completo aberto na tela. */}
-          {item.nomeCliente && (
-            <span className="min-w-0 break-words text-fg-strong">{item.nomeCliente}</span>
-          )}
-          {item.emailMascarado && (
-            <span className="wrap-token min-w-0">{item.emailMascarado}</span>
-          )}
-          {item.orderId && (
-            <span className="wrap-token min-w-0 font-mono">pedido {item.orderId}</span>
-          )}
-          {!naoLido && (
-            <StatusDot tone={item.temFbc ? 'success' : 'danger'}>
-              {item.temFbc ? 'com fbc' : 'sem fbc'}
-            </StatusDot>
-          )}
-          {/* Só quando existe: um "sem fbclid" em toda linha de venda orgânica
-              viraria ruído vermelho constante. A ausência já é dita pelo fbc. */}
-          {!naoLido && item.temFbclid && <StatusDot tone="success">fbclid</StatusDot>}
-          {!naoLido && item.temGclid && <StatusDot tone="neutral">gclid</StatusDot>}
-          {item.formato && <span>{FORMATO_TEXTO[item.formato]}</span>}
-          {item.emq !== undefined && <span className="tabular">EMQ {item.emq.toFixed(1)}</span>}
-        </p>
-
-        {item.resultados && item.resultados.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 border-t border-line pt-2">
-            {item.resultados.map((r, j) => (
-              <li
-                key={`${r.marcaId}-${j}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption"
-              >
-                <StatusDot tone={TOM_RESULTADO[r.status]}>
-                  {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
-                  {ROTULO_RESULTADO[r.status] ?? r.status}
-                </StatusDot>
-                {r.httpStatus ? (
-                  <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>
-                ) : null}
-                {r.fbtraceId && (
-                  <span className="font-mono text-caption text-fg-muted">
-                    fbtrace {r.fbtraceId.slice(0, 12)}…
-                  </span>
-                )}
-                {r.modoTeste && (
-                  <Badge variant="aviso">teste</Badge>
-                )}
-                {r.herdados.length > 0 && (
-                  <span className="text-fg-muted">
-                    herdou {r.herdados.join(', ')} do pré-checkout
-                  </span>
-                )}
-                {r.erro && <span className="text-danger">{r.erro}</span>}
-              </li>
-            ))}
-          </ul>
+        {naoLido && (
+          <Badge variant="perigo">
+            <FileWarning aria-hidden />
+            não deu para ler
+          </Badge>
         )}
       </div>
 
-      {/* `flex-wrap` sem largura fixa: em 360px os botões caem para a linha de
-          baixo em vez de empurrar a coluna do texto e vazar da tela. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Sempre presente, inclusive no item que não pôde ser lido — é
-            justamente nele que ver o corpo cru resolve o problema. */}
-        <Button size="sm" variant="ghost" onClick={aoVerPayload}>
-          <FileJson className="size-3.5" aria-hidden />
-          Ver payload
-        </Button>
+      {/* (b) O valor da venda: único elemento em negrito deste lado da linha.
+          É o que separa uma compra de R$ 497 de um ping de teste. */}
+      <div
+        className={cn(
+          'col-start-2 row-start-1 justify-self-end font-mono text-label font-semibold tabular whitespace-nowrap',
+          teste || naoLido ? 'text-fg-muted' : 'text-fg-strong'
+        )}
+      >
+        {teste || naoLido ? '—' : dinheiro(item.valor, item.moeda)}
+      </div>
+
+      {/* (c) Para onde isto vai, em uma frase, mais o selo de estado. */}
+      <div className="col-start-1 col-end-3 row-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-fg-body">
+        {par ? (
+          <>
+            <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
+            <span>vira</span>
+            <code className="rounded border border-line bg-surface-3 px-1.5 py-0.5 font-mono text-caption text-fg-body">
+              {par.tecnico}
+            </code>
+            <span className="text-caption text-fg-muted">{par.pt}</span>
+            {!par.padrao && (
+              <Badge variant="aviso">
+                <AlertTriangle aria-hidden />
+                fora do padrão da Meta
+              </Badge>
+            )}
+          </>
+        ) : teste ? (
+          <span className="inline-flex items-center gap-1.5 text-fg-muted">
+            <FlaskConical className="size-3.5 shrink-0" aria-hidden />
+            teste de conexão — nada a enviar
+          </span>
+        ) : naoLido ? (
+          <span className="inline-flex items-center gap-1.5 text-danger">
+            <FileWarning className="size-3.5 shrink-0" aria-hidden />
+            corpo não pôde ser lido
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-fg-muted">
+            <Ban className="size-3.5 shrink-0" aria-hidden />
+            não enviar
+          </span>
+        )}
+
+        {item.status === 'carregado' && (
+          <Badge>
+            <ArrowDownToLine aria-hidden />
+            carregado no formulário
+          </Badge>
+        )}
+        {item.status === 'disparado' && (
+          <Badge variant="sucesso">
+            <Check aria-hidden />
+            enviado à Meta
+          </Badge>
+        )}
+        {item.modo && (
+          <Badge>
+            {React.createElement(ICONE_MODO[item.modo], { 'aria-hidden': true })}
+            {ROTULO_MODO[item.modo]}
+          </Badge>
+        )}
+        {item.testeInterno && (
+          <Badge variant="aviso">
+            <FlaskConical aria-hidden />
+            teste da equipe
+          </Badge>
+        )}
+        {item.classificacao === 'desconhecido' && (
+          <Badge variant="aviso">
+            <HelpCircle aria-hidden />
+            nome novo, sem regra
+          </Badge>
+        )}
+        {item.rotuloDivergente && (
+          <Badge variant="aviso">
+            <History aria-hidden />
+            apelido antigo{item.rotuloRecebido ? `: ${item.rotuloRecebido}` : ''}
+          </Badge>
+        )}
+      </div>
+
+      {/* (d) Metadados: hora, cliente, pedido e sinais de atribuição. */}
+      <p className="col-start-1 col-end-3 row-start-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-muted">
+        <span className="tabular">{hora(item.recebidoEm)}</span>
+        {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono. Dá
+            para reconhecer o cliente sem o endereço completo aberto na tela. */}
+        {item.nomeCliente && (
+          <span className="min-w-0 break-words text-fg-body">{item.nomeCliente}</span>
+        )}
+        {item.emailMascarado && (
+          <span className="wrap-token min-w-0 font-mono">{item.emailMascarado}</span>
+        )}
+        {item.orderId && (
+          <span className="wrap-token min-w-0 font-mono">pedido {item.orderId}</span>
+        )}
         {!naoLido && (
-          <Button size="sm" variant="outline" onClick={aoCarregar}>
-            <ArrowDownToLine className="size-3.5" aria-hidden />
-            Carregar no formulário
-          </Button>
+          <StatusDot tone={item.temFbc ? 'success' : 'danger'}>
+            {item.temFbc ? 'com fbc' : 'sem fbc'}
+          </StatusDot>
         )}
-        {podeDisparar(item) && (
-          <Button size="sm" onClick={aoDisparar}>
-            <Send className="size-3.5" aria-hidden />
-            Disparar direto
+        {/* Só quando existe: um "sem fbclid" em toda linha de venda orgânica
+            viraria ruído vermelho constante. A ausência já é dita pelo fbc. */}
+        {!naoLido && item.temFbclid && <StatusDot tone="success">fbclid</StatusDot>}
+        {!naoLido && item.temGclid && <StatusDot tone="neutral">gclid</StatusDot>}
+        {item.formato && <span>{FORMATO_TEXTO[item.formato]}</span>}
+        {item.emq !== undefined && <span className="tabular">EMQ {item.emq.toFixed(1)}</span>}
+      </p>
+
+      {/* O motivo, com todas as letras: "IGNORAR" sozinho não explica nada. */}
+      {motivo && (
+        <p className="col-start-1 col-end-3 text-caption text-fg-muted">
+          {classificacao ? <span className="text-fg-body">{classificacao.rotulo}. </span> : null}
+          {motivo}
+        </p>
+      )}
+
+      {parSugerido && !par && (
+        <p className="col-start-1 col-end-3 text-caption text-fg-muted">
+          Palpite: pareceria{' '}
+          <span className="font-mono text-fg-body">{parSugerido.tecnico}</span> ({parSugerido.pt}).
+          Nada é enviado por palpite — crie a regra na aba Regras para valer.
+        </p>
+      )}
+
+      {item.resultados && item.resultados.length > 0 && (
+        <ul className="col-start-1 col-end-3 flex flex-col gap-1 border-t border-line pt-2">
+          {item.resultados.map((r, j) => (
+            <li
+              key={`${r.marcaId}-${j}`}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption"
+            >
+              <StatusDot tone={TOM_RESULTADO[r.status]}>
+                {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
+                {ROTULO_RESULTADO[r.status] ?? r.status}
+              </StatusDot>
+              {r.httpStatus ? (
+                <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>
+              ) : null}
+              {r.fbtraceId && (
+                <span className="font-mono text-caption text-fg-muted">
+                  fbtrace {r.fbtraceId.slice(0, 12)}…
+                </span>
+              )}
+              {r.modoTeste && (
+                <Badge variant="aviso">
+                  <FlaskConical aria-hidden />
+                  teste
+                </Badge>
+              )}
+              {r.herdados.length > 0 && (
+                <span className="text-fg-muted">
+                  herdou {r.herdados.join(', ')} do pré-checkout
+                </span>
+              )}
+              {r.erro && <span className="text-danger">{r.erro}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Ações. Em 64rem+ coluna própria com botões pequenos empilhados; abaixo
+          disso um botão de largura total com a ação mais provável e a gaveta
+          dos três pontos — nunca três botões de 36px lado a lado no celular. */}
+      <div className="col-start-1 col-end-3 mt-1 lg:col-start-3 lg:col-end-4 lg:row-start-1 lg:row-span-3 lg:mt-0 lg:w-48 lg:self-center">
+        <div className="hidden lg:flex lg:flex-col lg:gap-2">
+          {disparavel && (
+            <Button size="sm" onClick={aoDisparar}>
+              <Send className="size-3.5" aria-hidden />
+              Disparar direto
+            </Button>
+          )}
+          {!naoLido && (
+            <Button size="sm" variant="outline" onClick={aoCarregar}>
+              <ArrowDownToLine className="size-3.5" aria-hidden />
+              Carregar no formulário
+            </Button>
+          )}
+          {/* Sempre presente, inclusive no item que não pôde ser lido — é
+              justamente nele que ver o corpo cru resolve o problema. */}
+          <Button size="sm" variant="ghost" onClick={aoVerPayload}>
+            <FileJson className="size-3.5" aria-hidden />
+            Ver payload
           </Button>
-        )}
+        </div>
+
+        <div className="flex flex-col gap-2 lg:hidden">
+          <div className="flex items-center gap-2">
+            {disparavel ? (
+              <Button className="min-h-control-lg flex-1" onClick={aoDisparar}>
+                <Send className="size-4" aria-hidden />
+                Disparar direto
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="min-h-control-lg flex-1"
+                onClick={aoVerPayload}
+              >
+                <FileJson className="size-4" aria-hidden />
+                Ver payload
+              </Button>
+            )}
+            {secundarias > 0 && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="min-h-control-lg min-w-control-lg"
+                aria-expanded={maisAberto}
+                aria-label={maisAberto ? 'Fechar as outras ações' : 'Ver as outras ações'}
+                onClick={() => setMaisAberto((v) => !v)}
+              >
+                <MoreHorizontal className="size-4" aria-hidden />
+              </Button>
+            )}
+          </div>
+          {maisAberto && (
+            <div className="flex flex-col gap-2">
+              {!naoLido && (
+                <Button
+                  variant="outline"
+                  className="min-h-control-lg justify-start"
+                  onClick={aoCarregar}
+                >
+                  <ArrowDownToLine className="size-4" aria-hidden />
+                  Carregar no formulário
+                </Button>
+              )}
+              {disparavel && (
+                <Button
+                  variant="ghost"
+                  className="min-h-control-lg justify-start"
+                  onClick={aoVerPayload}
+                >
+                  <FileJson className="size-4" aria-hidden />
+                  Ver payload
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

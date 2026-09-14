@@ -25,6 +25,13 @@ import { cn } from "@/lib/utils"
  * antiga usava o degrau de 11px, ELIMINADO por DS-4.9 — o piso do produto e
  * 12px renderizados, selo incluido. Nao o reintroduza.
  *
+ * v3 — alinhamento com a pagina de referencia: pilula de 22px de altura, texto
+ * em caixa normal (o `uppercase` + `tracking-wide` de antes gritava, e o selo
+ * acompanha o dado, nao compete com ele) e icone lucide de 11px antes do
+ * texto. As cores e as opacidades de borda NAO mudaram: as razoes medidas
+ * logo abaixo foram calculadas para o /80, e o /30 da referencia derruba
+ * perigo e info para menos de 2:1 contra o proprio fill.
+ *
  * Contrastes medidos (pior caso das tres superficies onde o selo aparece —
  * painel s1, campo s2 e camada flutuante s3):
  *   texto  sucesso 6.41 · aviso 7.24 · perigo 4.82 · info 4.95 · neutro 7.26
@@ -35,11 +42,11 @@ import { cn } from "@/lib/utils"
  * 2.78 sobre a superficie flutuante — passa no painel e reprova no modal.
  */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-caption font-semibold uppercase tracking-wide whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "inline-flex h-[22px] w-fit shrink-0 items-center justify-center gap-1.5 rounded-full border px-2 text-caption font-semibold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-[11px]!",
   {
     variants: {
       variant: {
-        neutro: "border-line-control text-fg-muted",
+        neutro: "border-line-control bg-surface-2 text-fg-muted",
         sucesso: "border-success/80 bg-success/10 text-success",
         aviso: "border-warning/80 bg-warning/10 text-warning",
         perigo: "border-danger/80 bg-danger/10 text-danger",

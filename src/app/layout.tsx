@@ -1,20 +1,38 @@
 import type { Metadata, Viewport } from 'next';
-import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppChrome } from '@/components/common/AppChrome';
 import { DESCRICAO_PRODUTO, NOME_PRODUTO } from '@/lib/produto';
 import './globals.css';
 
-const sans = Plus_Jakarta_Sans({
+// IBM Plex Sans + IBM Plex Mono.
+//
+// Antes era Geist, e antes disso Plus Jakarta. A Geist é a fonte que vem de
+// fábrica em projeto Next.js — junto com Inter e DM Sans, é o que todo
+// console gerado por IA usa, e é parte do motivo de o produto parecer igual a
+// todos os outros por mais que a gente refatore.
+//
+// A Plex não é neutra: tem o "a" de dois andares com a cauda reta, o "g" de
+// um andar, terminais cortados em ângulo e um "l" com pé. São detalhes que se
+// leem como uma decisão de alguém. Foi desenhada para produto técnico denso,
+// que é exatamente esta tela, e tem um itálico verdadeiro (não oblíquo).
+//
+// A mono é a irmã da mesma família e essa é a razão de peso aqui: este
+// console mostra id, hash, fbtrace, token e valor o tempo todo, e com famílias
+// irmãs eles alinham com o texto ao redor em vez de parecerem citação colada
+// de outro sistema. Os nomes das variáveis CSS continuam os mesmos.
+const sans = IBM_Plex_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
 });
 
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
+  weight: ['400', '500', '600'],
   display: 'swap',
 });
 
@@ -30,7 +48,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // = --surface-0 de globals.css. O gate (G7) reprova se os dois divergirem:
   // a barra do navegador precisa ser a mesma cor do fundo da aplicacao.
-  themeColor: '#090b0f',
+  themeColor: '#0b0f17',
   colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,

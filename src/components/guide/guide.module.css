@@ -226,14 +226,6 @@
   content: '';
 }
 
-.pathEyebrow {
-  color: var(--fg-muted);
-  font-size: max(11px, 0.6875rem);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
 .pathTitle {
   color: var(--fg-strong);
   font-size: max(17px, 1.0625rem);

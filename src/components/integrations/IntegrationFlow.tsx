@@ -1,10 +1,11 @@
+import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  ArrowDown,
-  ArrowRight,
   ArrowUpRight,
   GitBranch,
   Inbox,
+  ListTree,
+  RotateCcw,
   Target,
   Webhook,
 } from 'lucide-react';
@@ -19,132 +20,293 @@ import {
 export type IntegrationTab = 'inbox' | 'regras' | 'retornos';
 
 /**
- * Um passo do mapa ou leva a uma aba desta tela, ou leva a outra rota. Os dois
- * casos existem porque o destino final do evento — o Pixel — mora em `/pixels`
- * e nao aqui: ate a FASE 4 o mapa terminava em "Meta e retornos" e o Pixel,
- * que e a razao de tudo isto existir, nao aparecia em lugar nenhum (IA-3).
+ * Um passo do trilho ou leva a uma aba desta tela, ou leva a outra rota. Os
+ * dois casos existem porque o destino final do evento — o Pixel — mora em
+ * `/pixels` e nao aqui: ate a FASE 4 o mapa terminava em "Meta e retornos" e o
+ * Pixel, que e a razao de tudo isto existir, nao aparecia em lugar nenhum
+ * (IA-3).
  */
 type PassoDoFluxo = {
   id: string;
   title: string;
-  description: string;
   icon: typeof Webhook;
+  /** Nome da variavel de tinta da area a que a estacao pertence. Entra em
+   *  fundo, borda e icone do chip — nunca no texto (DS-1.5′). */
+  tinta: string;
 } & (
   | { tipo: 'aba'; tab: IntegrationTab }
   | { tipo: 'rota'; href: string }
 );
 
-const STEPS: PassoDoFluxo[] = [
+const PASSOS: PassoDoFluxo[] = [
   {
-    id: 'origem',
+    id: 'instalacao',
     tipo: 'rota',
     href: '/instalacao',
     title: 'Instalação',
-    description: 'Webhook da plataforma e tag do site',
     icon: Webhook,
+    tinta: 'var(--tinta-instalacao)',
   },
   {
     id: 'inbox',
     tipo: 'aba',
     tab: 'inbox',
     title: 'Caixa de entrada',
-    description: 'Eventos recebidos',
     icon: Inbox,
+    tinta: 'var(--tinta-automatico)',
   },
   {
     id: 'regras',
     tipo: 'aba',
     tab: 'regras',
     title: 'Regras',
-    description: 'Meta, fila ou ignorar',
     icon: GitBranch,
+    tinta: 'var(--tinta-automatico)',
   },
   {
     id: 'pixels',
     tipo: 'rota',
     href: '/pixels',
     title: 'Pixels',
-    description: 'O destino de cada conversão',
     icon: Target,
+    tinta: 'var(--tinta-pixels)',
   },
   {
     id: 'retornos',
     tipo: 'aba',
     tab: 'retornos',
     title: 'Retornos',
-    description: 'Resultado para n8n ou CRM',
-    icon: ArrowUpRight,
+    icon: RotateCcw,
+    tinta: 'var(--tinta-automatico)',
   },
 ];
 
-const CAIXA =
-  'group flex min-h-14 min-w-0 items-center gap-3 rounded-control border border-line bg-surface-2/80 px-3 text-left transition-colors hover:border-line-control hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text';
+/** Numero que ainda nao chegou vira travessao. Nunca zero de enfeite. */
+const AUSENTE = '—';
 
-function ConteudoDoPasso({ passo }: { passo: PassoDoFluxo }) {
+function numero(valor: number | undefined): string {
+  return typeof valor === 'number' ? valor.toLocaleString('pt-BR') : AUSENTE;
+}
+
+function plural(valor: number | undefined, um: string, muitos: string): string {
+  if (typeof valor !== 'number') return `${AUSENTE} ${muitos}`;
+  return `${valor.toLocaleString('pt-BR')} ${valor === 1 ? um : muitos}`;
+}
+
+type Estado = 'ok' | 'atencao' | 'desconhecido';
+
+const ESTACAO =
+  'group relative grid min-h-12 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text';
+
+const ATIVA =
+  'bg-surface-2 before:absolute before:top-2.5 before:bottom-2.5 before:left-0 before:w-[3px] before:rounded-full before:bg-tinta before:content-[""]';
+
+function SeloDeEstado({ estado }: { estado: Estado }) {
+  if (estado === 'desconhecido') {
+    return (
+      <span className="font-mono text-label font-semibold text-fg-muted tabular-nums">
+        {AUSENTE}
+      </span>
+    );
+  }
+  const ok = estado === 'ok';
+  return (
+    <span className="flex items-center gap-1.5 text-caption text-fg-muted">
+      <span
+        aria-hidden
+        className={`size-[7px] shrink-0 rounded-full ${ok ? 'bg-success' : 'bg-warning'}`}
+      />
+      {ok ? 'ok' : 'atenção'}
+    </span>
+  );
+}
+
+function Contador({ valor }: { valor: number | undefined }) {
+  return (
+    <span className="font-mono text-label font-semibold text-fg-body tabular-nums">
+      {numero(valor)}
+    </span>
+  );
+}
+
+function ConteudoDaEstacao({
+  passo,
+  linha,
+  direita,
+}: {
+  passo: PassoDoFluxo;
+  linha: string;
+  direita: ReactNode;
+}) {
   const Icon = passo.icon;
   return (
     <>
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-control border border-accent-text/20 bg-accent-text/8 text-accent-text">
-        <Icon className="size-5" strokeWidth={1.75} aria-hidden />
+      <span
+        aria-hidden
+        className="flex size-8 items-center justify-center rounded-control border"
+        style={
+          {
+            color: passo.tinta,
+            backgroundColor: `color-mix(in srgb, ${passo.tinta} 12%, transparent)`,
+            borderColor: `color-mix(in srgb, ${passo.tinta} 28%, transparent)`,
+          } as CSSProperties
+        }
+      >
+        <Icon className="size-4" strokeWidth={1.75} />
       </span>
       <span className="min-w-0">
-        <span className="block text-label font-semibold text-fg-strong">
-          {passo.title}
+        <span className="flex items-center gap-1 text-label font-semibold text-fg-strong">
+          <span className="truncate">{passo.title}</span>
+          {passo.tipo === 'rota' && (
+            <ArrowUpRight
+              className="size-3.5 shrink-0 text-fg-muted"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          )}
         </span>
-        <span className="block text-caption text-fg-muted">
-          {passo.description}
-        </span>
+        <span className="block truncate text-caption text-fg-muted">{linha}</span>
       </span>
+      <span className="shrink-0">{direita}</span>
     </>
   );
 }
 
+/**
+ * Trilho de estado (V-05). Substitui o mapa de cinco caixas iguais: cada
+ * estacao mostra o numero REAL do seu trecho do caminho e leva ao lugar onde
+ * se mexe nele.
+ *
+ * Quem passa os numeros: `IntegrationsPage`. Hoje ela ja tem `cfg.regras`
+ * (total e quantas estao em automatico), os destinos de retorno e as marcas
+ * com token; `pendentes` sai do resumo da caixa de entrada e `dominios` /
+ * `webhookAtivo` da configuracao de instalacao. Toda prop de estado e
+ * OPCIONAL de proposito: enquanto a pagina nao passar o dado, a estacao
+ * mostra travessao — nenhum numero e inventado.
+ */
 export function IntegrationFlow({
   onNavigate,
+  abaAtiva,
+  dominios,
+  webhookAtivo,
+  naFila,
+  regrasAutomaticas,
+  regrasTotal,
+  pixelsComToken,
+  destinosAtivos,
 }: {
+  /** Troca de aba dentro de `/automatico`. Contrato antigo, mantido. */
   onNavigate: (tab: IntegrationTab) => void;
+  /** Aba aberta agora — marca a estacao com `aria-current` e linha de tinta. */
+  abaAtiva?: IntegrationTab;
+  /** Quantos dominios autorizados a tag do site tem. */
+  dominios?: number;
+  /** O webhook da plataforma tem URL configurada. */
+  webhookAtivo?: boolean;
+  /** Eventos recebidos esperando disparo. */
+  naFila?: number;
+  /** Regras em disparo automatico. */
+  regrasAutomaticas?: number;
+  /** Total de regras cadastradas. */
+  regrasTotal?: number;
+  /** Pixels com token de acesso salvo. */
+  pixelsComToken?: number;
+  /** Destinos de retorno (n8n, CRM) ligados. */
+  destinosAtivos?: number;
 }) {
+  const estadoInstalacao: Estado =
+    webhookAtivo === undefined
+      ? 'desconhecido'
+      : webhookAtivo && (dominios ?? 0) > 0
+        ? 'ok'
+        : 'atencao';
+  const estadoPixels: Estado =
+    pixelsComToken === undefined
+      ? 'desconhecido'
+      : pixelsComToken > 0
+        ? 'ok'
+        : 'atencao';
+
+  const linhas: Record<string, { linha: string; direita: ReactNode }> = {
+    instalacao: {
+      linha: `${
+        webhookAtivo === undefined
+          ? `webhook ${AUSENTE}`
+          : webhookAtivo
+            ? 'webhook ativo'
+            : 'webhook sem URL'
+      } · ${plural(dominios, 'domínio', 'domínios')}`,
+      direita: <SeloDeEstado estado={estadoInstalacao} />,
+    },
+    inbox: {
+      linha:
+        typeof naFila === 'number'
+          ? naFila === 1
+            ? '1 esperando o disparo'
+            : `${naFila.toLocaleString('pt-BR')} esperando o disparo`
+          : `${AUSENTE} esperando o disparo`,
+      direita: <Contador valor={naFila} />,
+    },
+    regras: {
+      linha: `${numero(regrasAutomaticas)} automáticas de ${numero(regrasTotal)}`,
+      direita: <Contador valor={regrasAutomaticas} />,
+    },
+    pixels: {
+      linha: plural(pixelsComToken, 'pixel com token', 'pixels com token'),
+      direita: <SeloDeEstado estado={estadoPixels} />,
+    },
+    retornos: {
+      linha: plural(destinosAtivos, 'destino ligado', 'destinos ligados'),
+      direita: <Contador valor={destinosAtivos} />,
+    },
+  };
+
   return (
     <section
-      aria-label="Fluxo das integrações"
-      className="rounded-panel border border-line-strong bg-surface-1/95 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.14)] sm:p-5"
+      aria-labelledby="trilho-de-estado"
+      className="w-full rounded-panel border border-line-strong bg-surface-1 p-4 shadow-realce sm:p-5"
     >
-      {/* Cinco passos so cabem lado a lado a partir de `lg`. Abaixo disso a
-          fileira vira coluna com seta para baixo — nenhum passo some. O
-          primeiro e o unico que sai desta tela: instalar e outra etapa, e
-          mistura-la com o que acontece DEPOIS foi o que escondeu a instalacao
-          por tanto tempo. */}
-      <div className="grid gap-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-center">
-        {STEPS.map((passo, index) => (
-          <div key={passo.id} className="contents">
-            {passo.tipo === 'rota' ? (
-              <Link href={passo.href} className={CAIXA}>
-                <ConteudoDoPasso passo={passo} />
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onNavigate(passo.tab)}
-                className={CAIXA}
-              >
-                <ConteudoDoPasso passo={passo} />
-              </button>
-            )}
-            {index < STEPS.length - 1 && (
-              <span
-                className="flex items-center justify-center text-fg-muted"
-                aria-hidden
-              >
-                <ArrowRight className="hidden size-4 lg:block" strokeWidth={1.75} />
-                <ArrowDown className="size-4 lg:hidden" strokeWidth={1.75} />
-              </span>
-            )}
-          </div>
-        ))}
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="flex size-8 items-center justify-center rounded-control border border-tinta/28 bg-tinta/12"
+          style={{ color: 'var(--tinta)' }}
+        >
+          <ListTree className="size-4" strokeWidth={1.75} />
+        </span>
+        <h2
+          id="trilho-de-estado"
+          className="text-label font-semibold text-fg-body"
+        >
+          Como está o caminho
+        </h2>
       </div>
-      <p className="mt-3 text-caption text-fg-muted">
-        O caminho de cada evento depende da regra: enviar para a Meta, deixar na fila ou ignorar.
-      </p>
+
+      {/* Vertical de proposito: em pe cada estacao cabe inteira, com o numero
+          do lado, em qualquer largura. A fileira horizontal so mostrava cinco
+          rotulos iguais e nenhum estado. */}
+      <nav aria-label="Estado das integrações" className="mt-3 grid gap-0.5">
+        {PASSOS.map((passo) => {
+          const { linha, direita } = linhas[passo.id];
+          const ativa = passo.tipo === 'aba' && passo.tab === abaAtiva;
+          const classe = `${ESTACAO}${ativa ? ` ${ATIVA}` : ''}`;
+          return passo.tipo === 'rota' ? (
+            <Link key={passo.id} href={passo.href} className={classe}>
+              <ConteudoDaEstacao passo={passo} linha={linha} direita={direita} />
+            </Link>
+          ) : (
+            <button
+              key={passo.id}
+              type="button"
+              onClick={() => onNavigate(passo.tab)}
+              aria-current={ativa ? 'page' : undefined}
+              className={classe}
+            >
+              <ConteudoDaEstacao passo={passo} linha={linha} direita={direita} />
+            </button>
+          );
+        })}
+      </nav>
     </section>
   );
 }

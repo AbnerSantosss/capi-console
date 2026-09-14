@@ -8,13 +8,104 @@
  *   2. <HelpTip>                -> so parametro tecnico que o helper nao cobre.
  *                                  Maximo 1 por linha, 3 por painel, 0 em botao.
  *   3. /guia                    -> tudo que precisa de mais de uma frase
+ *
+ * Superficies (V-01 / DS-2.6): TRES receitas e nenhuma outra — Cartao, Bloco e
+ * Destaque, exportadas abaixo tanto como componente quanto como string de
+ * classes (`receitaCartao` e companhia), para quem precisa vesti-las num
+ * elemento proprio. O que nao pode voltar: cartao dentro de cartao, opacidade
+ * em cor de superficie (`bg-surface-1/95`), sombra projetada em cartao parado
+ * alem da `--sombra-cartao`, e mais de um raio por familia.
  */
 
 import * as React from 'react';
-import { Info } from 'lucide-react';
+import { Info, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+
+import s from './superficies.module.css';
+
+/* ------------------------------------------------------------------ */
+/* As tres receitas de conteiner                                       */
+/* ------------------------------------------------------------------ */
+
+/** Cartao — o objeto que o operador manipula. Raio 12, borda forte, rampa. */
+export const receitaCartao = cn(
+  'min-w-0 rounded-panel border border-line-strong p-4 sm:p-5',
+  s.cartao
+);
+
+/** Bloco — grupo aninhado DENTRO de um cartao. Raio 8, superficie chapada. */
+export const receitaBloco = 'min-w-0 rounded-lg border border-line bg-surface-2 p-3';
+
+/** Destaque — no maximo um por tela: cartao + linha de tinta + halo da area. */
+export const receitaDestaque = cn(receitaCartao, s.destaque, 'p-5 sm:p-6');
+
+export function Cartao({
+  children,
+  className = '',
+  ...props
+}: React.ComponentProps<'div'>) {
+  return (
+    <div className={cn(receitaCartao, className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export function Bloco({
+  children,
+  className = '',
+  ...props
+}: React.ComponentProps<'div'>) {
+  return (
+    <div className={cn(receitaBloco, className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export function Destaque({
+  children,
+  className = '',
+  ...props
+}: React.ComponentProps<'div'>) {
+  return (
+    <div className={cn(receitaDestaque, className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* ChipDeIcone — o icone da area, em fundo e borda da tinta            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Um por cartao, no maximo. Nunca uma fileira de cinco iguais: e essa fileira
+ * que denuncia interface feita por IA, e o plano v3 manda apagar todas.
+ * A tinta entra em fundo, borda e traco — nunca no texto ao lado (DS-1.5').
+ */
+export function ChipDeIcone({
+  icon: Icon,
+  className = '',
+}: {
+  icon: React.ElementType;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'grid size-8 shrink-0 place-items-center rounded-lg border',
+        s.chip,
+        className
+      )}
+    >
+      <Icon className="size-4" strokeWidth={1.75} />
+    </span>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* ParamChip — o nome do parametro da API, fora do rotulo             */
@@ -146,7 +237,8 @@ export function Field({
           role="alert"
           className="flex items-start gap-1.5 text-caption font-medium text-danger"
         >
-          <span aria-hidden>⚠</span>
+          {/* V-07: icone de verdade no lugar do glifo literal. */}
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
           <span>{error}</span>
         </p>
       )}
@@ -169,7 +261,7 @@ export function useFieldA11y() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Section — passo numerado da coluna de trabalho                      */
+/* Section — o bloco de trabalho de uma pagina                         */
 /* ------------------------------------------------------------------ */
 
 export function Section({
@@ -182,6 +274,7 @@ export function Section({
   id,
   icon: Icon,
   variant = 'plain',
+  tinta = false,
 }: {
   step?: number;
   title: string;
@@ -191,7 +284,17 @@ export function Section({
   className?: string;
   id?: string;
   icon?: React.ElementType;
+  /**
+   * Mantida aceita por compatibilidade: dezenas de chamadas ainda passam
+   * `variant="card"`. Agora ela mapeia para a receita Cartao — nao existe mais
+   * uma quinta superficie propria de Section.
+   */
   variant?: 'plain' | 'card';
+  /**
+   * Troca a receita Cartao pela Destaque (linha de tinta no topo + halo da
+   * area no canto). Vale com `variant="card"`, e no maximo uma vez por tela.
+   */
+  tinta?: boolean;
 }) {
   const headingId = id ? `${id}-titulo` : undefined;
   return (
@@ -200,8 +303,7 @@ export function Section({
       aria-labelledby={headingId}
       className={cn(
         'flex min-w-0 flex-col gap-4 scroll-mt-32',
-        variant === 'card' &&
-          'rounded-xl border border-line-strong bg-surface-1/95 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.14)] sm:p-6',
+        variant === 'card' && (tinta ? receitaDestaque : receitaCartao),
         className
       )}
     >
@@ -215,18 +317,14 @@ export function Section({
               {step}
             </span>
           )}
+          {/* O icone do titulo entra como chip na tinta da area — nunca em
+              azul: azul e acao, tinta e assunto. */}
+          {Icon && <ChipDeIcone icon={Icon} />}
           <div className="min-w-0">
             <h2
               id={headingId}
-              className="flex items-center gap-2 text-title font-semibold text-fg-strong"
+              className="text-title font-semibold text-fg-strong"
             >
-              {Icon && (
-                <Icon
-                  className="size-5 shrink-0 text-accent-text"
-                  strokeWidth={1.75}
-                  aria-hidden
-                />
-              )}
               {title}
             </h2>
             {description && (
@@ -280,7 +378,7 @@ export function StatusDot({
 }
 
 /* ------------------------------------------------------------------ */
-/* Panel — superficie do painel de controle                            */
+/* Panel — receita Cartao com um cabecalho curto                       */
 /* ------------------------------------------------------------------ */
 
 export function Panel({
@@ -299,20 +397,14 @@ export function Panel({
   tone?: 'default' | 'warning' | 'danger' | 'success';
 }) {
   const borda = {
-    default: 'border-line-strong',
+    default: '',
     warning: 'border-warning/40',
     danger: 'border-danger/40',
     success: 'border-success/40',
   }[tone];
 
   return (
-    <div
-      className={cn(
-        'rounded-panel border bg-surface-1 p-4',
-        borda,
-        className
-      )}
-    >
+    <div className={cn(receitaCartao, borda, className)}>
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
@@ -328,7 +420,7 @@ export function Panel({
 }
 
 /* ------------------------------------------------------------------ */
-/* Callout — aviso inline                                              */
+/* Callout — aviso inline (semantico, nao estrutural)                  */
 /* ------------------------------------------------------------------ */
 
 export function Callout({
@@ -357,7 +449,7 @@ export function Callout({
     <div
       id={id}
       className={cn(
-        'flex items-start gap-2.5 rounded-control border p-3',
+        'flex min-w-0 items-start gap-2.5 rounded-lg border p-3',
         estilo,
         className
       )}

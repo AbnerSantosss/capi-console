@@ -33,19 +33,23 @@
      --accent-* pode ser redefinido fora deste bloco: `scripts/contrast-check.mjs`
      (G4) reprova o build se encontrar. Os valores abaixo são os que estavam em
      produção dentro de `.shell` — subiram para cá em vez de serem trocados
-     pelos do :root antigo, que ninguém nunca viu renderizado (DS-1.1).       */
-  --surface-0: #090b0f; /* fundo do app                                    */
-  --surface-1: #12151a; /* painel / card                                   */
-  --surface-2: #1a1e25; /* input, cabeçalho de accordion, elemento elevado */
+     pelos do :root antigo, que ninguém nunca viu renderizado (DS-1.1).
+
+     v3: a escada saiu do cinza-neutro quase preto para NAVY em camadas (os
+     mesmos quatro degraus da página de referência aprovada). Preto chapado
+     achata tudo; o navy dá profundidade sem acender nada.                    */
+  --surface-0: #0b0f17; /* fundo do app                                    */
+  --surface-1: #151b28; /* painel / card                                   */
+  --surface-2: #1c2333; /* input, cabeçalho de accordion, elemento elevado */
 
   /* Superfície ÚNICA de tudo que flutua por cima da página: dialog, popover,
      select, tooltip, paleta de comandos, toast. É mais clara que o painel de
-     propósito, mas o fill sozinho quase não separa — 1.22 s/ surface-1 e
-     1.30 s/ surface-0. Quem separa é a borda: `border-line-control` dá
-     3.20 s/ esta superfície e 4.38 contra a página escurecida pelo overlay
-     preto a 60% (#040406). Por isso NÃO existe e não deve voltar a existir
+     propósito, mas o fill sozinho quase não separa — 1.23 s/ surface-1 e
+     1.37 s/ surface-0. Quem separa é a borda: `border-line-control` dá
+     3.10 s/ esta superfície e 4.51 contra a página escurecida pelo overlay
+     preto a 60% (#040609). Por isso NÃO existe e não deve voltar a existir
      paleta local de modal: quem flutua usa --surface-3 + --border-control.   */
-  --surface-3: #222730; /* popover / dialog / tooltip / paleta             */
+  --surface-3: #242c3d; /* popover / dialog / tooltip / paleta             */
 
   /* --- Bordas (DS-3.1 — o nome diz o USO, não a ênfase) ------------------
      --border-subtle   divisória INTERNA: linha de tabela, separador dentro de
@@ -58,33 +62,46 @@
      As três cruzam 3:1 contra a superfície que delimitam (DS-2.1 / SC 1.4.11);
      é essa a diferença para a paleta anterior, em que subtle (1.29 s0) e
      default (2.58 s1) eram ornamento invisível. Elevação vem da borda, e uma
-     borda que não se enxerga não eleva nada.                                 */
-  --border-subtle: #5c636e; /* divisória interna  3.25 s0 · 3.02 s1 ✅     */
-  --border-default: #636b77; /* contorno de superfície
-                                3.66 s0 · 3.40 s1 · 3.10 s2 ✅             */
-  --border-control: #697586; /* limite de componente
-                                4.21 s0 · 3.91 s1 · 3.57 s2 · 3.20 s3 ✅    */
-  --border-focus: #4da6ff; /* anel de foco       7.16 s1 · 5.86 s3 ✅      */
+     borda que não se enxerga não eleva nada.
+
+     v3: a página de referência desenha as bordas como branco translúcido
+     (7–18%). Translúcido sobre navy dá ~1.4:1 — bonito na captura, reprovado
+     em G2/G3 e invisível para quem enxerga pouco. Aqui as três são SÓLIDAS,
+     no mesmo matiz navy da referência (r < g < b), no degrau mais escuro que
+     ainda cruza 3:1 contra a superfície que delimitam.                       */
+  --border-subtle: #606775; /* divisória interna  3.37 s0 · 3.03 s1 ✅     */
+  --border-default: #676e7e; /* contorno de superfície
+                                3.75 s0 · 3.37 s1 · 3.07 s2 ✅             */
+  --border-control: #6f7787; /* limite de componente
+                                4.26 s0 · 3.83 s1 · 3.49 s2 · 3.10 s3 ✅    */
+  --border-focus: #3b82f6; /* anel de foco       4.68 s1 · 3.80 s3 ✅      */
 
   /* --- Texto (razões medidas sobre painel s1 e sobre a camada flutuante s3) */
-  --fg-strong: #fafafa; /* títulos, valores      17.53 s1 · 14.36 s3      */
-  --fg-body: #e4e7ec; /* corpo, rótulos        14.76 s1 · 12.09 s3      */
-  --fg-muted: #adb5c2; /* helper, legendas, placeholder
-                               8.86 s1 ·  7.26 s3 ✅                      */
-  --fg-disabled: #7f8896; /* SÓ desabilitado/ornamento   5.11 s1 · 4.19 s3
+  --fg-strong: #f4f6fa; /* títulos, valores      15.92 s1 · 12.92 s3      */
+  --fg-body: #c7cfdc; /* corpo, rótulos        10.98 s1 ·  8.91 s3      */
+  --fg-muted: #8a95a8; /* helper, legendas, placeholder
+                               5.70 s1 ·  4.62 s3 ✅                      */
+  --fg-disabled: #5b6577; /* SÓ desabilitado/ornamento   2.93 s1 · 2.38 s3
                               — reprova como conteúdo em QUALQUER
                               superfície; placeholder usa --fg-muted       */
 
-  /* --- Acento (azul oficial da Meta) ------------------------------------ */
-  --accent-fill: #0064e0; /* fundo do botão primário — branco = 5.39 ✅   */
-  --accent-fill-hover: #0b6fe8;
-  --accent-fill-active: #0057c4;
-  --accent-text: #4da6ff; /* link, aba ativa, ícone ativo    7.09 ✅      */
+  /* --- Acento (azul de AÇÃO: botão, link, foco — nunca decoração) --------
+     A referência pinta o botão com a rampa #3b82f6 → #2563eb → #1d4ed8. O
+     degrau mais claro, com texto branco em cima, dá 3.68:1 e reprova em G1,
+     então o fundo do botão começa um degrau abaixo: a rampa é a mesma, só
+     não parte do topo. O #3b82f6 continua no produto onde não carrega texto
+     — anel de foco e chart-1 —, e o azul que o olho lê como "link" é
+     --accent-text.                                                          */
+  --accent-fill: #2563eb; /* fundo do botão primário — branco = 5.17 ✅   */
+  --accent-fill-hover: #2d70e0; /*                        branco = 4.66 ✅ */
+  --accent-fill-active: #1d4ed8; /*                       branco = 6.70 ✅ */
+  --accent-text: #7fb3ff; /* link, aba ativa, ícone ativo    8.03 ✅      */
 
   /* --- Status (sempre acompanhados de ícone + texto) -------------------- */
-  --success: #34d399; /*  9.43 */
-  --warning: #fbbf24; /* 10.86 — PRODUÇÃO / evento real */
-  --danger: #fb7185; /*  6.74 */
+  --success: #22c55e; /*  7.56 */
+  --warning: #f59e0b; /*  8.02 — PRODUÇÃO / evento real */
+  --danger: #fb7f93; /*  7.02 — a rosa da referência (#f43f5e) dá 3.49
+                          dentro da caixa de erro do modal; esta dá 4.86  */
 
   /* =======================================================================
      Ponte para os nomes que os primitivos shadcn/Base UI já usam.
@@ -110,11 +127,11 @@
   --input: var(--border-control);
   --ring: var(--border-focus);
 
-  --chart-1: #0064e0;
-  --chart-2: #34d399;
-  --chart-3: #fbbf24;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
   --chart-4: #a78bfa;
-  --chart-5: #fb7185;
+  --chart-5: #fb7f93;
 
   --sidebar: var(--surface-1);
   --sidebar-foreground: var(--fg-body);
@@ -124,6 +141,73 @@
   --sidebar-accent-foreground: var(--fg-strong);
   --sidebar-border: var(--border-subtle);
   --sidebar-ring: var(--border-focus);
+
+  /* =======================================================================
+     TINTA POR ÁREA (§2.3 do plano v3) — segunda exceção a DS-0.1; a primeira
+     é o --hue do Guia. Cada seção do console tem um matiz que o operador
+     reconhece antes de ler o título. A tinta entra em FUNDO (6–16%), em chip
+     de ícone e em linha de destaque. NUNCA em texto: azul de ação e tinta de
+     área são coisas diferentes, e texto colorido some do lado do dado.
+     Os nomes ficam de fora dos quatro namespaces vigiados pelo G4 de
+     propósito — é --tinta que troca por rota, e trocar é o ponto.
+     ======================================================================= */
+  --tinta-painel: #2dd4bf; /* teal    — dados que chegaram        */
+  --tinta-instalacao: #38bdf8; /* céu     — as duas portas de entrada */
+  --tinta-pixels: #f59e0b; /* âmbar   — para onde o evento vai    */
+  --tinta-manual: #fb7185; /* coral   — ação humana               */
+  --tinta-automatico: #a78bfa; /* violeta — regras rodando sozinhas   */
+  --tinta: var(--tinta-painel); /* padrão; cada <main data-area> troca */
+
+  /* --- Relevo de superfície (DS-2.4′) ------------------------------------
+     Não é sombra projetada: é a aresta de cima da superfície pegando luz,
+     como em Raycast/Linear. --sombra-cartao é curta e fechada de propósito —
+     o cartão assenta no fundo, não flutua sobre ele.                        */
+  --realce-interno: inset 0 1px 0 rgb(255 255 255 / 7%);
+  --realce-interno-forte: inset 0 1px 0 rgb(255 255 255 / 12%);
+  --sombra-cartao: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 24px -12px rgb(0 0 0 / 55%);
+
+  /* --- Medidas de casca (em rem: acompanham o zoom de texto do usuário) -- */
+  --altura-cabecalho: 3.5rem;
+  --altura-barra-abas: 3.75rem;
+  --container-pagina: 82rem;
+  /* A barra de cima é mais larga que a página de propósito.
+     Medido: marca 9,0rem + seletor de empresa 10,5rem + menu de cinco seções
+     41,6rem + pílula de ambiente 13,9rem + busca + sino + avatar = 87,7rem de
+     conteúdo. Em 82rem sobram 78,2rem úteis, então a linha não cabia em
+     largura nenhuma — quem limitava era o container, não a janela — e o flex
+     descontava a diferença esmagando o seletor de empresa até o nome sumir.
+     Alargar a barra é o que mantém o menu inteiro em cima, com rótulo, sem
+     esconder nada. A PÁGINA continua em 82rem: é a leitura que pede medida
+     curta de linha, não a barra de controles. */
+  --container-cabecalho: 96rem;
+
+  /* --- Tipografia fluida (o único clamp do produto) ----------------------
+     --text-pagina  título de página   24 → 30 px
+
+     Havia um segundo degrau aqui, `--text-norte` (36 → 52 px), só para o
+     algarismo gigante do Painel. O cartão virou frase e o degrau morreu
+     junto: nenhum número deste console precisa de corpo maior que o título
+     da própria página. */
+  --text-pagina: clamp(1.5rem, 1.2rem + 1.2vw, 1.875rem);
+}
+
+/* A tinta da área, escolhida pelo `data-area` que cada <main> declara. Fora
+   do :root de propósito: `--tinta` não casa a regex do G4, e trocar de valor
+   por rota é exatamente a função dela. */
+[data-area='painel'] {
+  --tinta: var(--tinta-painel);
+}
+[data-area='instalacao'] {
+  --tinta: var(--tinta-instalacao);
+}
+[data-area='pixels'] {
+  --tinta: var(--tinta-pixels);
+}
+[data-area='manual'] {
+  --tinta: var(--tinta-manual);
+}
+[data-area='automatico'] {
+  --tinta: var(--tinta-automatico);
 }
 
 /* O app é dark-only. `.dark` existe só para os seletores dos primitivos. */
@@ -189,6 +273,24 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* Tinta da área como cor de utilitário: `bg-tinta/10`, `border-tinta/40`,
+     `from-tinta/15`. `text-tinta` é proibido (DS-1.5′) — o gate não pega, a
+     revisão pega. Fica no @theme INLINE porque o valor precisa continuar
+     sendo a variável viva: emitido em :root, `--tinta` congelaria no valor
+     do painel e nenhum data-area trocaria mais nada. */
+  --color-tinta: var(--tinta);
+
+  /* Relevo e casca — mesma razão: o valor mora no :root e é lido de lá. */
+  --shadow-realce: var(--realce-interno);
+  --shadow-realce-forte: var(--realce-interno-forte);
+  --shadow-cartao: var(--sombra-cartao);
+  --container-pagina: var(--container-pagina); /* max-w-pagina */
+  --container-cabecalho: var(--container-cabecalho); /* max-w-cabecalho */
+
+  /* O degrau fluido. `text-pagina`. */
+  --text-pagina: var(--text-pagina);
+  --text-pagina--line-height: 1.15;
+
   /* --- Tipografia -------------------------------------------------------
      As famílias ficam aqui (e não no @theme static abaixo) porque o valor se
      refere à variável homônima que o next/font injeta no <html>: emitida em
@@ -209,6 +311,21 @@
    cumprida fora do Tailwind.
    ========================================================================= */
 @theme static {
+  /* --- Um degrau de largura só do cabeçalho -----------------------------
+     `barra:` = 94rem. É a largura em que a barra de cima cabe com TUDO por
+     extenso: nome do produto, nome da empresa, as cinco seções com rótulo e
+     "PRODUÇÃO · SEM AUTO" inteiro — 87,7rem de conteúdo mais 4rem de respiro.
+     O degrau é 94 e não 92 porque 92 deixava 0,3rem de folga: largura de texto
+     varia com a fonte que o sistema entrega, e margem de meio caractere não é
+     margem.
+     Entre 80rem (onde o menu de cima aparece) e 94rem falta espaço para os
+     dois rótulos mais longos — e nessa faixa é o nome do produto e o sufixo
+     do ambiente que encolhem, nunca o menu e nunca o nome da empresa.
+     DECLARADO aqui de propósito: variante de Tailwind sem `--breakpoint-*`
+     no tema não emite regra nenhuma, e a classe `hidden` que ela deveria
+     vencer fica valendo em toda largura — foi assim que o menu sumiu. */
+  --breakpoint-barra: 94rem;
+
   /* Seis degraus. Proibido text-[9px], text-[10px] e text-[13px].
      O antigo degrau de 11px foi ELIMINADO por DS-4.9: o piso do produto é 12px
      renderizados, em qualquer densidade e inclusive em selo. Um token cujo
@@ -368,17 +485,17 @@
   background-image:
     radial-gradient(
       ellipse 80% 50% at 15% -10%,
-      rgba(0, 100, 224, 0.16),
+      color-mix(in srgb, var(--tinta) 10%, transparent),
       transparent 60%
     ),
     radial-gradient(
       ellipse 60% 45% at 92% 8%,
-      rgba(77, 166, 255, 0.1),
+      color-mix(in srgb, var(--tinta) 5%, transparent),
       transparent 62%
     ),
     radial-gradient(
       ellipse 70% 60% at 50% 105%,
-      rgba(0, 100, 224, 0.08),
+      color-mix(in srgb, var(--accent-fill) 5%, transparent),
       transparent 65%
     );
   background-attachment: fixed;
@@ -423,4 +540,49 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
+}
+
+/* =========================================================================
+   Superfícies do navegador
+
+   O que o navegador desenha por conta própria — seleção de texto, cursor de
+   texto, sublinhado de link, anel de foco, seta do campo numérico — vem com o
+   padrão de fábrica, que não pertence a design system nenhum. Deixar assim é o
+   sinal mais barato de que a tela foi montada e não desenhada. Tudo aqui sai
+   dos tokens do :root; nenhum hex novo (G7).
+   ========================================================================= */
+::selection {
+  /* Tinta da área, não o azul de ação: selecionar não é agir. */
+  background: color-mix(in srgb, var(--tinta) 30%, transparent);
+  color: var(--fg-strong);
+}
+::-moz-selection {
+  background: color-mix(in srgb, var(--tinta) 30%, transparent);
+  color: var(--fg-strong);
+}
+
+/* Cursor de texto na tinta da área, não no cinza do corpo. */
+input,
+textarea,
+[contenteditable] {
+  caret-color: var(--tinta);
+}
+
+/* Link dentro de texto corrido: sublinhado afastado da letra e fino, em vez
+   do sublinhado colado de fábrica que corta as descendentes. */
+a:not([class]),
+.prosa a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, currentcolor 40%, transparent);
+}
+a:not([class]):hover,
+.prosa a:hover {
+  text-decoration-color: currentcolor;
+}
+
+/* Controles nativos (checkbox, radio, range, progress) herdam a cor de ação
+   em vez do azul do sistema operacional. */
+:root {
+  accent-color: var(--accent-fill);
 }

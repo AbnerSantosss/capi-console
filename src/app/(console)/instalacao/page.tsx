@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 const TITULO = 'Instalação';
 const DESCRICAO =
-  'As duas portas por onde evento entra: o webhook da plataforma de vendas e a tag do site do cliente. Enquanto estas duas coisas não estiverem instaladas, nenhuma outra tela do console tem o que mostrar.';
+  'As duas portas por onde o evento entra: o webhook da plataforma de vendas e a tag do site do cliente.';
 
 export default async function Instalacao() {
   // Leitura única: esta tela não depende do log de entregas, e configuração
@@ -29,9 +29,8 @@ export default async function Instalacao() {
     // mensagem que faz o operador achar que perdeu a configuração.
     if (!(erro instanceof ErroConfiguracaoIndisponivel)) throw erro;
     return (
-      <main className={consoleStyles.page}>
+      <main className={consoleStyles.page} data-area="instalacao">
         <ConsolePageHeader
-          eyebrow="Primeiro passo"
           title={TITULO}
           description={DESCRICAO}
           icon={Plug}
@@ -42,9 +41,8 @@ export default async function Instalacao() {
   }
 
   return (
-    <main className={consoleStyles.page}>
+    <main className={consoleStyles.page} data-area="instalacao">
       <ConsolePageHeader
-        eyebrow="Primeiro passo"
         title={TITULO}
         description={DESCRICAO}
         icon={Plug}

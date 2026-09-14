@@ -107,6 +107,17 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
 
   return (
     <>
+      {/* A linha que separa esta tela do disparo automático, dita onde a mão
+          do operador está: aqui é um evento por vez, conferido, e nada anda
+          sozinho. O aviso de evento real continua abaixo, dentro do Panel —
+          são coisas diferentes: este diz COMO sai, aquele diz o que sair
+          custa. */}
+      <p className="text-caption text-fg-muted">
+        Um evento por vez, revisado por você. Nada vai para a Meta antes de você
+        clicar em{' '}
+        <strong className="font-medium text-fg-body">Disparar evento</strong>.
+      </p>
+
       <Panel
         title="Pixel de destino"
         icon={Target}
@@ -237,7 +248,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
   return (
     <>
       <div
-        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0/95 backdrop-blur-md min-[1200px]:hidden"
+        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0/95 backdrop-blur-md xl:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">

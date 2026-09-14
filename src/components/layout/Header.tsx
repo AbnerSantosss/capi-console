@@ -3,127 +3,77 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { Menu } from '@base-ui/react/menu';
 import { toast } from 'sonner';
 import {
-  AlertTriangle,
+  Bell,
   BookOpen,
-  Building2,
-  ChevronDown,
-  FlaskConical,
   Gauge,
   LogOut,
   Plug,
   Plus,
-  Settings,
-  Command,
+  Search,
   Send,
+  Settings,
   Target,
+  User,
   Workflow,
 } from 'lucide-react';
 
 import { useBrandStore, limparLegado } from '@/stores/useBrandStore';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import { useEstadoAutomatico, type SituacaoAuto } from '@/hooks/useEstadoAutomatico';
+import { useEstadoAutomatico } from '@/hooks/useEstadoAutomatico';
 import { useEventStore } from '@/stores/useEventStore';
-import { Badge } from '@/components/ui/badge';
+import { useUserStore } from '@/stores/useUserStore';
 import { SeletorDeEmpresa } from '@/components/empresa/SeletorDeEmpresa';
 import { SettingsDialog } from '@/components/settings/SettingsDialog';
 import { CommandPalette } from '@/components/common/CommandPalette';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { AppMark } from '@/components/ui/app-mark';
+import { NOME_PRODUTO } from '@/lib/produto';
 import { cn } from '@/lib/utils';
 
 /**
- * Os dois caminhos ate a Meta precisam estar ditos aqui, com todas as letras:
- * quem abre o console tem que ver que existe um manual e um automatico, e
- * qual dos dois esta ligado. A sublinha so aparece em tela larga.
+ * As cinco seções do console, na ordem do trabalho real.
  *
- * O item Pixels e o que corrige IA-1: o Pixel era o assunto central
- * do produto e o unico sem lugar na navegacao — vivia atras de um botao do
- * cabecalho.
- *
- * 🔴 TETO DE CINCO ITENS (IA-R1'). Eram quatro. O Painel abriu a quinta vaga por
- * decisao explicita do dono, registrada em `wiki/plano-dashboard-ux.md` (§3-bis):
- * ele nao e uma etapa do trabalho como as outras quatro, e a resposta a primeira
+ * 🔴 TETO DE CINCO ITENS (IA-R1'). O Painel abriu a quinta vaga por decisão
+ * registrada em `wiki/plano-dashboard-ux.md` (§3-bis): ele responde a primeira
  * pergunta de quem abre o console — "entrou venda? saiu para a Meta?" — e por
- * isso fica ANTES de Instalacao e e a tela de chegada (D-2'). Um SEXTO item
- * continua proibido: significa que algo deveria ter virado aba de um dos cinco.
+ * isso vem antes de Instalação. Um SEXTO item continua proibido: significa que
+ * algo deveria ter virado aba de um dos cinco.
  *
- * Depois do Painel, a ordem e a do trabalho real, e nao a da ordem em que as
- * telas nasceram: primeiro instalar (webhook e tag), depois dizer para qual
- * Pixel vai, depois disparar na mao e so entao deixar a regra disparar sozinha.
- * Quem chega numa empresa nova le a navegacao de cima para baixo e ja tem o
- * roteiro. O Guia saiu daqui: ele nao e uma etapa do trabalho, e a consulta —
- * virou icone do cabecalho.
+ * Depois do Painel a ordem é a do trabalho: instalar (webhook e tag), dizer
+ * para qual Pixel vai, disparar na mão e só então deixar a regra disparar
+ * sozinha. O Guia não é etapa de trabalho, é consulta: mora no menu do
+ * operador.
+ *
+ * A lista é exportada porque a barra de abas do rodapé (`BarraDeAbas.tsx`)
+ * mostra exatamente as mesmas cinco seções com os rótulos curtos. Duas listas
+ * paralelas seriam duas navegações que discordam na primeira mudança.
  */
-const NAV = [
-  {
-    href: '/painel',
-    rotulo: 'Painel',
-    curto: 'Painel',
-    sub: 'o que chegou e de onde veio',
-    icon: Gauge,
-    estado: false,
-  },
-  {
-    href: '/instalacao',
-    rotulo: 'Instalação',
-    curto: 'Instalação',
-    sub: 'webhook e tag do site',
-    icon: Plug,
-    estado: false,
-  },
-  {
-    href: '/pixels',
-    rotulo: 'Pixels',
-    curto: 'Pixels',
-    sub: 'os destinos e a trava de cada um',
-    icon: Target,
-    estado: false,
-  },
-  {
-    href: '/',
-    rotulo: 'Disparo manual',
-    curto: 'Manual',
-    sub: 'você monta e envia',
-    icon: Send,
-    estado: false,
-  },
-  {
-    // A sublinha nao cita mais a xWinner: o recebimento deixou de ser de uma
-    // plataforma so, e prometer "webhook xWinner" numa instalacao de outra
-    // empresa seria mentira na primeira tela.
-    href: '/automatico',
-    rotulo: 'Disparo automático',
-    curto: 'Auto',
-    sub: 'regras → Meta, sem você digitar',
-    icon: Workflow,
-    estado: true,
-  },
-];
+export const SECOES = [
+  { href: '/painel', rotulo: 'Painel', curto: 'Painel', icon: Gauge },
+  { href: '/instalacao', rotulo: 'Instalação', curto: 'Instalar', icon: Plug },
+  { href: '/pixels', rotulo: 'Pixels', curto: 'Pixels', icon: Target },
+  { href: '/', rotulo: 'Disparo manual', curto: 'Manual', icon: Send },
+  { href: '/automatico', rotulo: 'Disparo automático', curto: 'Auto', icon: Workflow },
+] as const;
 
-/**
- * As quatro situações do disparo automático, ditas nas variantes do `Badge`.
- *
- * Antes daqui existia o `SELO_AUTO`: um mapa de classes próprio, terceiro
- * sistema de cor de estado do produto, paralelo às variantes e ao realce do
- * item ativo da navegação. Três vocabulários para a mesma pergunta — "isto
- * está ligado?" — é o que 13.B manda acabar.
- *
- * A leitura, nos termos de §12.6:
- *   carregando · ainda lendo as regras — neutro, porque ainda não é estado
- *   desligado   · "só acumulando fila": nada sai sem um clique — neutro
- *   teste       · sai sozinho, mas com código de teste — info, não é risco
- *   producao    · sai sozinho e entra nas métricas reais — aviso, é o perigoso
- */
-const VARIANTE_AUTO: Record<
-  SituacaoAuto,
-  React.ComponentProps<typeof Badge>['variant']
-> = {
-  carregando: 'neutro',
-  desligado: 'neutro',
-  teste: 'info',
-  producao: 'aviso',
-};
+/** `/` só está ativo em `/`; as outras casam por prefixo (abas e âncoras). */
+export function secaoAtiva(pathname: string, href: string): boolean {
+  return href === '/' ? pathname === '/' : pathname.startsWith(href);
+}
+
+/** Até duas letras do nome do operador; sem nome, o ícone genérico. */
+function iniciaisDoOperador(nome: string): string | null {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return null;
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+/** Uma linha só de item de menu — as cinco do operador são idênticas. */
+const ITEM_MENU =
+  'flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong';
 
 export function Header() {
   const pathname = usePathname();
@@ -135,6 +85,7 @@ export function Header() {
   const carregado = useBrandStore((s) => s.carregado);
   const carregar = useBrandStore((s) => s.carregar);
   const carregarEmpresas = useEmpresaStore((s) => s.carregar);
+  const nomeOperador = useUserStore((s) => s.nome);
   const automatico = useEstadoAutomatico();
 
   useEffect(() => {
@@ -174,254 +125,277 @@ export function Header() {
 
   const ativa = marcas.find((m) => m.id === marcaAtivaId) ?? marcas[0];
   const emTeste = Boolean(ativa?.testCode?.trim());
+  const iniciais = iniciaisDoOperador(nomeOperador);
 
-  // O hook devolve "—" enquanto le as regras, e travessao nao e estado: em
-  // tela estreita isso ficava indistinguivel de "desligado".
-  const rotuloAuto =
-    automatico.situacao === 'carregando' ? 'lendo…' : automatico.rotulo;
+  /**
+   * A pílula de ambiente carrega o estado do automático (R-03). Antes eram
+   * duas coisas: um selo de ambiente aqui em cima e uma faixa inteira
+   * "Disparo automático: N em produção" numa terceira linha do cabeçalho —
+   * faixa que, de quebra, sumia entre 1024 e 1279px porque estava em
+   * `lg:hidden` enquanto a tira de abas ia até `xl`. As duas viraram esta
+   * pílula, visível em QUALQUER largura: o buraco de 1024–1279px deixa de
+   * existir por construção, e não por um breakpoint corrigido.
+   */
+  const contaAuto =
+    automatico.situacao === 'carregando'
+      ? 'lendo…'
+      : automatico.regrasAuto === 0
+        ? 'sem auto'
+        : `${automatico.regrasAuto} auto`;
+  const ambienteLongo = `${emTeste ? 'TESTE' : 'PRODUÇÃO'} · ${contaAuto}`;
+  const ambienteCurto = emTeste ? 'TESTE' : 'PROD';
+  const ambienteFalado = [
+    emTeste
+      ? `Modo teste com o código ${ativa?.testCode ?? ''}`.trim()
+      : 'Modo produção: o evento entra nas métricas reais',
+    automatico.situacao === 'carregando'
+      ? 'ainda lendo as regras'
+      : automatico.regrasAuto === 0
+        ? 'nenhuma regra em disparo automático'
+        : `${automatico.regrasAuto} ${
+            automatico.regrasAuto === 1 ? 'regra' : 'regras'
+          } em disparo automático`,
+    'Abre os Pixels',
+  ].join('. ');
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-surface-0/90 backdrop-blur-md">
-      <div className="mx-auto flex min-h-16 w-full max-w-[1280px] items-center gap-2 px-4 py-2 sm:px-6 lg:gap-4 lg:px-8">
-        {/* Quem e a empresa dona da tela. O literal "Codigo Vencedor" que
-            ficava aqui virou o nome da empresa ATIVA, lido do
-            `useEmpresaStore` — o Codigo Vencedor passou a ser uma empresa
-            entre outras, e a logo dela e o que sinaliza que todo o resto do
-            cabecalho fala dela. O nome do produto desceu para a legenda. */}
+    <header className="sticky top-0 z-40 border-b border-line bg-surface-0/82 backdrop-blur-md">
+      {/* UMA linha, 56px, em qualquer largura. O cabeçalho anterior tinha três
+          (linha de controles + tira de 5 abas + faixa de status) e chegava a
+          305px no celular: a dobra inteira era casca. A navegação das telas
+          estreitas desceu para a barra de abas do rodapé, que é onde o polegar
+          alcança, e o estado do automático entrou na pílula de ambiente. */}
+      <div className="mx-auto flex h-[var(--altura-cabecalho)] w-full max-w-cabecalho items-center gap-2.5 px-4 sm:px-6 lg:px-8">
+        {/* Marca do produto. O vetor é o oficial (`ui/app-mark.tsx`) — o
+            quadrado com gradiente é a moldura, não um desenho novo. */}
+        <Link
+          href="/painel"
+          aria-label={`${NOME_PRODUTO} — ir para o Painel`}
+          className="flex shrink-0 items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+        >
+          <span className="grid size-[1.625rem] shrink-0 place-items-center rounded-control bg-linear-to-br from-accent-fill to-accent-fill-active text-white shadow-realce-forte">
+            <AppMark size={16} className="text-white" />
+          </span>
+          {/* Some só na faixa de 80rem a 92rem: é onde o menu já está na linha
+              e o espaço acaba. O quadrado com a marca fica, e o `aria-label`
+              do link continua dizendo o nome por extenso. */}
+          <span className="hidden text-label font-semibold tracking-tight text-fg-strong sm:inline xl:hidden barra:inline">
+            {NOME_PRODUTO}
+          </span>
+        </Link>
+
+        <span aria-hidden className="h-5 w-px shrink-0 bg-line-strong" />
+
+        {/* Quem é a empresa dona da tela — visível em TODA largura, inclusive
+            no celular, onde o nome vivia escondido. Errar de empresa custa um
+            evento real no Pixel errado. */}
         <SeletorDeEmpresa />
 
-        {/* Navegacao */}
-        {/* 🔴 A barra de cima só mostra o menu a partir de `xl` (1280px).
-            Era `lg` (1024px) quando os itens eram quatro. Com o Painel, os
-            cinco não cabiam mais ao lado do seletor de empresa e do aglomerado
-            da direita: o espaçador `flex-1` era espremido a zero, o aglomerado
-            (que encolhe) também ia a zero, e os botões dele — que não encolhem
-            — vazavam 23px para fora da janela, cortados pela borda. Era
-            exatamente o "coisa vazando da tela" relatado. Entre 1024 e 1279 o
-            menu agora desce para a faixa de baixo, que é feita para isso. */}
-        <nav aria-label="Seções" className="hidden items-center gap-1 xl:flex">
-          {NAV.map((item) => {
+        {/* A navegação de cima só cabe a partir de 80rem. Abaixo disso quem
+            navega é a barra de abas do rodapé — nunca as duas ao mesmo tempo,
+            e nunca nenhuma das duas. */}
+        <nav aria-label="Seções" className="ml-1 hidden items-center xl:flex">
+          {SECOES.map((item) => {
             const Icon = item.icon;
-            const ativo =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname.startsWith(item.href);
+            const ativo = secaoAtiva(pathname, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={ativo ? 'page' : undefined}
                 className={cn(
-                  // `min-w-0 shrink`: entre 1024 e 1400px o menu inteiro cabe
-                  // porque cada item aceita encolher — antes nenhum cedia e o
-                  // cabecalho era cortado na borda direita.
-                  'flex min-h-control-sm min-w-0 shrink items-center gap-2 rounded-control px-3 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
-                  ativo
-                    ? 'bg-surface-2 text-fg-strong'
-                    : 'text-fg-muted hover:bg-surface-2 hover:text-fg-body'
+                  // A linha de 2px na tinta da área assenta na borda de baixo
+                  // do cabeçalho: é a régua que diz onde você está, e não um
+                  // retângulo azul de fundo (azul é ação, não localização).
+                  'group relative flex h-[var(--altura-cabecalho)] items-center px-0.5',
+                  ativo &&
+                    'after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-tinta'
                 )}
               >
-                <Icon className="size-[18px] shrink-0" strokeWidth={1.75} aria-hidden />
-                <span className="flex flex-col leading-none">
-                  <span className="flex items-center gap-1.5 text-label font-medium whitespace-nowrap">
-                    {item.rotulo}
-                    {item.estado && (
-                      <Badge variant={VARIANTE_AUTO[automatico.situacao]}>
-                        {rotuloAuto}
-                      </Badge>
-                    )}
-                  </span>
-                  {/* A sublinha so entra a partir de 2xl: em 1280–1400px era
-                      ela quem estourava a largura do cabecalho. */}
-                  <span className="mt-0.5 hidden whitespace-nowrap text-caption font-normal text-fg-muted 2xl:block">
-                    {item.sub}
-                  </span>
+                <span
+                  className={cn(
+                    'flex items-center gap-2 rounded-control px-2.5 py-1.5 text-label font-medium whitespace-nowrap transition-colors',
+                    ativo
+                      ? 'text-fg-strong'
+                      : 'text-fg-muted group-hover:bg-surface-2 group-hover:text-fg-body'
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  {item.rotulo}
                 </span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="flex-1" />
-
-        {/* O aglomerado da direita nao tinha contêiner: cada botao era filho
-            direto da linha e nada podia quebrar. Agora eles moram num flex
-            proprio que encolhe (`min-w-0 shrink`) e, quando ainda assim nao
-            cabe, desce para uma segunda linha alinhada a direita
-            (`flex-wrap justify-end gap-y-1`) em vez de ser cortado. */}
-        <div className="flex min-w-0 shrink flex-wrap items-center justify-end gap-2 gap-y-1">
-          {/* Ambiente — sempre visivel, em qualquer largura. Producao e o
-              perigoso. Virou link porque o destino virou pagina: o que antes
-              abria um modal agora leva para /pixels, com o cartao do Pixel
-              ativo na ancora. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {carregado && ativa && (
             <Link
               href={`/pixels#${ativa.id}`}
+              aria-label={ambienteFalado}
+              title={ambienteFalado}
               className={cn(
-                'flex h-control-sm shrink-0 items-center gap-2 rounded-control border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
+                'flex h-control-sm shrink-0 items-center gap-2 rounded-full border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
                 emTeste
                   ? 'border-accent-text/40 bg-accent-text/10 text-accent-text hover:bg-accent-text/15'
-                  : 'border-warning/50 bg-warning/10 text-warning hover:bg-warning/15'
+                  : 'border-warning/40 bg-warning/10 text-warning hover:bg-warning/15'
               )}
-              title={
-                emTeste
-                  ? `Modo teste com o código ${ativa.testCode}. Abre os Pixels para trocar o pixel, o token ou o modo.`
-                  : 'Modo produção: o evento entra nas métricas reais da conta. Abre os Pixels para trocar o pixel, o token ou o modo.'
-              }
             >
-              {emTeste ? (
-                <FlaskConical className="size-3.5" aria-hidden />
-              ) : (
-                <AlertTriangle className="size-3.5" aria-hidden />
-              )}
-              <span>{emTeste ? 'Teste' : 'Produção'}</span>
-              {/* Sem a seta o selo parecia so um aviso de status, e ninguem
-                  descobria que a configuracao do pixel mora atras dele. */}
-              <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+              {/* Ponto com halo, e não ponto que pulsa: nada se move parado
+                  nesta casa. O halo é um anel fixo. */}
+              <span
+                aria-hidden
+                className={cn(
+                  'size-[0.4375rem] shrink-0 rounded-full ring-3',
+                  emTeste
+                    ? 'bg-accent-text ring-accent-text/20'
+                    : 'bg-warning ring-warning/20'
+                )}
+              />
+              {/* Mesma faixa, mesmo motivo. O `title` e o `aria-label` do link
+                  seguem com a frase inteira, então o leitor de tela e o
+                  passar do mouse continuam dizendo quantas regras estão em
+                  disparo automático mesmo quando o selo está curto. */}
+              <span className="hidden sm:inline xl:hidden barra:inline">{ambienteLongo}</span>
+              <span className="sm:hidden xl:inline barra:hidden">{ambienteCurto}</span>
             </Link>
           )}
 
-          {/* Mantido, e nao removido, porque quem usa o produto ja decorou onde
-              este botao fica — o que mudou e para onde ele leva. */}
-          <Link
-            href="/pixels"
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'hidden 2xl:flex'
-            )}
-          >
-            <Target className="size-4" strokeWidth={1.75} aria-hidden />
-            Pixel e token
-          </Link>
-
-          {/* "Adicionar empresa" no canto superior direito, ao lado de "Pixel e
-              token" — pedido explicito do dono. Ele nao abre o dialogo por
-              estado proprio: avisa o `SeletorDeEmpresa`, que e quem tem o
-              `EmpresaDialog`, pelo mesmo barramento de evento de janela que
-              este cabecalho ja usa para abrir a paleta. Assim existe UM dialogo
-              de empresa na arvore, e nao um por botao que o invoca.
-              O rotulo encolhe antes de sumir: em telas estreitas ficam so os
-              icones, e quem le a tela por audio recebe o `aria-label`. */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent('capi:adicionar-empresa'))
-            }
-            aria-label="Adicionar empresa"
-            title="Adicionar empresa"
-          >
-            <Building2 className="size-4" strokeWidth={1.75} aria-hidden />
-            <Plus className="-ml-1 size-3" strokeWidth={2.5} aria-hidden />
-            {/* O rotulo por extenso so a partir de 2xl. O apelido "Empresa"
-                vale ate `xl`, que e onde o menu volta para a barra de cima e o
-                espaco acaba; de `xl` a `2xl` ficam so os icones, e o
-                `aria-label` acima continua dizendo a acao por extenso. */}
-            <span className="hidden 2xl:inline">Adicionar empresa</span>
-            <span className="hidden sm:inline xl:hidden">Empresa</span>
-          </Button>
-
-          {/* Paleta de comandos */}
-          <Button
-            variant="outline"
-            size="sm"
+          {/* Busca — o mesmo botão em três tamanhos, pela conta do espaço.
+              A linha tem 78rem úteis (container de 82rem menos o respiro) e o
+              menu de cinco seções come 41,6rem deles. Com o campo por extenso
+              (15rem) a conta dá 95,6rem: não cabe em largura nenhuma, porque
+              quem limita é o container, não a janela. O flex então esmagava o
+              único que podia encolher — o seletor de empresa, de 10,5rem para
+              0,1rem, com o nome da empresa sumindo.
+              Então: de 80rem para cima, onde o menu está na tela, a busca é
+              ícone + ⌘K (5,5rem) e sobram 4rem. Abaixo de 80rem o menu desceu
+              para a barra de abas e o campo por extenso volta a caber. */}
+          <button
+            type="button"
             onClick={() =>
               window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))
             }
-            className="hidden lg:flex"
-            aria-label="Abrir a paleta de comandos"
+            aria-label="Buscar pedido, e-mail ou regra"
+            className="hidden h-control-sm w-60 shrink items-center gap-2 rounded-control border border-line bg-surface-1 px-2.5 text-label text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text lg:flex xl:hidden"
           >
-            <Command className="size-3.5" aria-hidden />
-            {/* A letra do atalho so a partir de 2xl; o icone fica sempre e o
-                `aria-label` acima diz a acao por extenso. */}
-            <span className="hidden font-mono text-caption 2xl:inline">K</span>
-          </Button>
+            <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            <span className="truncate">Buscar pedido, e-mail, regra</span>
+            <kbd
+              aria-hidden
+              className="ml-auto rounded-sm border border-line-control px-1.5 font-mono text-caption"
+            >
+              ⌘K
+            </kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))
+            }
+            aria-label="Buscar pedido, e-mail ou regra"
+            title="Buscar pedido, e-mail ou regra (⌘K)"
+            className="grid size-control-sm shrink-0 place-items-center gap-1.5 rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text lg:hidden xl:flex xl:h-control-sm xl:w-auto xl:items-center xl:px-2"
+          >
+            <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            {/* O atalho fica à vista de propósito: sem o campo por extenso, é
+                ele que conta que dá para buscar digitando. */}
+            <kbd
+              aria-hidden
+              className="hidden rounded-sm border border-line-control px-1.5 font-mono text-caption xl:inline"
+            >
+              ⌘K
+            </kbd>
+          </button>
 
-          {/* O Guia saiu da navegacao porque ele nao e uma etapa do trabalho: e
-              consulta, do mesmo naipe das preferencias e do sair. Aqui ele fica
-              visivel em qualquer largura — inclusive no celular, onde a grade
-              de quatro nao tinha vaga para ele. */}
+          {/* Avisos leva para os retornos do disparo automático — é lá que o
+              erro de entrega aparece por escrito. O sino não abre uma caixa de
+              notificação que o produto não tem. */}
           <Link
-            href="/guia"
-            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }))}
-            aria-label="Guia"
-            title="Guia"
+            href="/automatico#retornos"
+            aria-label="Avisos: retornos e erros do disparo automático"
+            title="Avisos: retornos e erros do disparo automático"
+            className="grid size-control-sm shrink-0 place-items-center rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
           >
-            <BookOpen className="size-4" aria-hidden />
+            <Bell className="size-4" strokeWidth={1.75} aria-hidden />
           </Link>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setPrefsAbertas(true)}
-            aria-label="Preferências"
-          >
-            <Settings className="size-4" aria-hidden />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => void sair()}
-            aria-label="Sair do console"
-            title="Sair do console"
-          >
-            <LogOut className="size-4" aria-hidden />
-          </Button>
-        </div>
-      </div>
-
-      {/* Navegação e configuração em telas menores.
-
-          `grid-cols-5` porque os itens agora são cinco: com quatro colunas o
-          Painel descia sozinho para uma segunda linha, meia-largura, com cara
-          de erro. E `xl:hidden` para casar com o `xl:flex` da barra de cima —
-          se os dois usassem breakpoints diferentes, haveria uma faixa de
-          largura com dois menus ou com nenhum. */}
-      <nav
-        aria-label="Seções"
-        className="mx-auto grid w-full max-w-[1280px] grid-cols-5 gap-1 border-t border-line px-4 py-1.5 sm:px-6 xl:hidden"
-      >
-        {NAV.map((item) => {
-          const Icon = item.icon;
-          const ativo =
-            item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={ativo ? 'page' : undefined}
-              className={cn(
-                'flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-0.5 rounded-control px-1 py-1 text-caption font-medium transition-colors',
-                ativo
-                  ? 'bg-surface-2 text-fg-strong'
-                  : 'text-fg-muted hover:text-fg-body'
-              )}
+          {/* Menu do operador. Os três botões soltos que moravam aqui (Guia,
+              Preferências, Sair) mais "Pixel e token" e "Adicionar empresa"
+              cabem num menu só — era esse aglomerado que quebrava em cinco
+              linhas em 1536px. */}
+          <Menu.Root>
+            <Menu.Trigger
+              render={
+                <button
+                  type="button"
+                  aria-label={
+                    nomeOperador
+                      ? `Menu do operador: ${nomeOperador}`
+                      : 'Menu do operador'
+                  }
+                  className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-linear-to-br from-accent-fill to-accent-fill-active text-caption font-semibold text-white ring-2 ring-surface-3 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+                />
+              }
             >
-              <span className="shrink-0">
-                <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
-              </span>
-              <span className="max-w-full truncate">{item.curto}</span>
-              {/* So quando o rotulo curto nao e o completo: com os dois iguais
-                  o leitor de tela anunciava "Pixels Pixels". */}
-              {item.curto !== item.rotulo && (
-                <span className="sr-only">{item.rotulo}</span>
-              )}
-            </Link>
-          );
-        })}
-        {/* A grade continua em quatro colunas e nenhum assunto foi escondido:
-            o "Pixel" que abria modal virou item da propria navegacao, e agora
-            o Guia cedeu a vaga para Instalacao — ele continua a um toque, como
-            icone do cabecalho, que aparece em qualquer largura. */}
-      </nav>
+              {iniciais ?? <User className="size-4" strokeWidth={2} aria-hidden />}
+            </Menu.Trigger>
 
-      {/* Estado do automatico por escrito. Em tela estreita ele so existia
-          como um ponto colorido no icone — cor sozinha nao e rotulo. */}
-      <div className="mx-auto flex w-full max-w-[1280px] items-center gap-2 border-t border-line px-4 py-1.5 sm:px-6 lg:hidden">
-        <Workflow className="size-3.5 shrink-0 text-fg-muted" strokeWidth={1.75} aria-hidden />
-        <span className="text-caption text-fg-muted">Disparo automático:</span>
-        <Badge variant={VARIANTE_AUTO[automatico.situacao]}>{rotuloAuto}</Badge>
+            <Menu.Portal>
+              <Menu.Positioner
+                side="bottom"
+                align="end"
+                sideOffset={6}
+                className="isolate z-50"
+              >
+                <Menu.Popup className="min-w-56 origin-(--transform-origin) rounded-panel border border-line-control bg-surface-3 p-1 shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+                  <Menu.Item
+                    onClick={() => router.push('/pixels')}
+                    className={ITEM_MENU}
+                  >
+                    <Target className="size-4 shrink-0" aria-hidden />
+                    Pixel e token
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent('capi:adicionar-empresa')
+                      )
+                    }
+                    className={ITEM_MENU}
+                  >
+                    <Plus className="size-4 shrink-0" aria-hidden />
+                    Adicionar empresa
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => router.push('/guia')}
+                    className={ITEM_MENU}
+                  >
+                    <BookOpen className="size-4 shrink-0" aria-hidden />
+                    Abrir o guia
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setPrefsAbertas(true)}
+                    className={ITEM_MENU}
+                  >
+                    <Settings className="size-4 shrink-0" aria-hidden />
+                    Preferências
+                  </Menu.Item>
+
+                  <Menu.Separator className="my-1 h-px bg-line-strong" />
+
+                  <Menu.Item
+                    onClick={() => void sair()}
+                    className={cn(ITEM_MENU, 'text-danger')}
+                  >
+                    <LogOut className="size-4 shrink-0" aria-hidden />
+                    Sair do console
+                  </Menu.Item>
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
+        </div>
       </div>
 
       <SettingsDialog open={prefsAbertas} onOpenChange={setPrefsAbertas} />

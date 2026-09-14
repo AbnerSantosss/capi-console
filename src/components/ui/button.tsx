@@ -3,21 +3,35 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+import s from "./button.module.css"
+
 /**
- * Alturas: sm=36 (so toolbar desktop) · default=40 · lg=44 (primario e mobile).
- * Nada abaixo de 36px — ver plano-redesign-ux-v2.md secao 3.7.
+ * Alturas: sm=30 (toolbar densa) · default=36 · lg=42 (ação principal).
+ * Raio 8px, um só, para toda a família. Os valores são os da página de
+ * referência visual aprovada (wiki/assets/ux-v3/referencia-visual.html).
+ *
+ * O primário é o único com rampa vertical e brilho — DS-2.4′ libera gradiente
+ * exatamente aqui e em nenhum outro lugar. O destrutivo não ganha nem rampa
+ * nem brilho: destrutivo não convida.
+ *
+ * As três coisas que o CSS utilitário não escreve (a rampa, a faixa de brilho
+ * com z-index negativo e as listras do estado ocupado) moram em
+ * `button.module.css`, ao lado.
  */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-control border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text active:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text active:translate-y-px disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default:
-          "bg-accent-fill text-white hover:bg-accent-fill-hover active:bg-accent-fill-active",
+        default: cn(
+          "isolate overflow-hidden border-accent-fill-active text-white",
+          s.primario,
+          s.brilho
+        ),
         outline:
-          "border-line-control bg-surface-2 text-fg-body hover:border-line-control hover:bg-surface-3 hover:text-fg-strong aria-expanded:bg-surface-3",
+          "border-line-control bg-surface-2 text-fg-body shadow-realce hover:border-line-control hover:bg-surface-3 hover:text-fg-strong aria-expanded:bg-surface-3",
         secondary:
-          "bg-surface-2 text-fg-body hover:bg-surface-3 hover:text-fg-strong",
+          "bg-surface-2 text-fg-body shadow-realce hover:bg-surface-3 hover:text-fg-strong",
         ghost:
           "text-fg-muted hover:bg-surface-2 hover:text-fg-strong aria-expanded:bg-surface-2",
         destructive:
@@ -25,12 +39,12 @@ const buttonVariants = cva(
         link: "text-accent-text underline-offset-4 hover:underline",
       },
       size: {
-        sm: "h-control-sm gap-1.5 px-3 text-label",
-        default: "h-control-md gap-2 px-3.5 text-label",
-        lg: "h-control-lg gap-2 px-5 text-body font-semibold",
-        icon: "size-control-md",
-        "icon-sm": "size-control-sm",
-        "icon-lg": "size-control-lg",
+        sm: "h-[30px] gap-1.5 px-2.5 text-caption",
+        default: "h-control-sm gap-2 px-3.5 text-label",
+        lg: "h-[42px] gap-2 px-5 text-body",
+        icon: "size-control-sm",
+        "icon-sm": "size-[30px]",
+        "icon-lg": "size-[42px]",
       },
     },
     defaultVariants: {
@@ -40,18 +54,48 @@ const buttonVariants = cva(
   }
 )
 
+export interface ButtonProps
+  extends ButtonPrimitive.Props,
+    VariantProps<typeof buttonVariants> {
+  /**
+   * Trabalho em andamento: listras andando no fundo, disco girando antes do
+   * rótulo e `aria-busy` para quem ouve a tela. O brilho de hover não roda
+   * enquanto isto é verdade, e com `prefers-reduced-motion` tudo fica parado.
+   *
+   * Quem chama continua responsável por `disabled` — o ocupado descreve o
+   * estado, não bloqueia o clique sozinho.
+   */
+  ocupado?: boolean
+}
+
 function Button({
   className,
   variant = "default",
   size = "default",
+  ocupado = false,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonProps) {
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      data-ocupado={ocupado || undefined}
+      aria-busy={ocupado || undefined}
+      className={cn(
+        buttonVariants({ variant, size }),
+        ocupado && s.ocupado,
+        className
+      )}
       {...props}
-    />
+    >
+      {ocupado && (
+        <span
+          aria-hidden
+          className={cn("size-[14px] shrink-0", s.girando)}
+        />
+      )}
+      {children}
+    </ButtonPrimitive>
   )
 }
 

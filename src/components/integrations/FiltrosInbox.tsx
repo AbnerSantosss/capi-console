@@ -264,8 +264,11 @@ export function FiltrosInbox({
 
   return (
     <div className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-1 p-3">
-      <div className="flex min-w-0 flex-wrap items-end gap-2">
-        <span className="inline-flex h-control-sm shrink-0 items-center gap-1.5 text-caption font-medium text-fg-muted">
+      {/* Abaixo de 48rem cada campo ocupa a linha inteira: cinco selects lado a
+          lado em 360px davam 5 linhas de filtro antes da lista, e cada gatilho
+          ficava estreito demais para ler o valor escolhido. */}
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-end">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-caption font-medium text-fg-muted md:h-control-md">
           <ListFilter className="size-3.5" aria-hidden />
           Filtrar
         </span>
@@ -430,14 +433,19 @@ export function FiltrosInbox({
         </CampoFiltro>
 
         {ativo && (
-          <Button size="sm" variant="ghost" onClick={() => onValor(FILTROS_VAZIOS)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-control-md w-full md:w-auto md:min-h-control-sm"
+            onClick={() => onValor(FILTROS_VAZIOS)}
+          >
             <X className="size-3.5" aria-hidden />
             Limpar filtros
           </Button>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+      <div className="flex min-w-0 flex-col gap-2 border-t border-line pt-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
         <p className="text-caption text-fg-muted">
           <span className="tabular text-fg-body">{totalVisiveis}</span> de{' '}
           <span className="tabular">{totalItens}</span> evento
@@ -450,7 +458,7 @@ export function FiltrosInbox({
         </p>
 
         {rodando ? (
-          <div className="flex min-w-56 flex-col gap-1">
+          <div className="flex w-full min-w-0 flex-col gap-1 md:w-auto md:min-w-56">
             <div className="flex items-center justify-between gap-3">
               <span className="text-caption text-fg-body tabular">
                 Enviando {Math.min(lote.feitos + 1, lote.total)} de {lote.total} · {lote.ok} ok
@@ -459,7 +467,13 @@ export function FiltrosInbox({
                   ? ` · ${lote.erros.length} erro${lote.erros.length === 1 ? '' : 's'}`
                   : ''}
               </span>
-              <Button size="sm" variant="outline" onClick={onPararLote}>
+              {/* "Parar" interrompe um disparo real: 40px no mínimo, sempre. */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-control-md shrink-0 md:min-h-control-sm"
+                onClick={onPararLote}
+              >
                 <Square className="size-3.5" aria-hidden />
                 Parar
               </Button>
@@ -481,8 +495,13 @@ export function FiltrosInbox({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-end gap-1">
-            <Button size="sm" onClick={onAbrirLote} disabled={totalElegiveis === 0}>
+          <div className="flex w-full min-w-0 flex-col gap-1 md:w-auto md:items-end">
+            <Button
+              size="sm"
+              className="min-h-control-md w-full md:w-auto md:min-h-control-sm"
+              onClick={onAbrirLote}
+              disabled={totalElegiveis === 0}
+            >
               <Send className="size-3.5" aria-hidden />
               Disparar {totalElegiveis > 0 ? `os ${totalElegiveis} ` : ''}filtrados
             </Button>
@@ -507,10 +526,11 @@ function CampoFiltro({
   rotulo: string;
   children: React.ReactNode;
 }) {
-  // `min-w-40 flex-1`: com CINCO campos, a barra quebra sozinha em duas ou três
-  // linhas a 360 px e ocupa uma só linha no desktop — sem grade de breakpoint.
+  // Largura total até 48rem (uma coluna, nada de campo espremido); a partir daí
+  // `min-w-40 flex-1` deixa a barra se acomodar sozinha em duas ou três linhas
+  // no tablet e numa só no desktop — sem grade de breakpoint.
   return (
-    <div className="flex min-w-40 flex-1 flex-col gap-1">
+    <div className="flex w-full min-w-0 flex-col gap-1 md:w-auto md:min-w-40 md:flex-1">
       <label htmlFor={id} className="text-caption font-medium text-fg-muted">
         {rotulo}
       </label>

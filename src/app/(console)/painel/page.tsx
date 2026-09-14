@@ -21,11 +21,10 @@ export const dynamic = 'force-dynamic';
  */
 export default function Painel() {
   return (
-    <main className={consoleStyles.page}>
+    <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
-        eyebrow="Visão geral"
         title="Painel de eventos"
-        description="O que chegou, o que saiu para a Meta e de onde veio o tráfego desta empresa. Cada card abre a lista dos eventos que ele conta — e os testes da equipe ficam fora de todas as porcentagens."
+        description="O que chegou, o que saiu para a Meta e de onde veio o tráfego. Os testes da equipe ficam fora das porcentagens."
         icon={Gauge}
       />
       <PainelDeEventos />

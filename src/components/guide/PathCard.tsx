@@ -51,7 +51,10 @@ export function PathCard({
           <Icone size={24} weight="duotone" />
         </span>
         <div className="min-w-0">
-          <p className={styles.pathEyebrow}>{caminho.eyebrow}</p>
+          {/* Saiu daqui um "Caminho 1" / "Caminho 2" em caixa alta acima do
+              titulo. Os dois caminhos sao alternativas, nao etapas: numerar
+              sugeria uma ordem que nao existe — ninguem faz o 1 e depois o 2.
+              O titulo diz qual e qual sozinho. */}
           <h2 className={styles.pathTitle}>{caminho.titulo}</h2>
         </div>
       </div>

@@ -13,8 +13,30 @@
  * métrica mentirosa.
  */
 
-/** Janela que o painel sabe olhar. Nada de período livre: três botões bastam. */
-export type Periodo = 7 | 30 | 90;
+/**
+ * Período livre escolhido no calendário: duas datas de Brasília em
+ * `AAAA-MM-DD`, INCLUSIVAS nas duas pontas — escolher 01 a 01 conta o dia 01
+ * inteiro, não zero segundo.
+ */
+export interface PeriodoPersonalizado {
+  de: string;
+  ate: string;
+}
+
+/**
+ * Janela que o painel sabe olhar.
+ *
+ * Os números são janela CORRIDA (`30` = as últimas 720 horas). `'hoje'` e
+ * `'ontem'` são DIA DE CALENDÁRIO — "hoje" começa à meia-noite, não 24 horas
+ * atrás. São coisas diferentes de propósito: quem abre o painel às 9h da manhã
+ * quer ver o que entrou desde que o dia virou, não o que entrou desde ontem
+ * às 9h. O objeto é o período livre, também em dia de calendário.
+ */
+export type Periodo = 'hoje' | 'ontem' | 7 | 30 | 90 | PeriodoPersonalizado;
+
+export function ehPeriodoPersonalizado(p: Periodo): p is PeriodoPersonalizado {
+  return typeof p === 'object' && p !== null;
+}
 
 /**
  * O mínimo do item que o resumo precisa — espelho PARCIAL de `ItemInbox`, de
@@ -46,9 +68,20 @@ export interface CardContagem {
 }
 
 export interface ResumoInbox {
-  periodoDias: Periodo;
+  /** Exatamente o período pedido, de volta — a tela usa para saber se já recarregou. */
+  periodo: Periodo;
+  /** De quando até quando a conta olhou, em ISO. A tela mostra por extenso. */
+  janela: { inicio: string; fim: string };
   /** Quantos itens foram olhados. O teto da memória vale aqui e a tela diz isso. */
   amostra: number;
+  /**
+   * `false` quando a amostra bateu o teto E o item mais antigo dela já é mais
+   * novo que o início da janela: existe evento dentro do período que a conta
+   * não chegou a ver. A tela precisa dizer isso com todas as letras — número
+   * incompleto com cara de completo é o pior resultado que este painel pode
+   * produzir.
+   */
+  amostraCobreJanela: boolean;
   /** Eventos REAIS no período: o denominador de toda porcentagem. */
   base: number;
   volume: {
@@ -78,12 +111,135 @@ export interface ResumoInbox {
   receitaEnviada: { total: number; moeda: string } | null;
 }
 
-const PERIODOS: readonly Periodo[] = [7, 30, 90];
+const PERIODOS: readonly Periodo[] = ['hoje', 'ontem', 7, 30, 90];
 
-/** `?dias=` vindo da URL. Qualquer coisa fora dos três valores cai em 30. */
-export function periodoValido(bruto: unknown): Periodo {
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `AAAA-MM-DD` que EXISTE no calendário.
+ *
+ * O teste de ida e volta pelo `Date` é o que recusa `2026-02-30` e `2026-13-01`
+ * — a expressão regular sozinha aceita os dois, e uma data impossível viraria
+ * silenciosamente outro dia.
+ */
+export function dataIsoValida(bruto: unknown): bruto is string {
+  if (typeof bruto !== 'string' || !DATA_ISO.test(bruto)) return false;
+  const [a, m, d] = bruto.split('-').map(Number);
+  const dt = new Date(Date.UTC(a, m - 1, d));
+  return dt.getUTCFullYear() === a && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * O período pedido na URL: `?dias=` para os cinco fixos, `?de=&ate=` para o
+ * livre. Qualquer coisa fora disso cai em 30.
+ *
+ * As duas datas mandam mais que `dias` quando ambas são válidas — quem
+ * preencheu o calendário está pedindo aquele intervalo, e não o botão que
+ * ficou marcado antes.
+ */
+export function periodoValido(bruto: unknown, de?: unknown, ate?: unknown): Periodo {
+  if (dataIsoValida(de) && dataIsoValida(ate)) {
+    // Ordem invertida é engano óbvio de quem preencheu, e as duas datas dizem
+    // sem ambiguidade qual intervalo a pessoa quer ver. Trocar é entregar o
+    // pedido; cair no padrão de 30 dias seria devolver outro número sem avisar.
+    return de <= ate ? { de, ate } : { de: ate, ate: de };
+  }
+  if (bruto === 'hoje' || bruto === 'ontem') return bruto;
   const n = Number(bruto);
-  return (PERIODOS as readonly number[]).includes(n) ? (n as Periodo) : 30;
+  return (PERIODOS as readonly unknown[]).includes(n) ? (n as Periodo) : 30;
+}
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Fuso do negócio. O container pode rodar em UTC; "hoje" tem que ser o hoje de
+ * quem está olhando a tela, em Brasília, senão das 21h à meia-noite o painel
+ * mostraria o dia seguinte.
+ */
+const FUSO = 'America/Sao_Paulo';
+
+const RELOGIO_LOCAL = new Intl.DateTimeFormat('en-US', {
+  timeZone: FUSO,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
+/**
+ * Quanto o relógio de Brasília está à frente do UTC, em ms, naquele instante.
+ * Sai negativo (−3 h hoje). Calculado, e não fixo em −3, para não quebrar se o
+ * horário de verão voltar.
+ */
+function deslocamentoDoFuso(ts: number): number {
+  const p = RELOGIO_LOCAL.formatToParts(new Date(ts));
+  const n = (tipo: string) => Number(p.find((x) => x.type === tipo)?.value ?? 0);
+  const comoSeFosseUtc = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour') % 24, n('minute'), n('second'));
+  return comoSeFosseUtc - Math.floor(ts / 1000) * 1000;
+}
+
+/** Meia-noite de Brasília do dia que contém `ts`, recuado `recuo` dias, em ms UTC. */
+function meiaNoiteLocal(ts: number, recuo: number): number {
+  const desloc = deslocamentoDoFuso(ts);
+  const local = ts + desloc;
+  return Math.floor(local / DIA_MS) * DIA_MS - recuo * DIA_MS - desloc;
+}
+
+/** Meia-noite de Brasília do dia `AAAA-MM-DD`, em ms UTC. */
+function meiaNoiteDaData(iso: string): number {
+  const [a, m, d] = iso.split('-').map(Number);
+  const comoSeFosseUtc = Date.UTC(a, m - 1, d);
+  // Duas passadas: a primeira usa o fuso do palpite, a segunda o fuso do
+  // instante já corrigido. Só muda alguma coisa na noite em que o relógio
+  // vira — e é exatamente essa noite que uma passada só erraria em uma hora.
+  const primeira = comoSeFosseUtc - deslocamentoDoFuso(comoSeFosseUtc);
+  return comoSeFosseUtc - deslocamentoDoFuso(primeira);
+}
+
+const RELOGIO_DATA = new Intl.DateTimeFormat('en-US', {
+  timeZone: FUSO,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * Que dia `AAAA-MM-DD` era em Brasília naquele instante.
+ *
+ * A tela usa para o `max` dos campos de data: ninguém escolhe amanhã, e o
+ * "amanhã" de quem está com o notebook em outro fuso não vale — o dia do
+ * negócio é o de Brasília.
+ */
+export function dataLocalIso(ts: number): string {
+  const p = RELOGIO_DATA.formatToParts(new Date(ts));
+  const v = (tipo: string) => p.find((x) => x.type === tipo)?.value ?? '';
+  return `${v('year')}-${v('month')}-${v('day')}`;
+}
+
+/**
+ * De quando até quando o painel conta, dado o período pedido.
+ *
+ * Número = janela corrida terminando agora. `'hoje'` = da meia-noite até agora.
+ * `'ontem'` = o dia inteiro anterior, fechado — não encosta em hoje. Período
+ * livre = da meia-noite de `de` até o último milissegundo de `ate`.
+ */
+export function janelaDoPeriodo(agora: number, periodo: Periodo): { inicio: number; fim: number } {
+  if (ehPeriodoPersonalizado(periodo)) {
+    const inicio = meiaNoiteDaData(periodo.de);
+    // `ate` é INCLUSIVO — o dia escolhido conta inteiro. Nunca passa de agora:
+    // escolher até hoje não pode abrir uma janela no futuro.
+    const fim = meiaNoiteDaData(periodo.ate) + DIA_MS - 1;
+    return { inicio, fim: Math.min(fim, agora) };
+  }
+  if (periodo === 'hoje') return { inicio: meiaNoiteLocal(agora, 0), fim: agora };
+  if (periodo === 'ontem') {
+    const inicio = meiaNoiteLocal(agora, 1);
+    return { inicio, fim: meiaNoiteLocal(agora, 0) - 1 };
+  }
+  return { inicio: agora - periodo * DIA_MS, fim: agora };
 }
 
 function pct(parte: number, base: number): number | null {
@@ -114,16 +270,25 @@ function ehTeste(i: ItemResumivel): boolean {
 export function resumirInbox(
   itens: ItemResumivel[],
   agoraIso: string,
-  periodoDias: Periodo
+  periodo: Periodo,
+  tetoDaAmostra: number = Number.POSITIVE_INFINITY
 ): ResumoInbox {
   const agora = Date.parse(agoraIso);
-  const inicio = agora - periodoDias * 24 * 60 * 60 * 1000;
+  const { inicio, fim } = janelaDoPeriodo(agora, periodo);
 
   const noPeriodo = itens.filter((i) => {
     const t = Date.parse(i.recebidoEm);
     // Data ilegível não derruba o painel: fica de fora, caladamente.
-    return Number.isFinite(t) && t >= inicio && t <= agora;
+    return Number.isFinite(t) && t >= inicio && t <= fim;
   });
+
+  // A amostra só cobre a janela se ela alcança algo ANTERIOR ao início dela.
+  // Com a amostra no teto e o item mais antigo já dentro do período, existe
+  // evento do período que ficou de fora da leitura — e aí o número é um piso,
+  // não um total.
+  const tempos = itens.map((i) => Date.parse(i.recebidoEm)).filter((t) => Number.isFinite(t));
+  const maisAntigo = tempos.length > 0 ? Math.min(...tempos) : Number.NEGATIVE_INFINITY;
+  const amostraCobreJanela = itens.length < tetoDaAmostra || maisAntigo <= inicio;
 
   const testes = noPeriodo.filter(ehTeste);
   const reais = noPeriodo.filter((i) => !ehTeste(i));
@@ -166,8 +331,10 @@ export function resumirInbox(
       : null;
 
   return {
-    periodoDias,
+    periodo,
+    janela: { inicio: new Date(inicio).toISOString(), fim: new Date(fim).toISOString() },
     amostra: itens.length,
+    amostraCobreJanela,
     base,
     volume: {
       recebidos: noPeriodo.length,

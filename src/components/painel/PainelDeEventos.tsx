@@ -23,12 +23,13 @@ import { Esqueleto } from '@/components/common/Esqueleto';
 import { BarraAnimada, NumeroAnimado } from '@/components/common/motion';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  buscaDoPeriodo,
+  PERIODO_PADRAO,
+  respostaEhDoPeriodo,
+  rotuloDoPeriodo,
+  SeletorDePeriodo,
+  type PeriodoEscolhido,
+} from '@/components/common/SeletorDePeriodo';
 import { FILTROS_VAZIOS, type FiltrosInboxValor } from '@/components/integrations/FiltrosInbox';
 import { InboxList } from '@/components/integrations/InboxList';
 import { cn } from '@/lib/utils';
@@ -60,8 +61,13 @@ interface CardContagem {
 }
 
 interface ResumoInbox {
-  periodoDias: number;
+  /** O período que o servidor usou: `'hoje'`, `'ontem'`, 7, 30, 90 ou `{de, ate}`. */
+  periodo: string | number | { de: string; ate: string };
+  /** De quando até quando ele contou, em ISO. */
+  janela: { inicio: string; fim: string };
   amostra: number;
+  /** `false` = a amostra parou antes do começo da janela; o número é um piso. */
+  amostraCobreJanela: boolean;
   base: number;
   volume: {
     recebidos: number;
@@ -85,12 +91,6 @@ interface ResumoInbox {
   porEvento: Array<{ evento: string; total: number; pct: number | null }>;
   receitaEnviada: { total: number; moeda: string } | null;
 }
-
-const PERIODOS = [
-  { valor: '7', rotulo: 'Últimos 7 dias' },
-  { valor: '30', rotulo: 'Últimos 30 dias' },
-  { valor: '90', rotulo: 'Últimos 90 dias' },
-] as const;
 
 /** Só eventos reais: o recorte que todo card de métrica abre. */
 const SO_REAIS: FiltrosInboxValor = { ...FILTROS_VAZIOS, equipe: 'reais' };
@@ -224,7 +224,7 @@ interface Recorte {
 export function PainelDeEventos() {
   const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
 
-  const [dias, setDias] = useState('30');
+  const [periodo, setPeriodo] = useState<PeriodoEscolhido>(PERIODO_PADRAO);
   const [resumo, setResumo] = useState<ResumoInbox | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -251,11 +251,15 @@ export function PainelDeEventos() {
    * os números velhos continuam na tela e quem avisa é o `atualizando`,
    * derivado, sem estado novo.
    */
+  // String, e não o objeto: dependência de efeito comparada por identidade
+  // refaria a busca a cada render, já que o objeto do período nasce novo.
+  const busca = buscaDoPeriodo(periodo);
+
   useEffect(() => {
     let vivo = true;
     void (async () => {
       try {
-        const dados = await pedir<{ resumo: ResumoInbox }>(`/api/inbox/resumo?dias=${dias}`, {
+        const dados = await pedir<{ resumo: ResumoInbox }>(`/api/inbox/resumo?${busca}`, {
           cache: 'no-store',
         });
         if (!vivo) return;
@@ -274,7 +278,7 @@ export function PainelDeEventos() {
     };
     // Trocar de empresa troca a resposta inteira: o header X-Empresa-Id muda.
     // `tentativa` existe para o botão "Tentar de novo" refazer a chamada.
-  }, [dias, empresaAtivaId, tentativa]);
+  }, [busca, empresaAtivaId, tentativa]);
 
   /** Abre a lista do recorte e leva o foco até ela. */
   const abrirRecorte = useCallback((filtros: FiltrosInboxValor, rotulo: string) => {
@@ -285,18 +289,12 @@ export function PainelDeEventos() {
   }, []);
 
   const seletorDePeriodo = (
-    <Select value={dias} onValueChange={(v) => setDias(v ?? "30")}>
-      <SelectTrigger className="w-full min-w-40 sm:w-auto" aria-label="Período do painel">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {PERIODOS.map((p) => (
-          <SelectItem key={p.valor} value={p.valor}>
-            {p.rotulo}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <SeletorDePeriodo
+      valor={periodo}
+      aoMudar={setPeriodo}
+      rotuloDoGrupo="Período do painel"
+      className="w-full"
+    />
   );
 
   const cardsDeAtribuicao = useMemo(() => {
@@ -402,26 +400,37 @@ export function PainelDeEventos() {
   // Derivado, não estado: o resumo na tela ainda é da janela anterior, logo a
   // resposta da nova ainda não chegou. Dizer isso com todas as letras evita o
   // pior dos dois mundos — número velho com cara de número novo.
-  const atualizando = resumo.periodoDias !== Number(dias);
+  const atualizando = !respostaEhDoPeriodo(resumo.periodo, periodo);
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       {/* ---------------- período e recorte da amostra ---------------- */}
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
+        {seletorDePeriodo}
         <p className="min-w-0 text-caption text-fg-muted">
-          Contagem feita sobre os últimos {resumo.amostra}{' '}
+          {rotuloDoPeriodo(periodo)}: contagem feita sobre os últimos {resumo.amostra}{' '}
           {resumo.amostra === 1 ? 'evento recebido' : 'eventos recebidos'} desta empresa. Teste da
           equipe fica fora das porcentagens.
           {atualizando && (
             <span className="text-fg-body"> Refazendo a conta para a nova janela…</span>
           )}
         </p>
-        {seletorDePeriodo}
       </div>
 
       {erro && (
         <Callout tone="warning" title="Os números podem estar velhos">
           <p className="text-caption text-fg-body">{erro}</p>
+        </Callout>
+      )}
+
+      {!resumo.amostraCobreJanela && (
+        <Callout tone="warning" title="Este período é maior que a leitura">
+          <p className="text-caption text-fg-body">
+            A conta olha os {resumo.amostra} eventos mais recentes desta empresa, e o mais antigo
+            deles já está dentro do período escolhido. Existe evento nesta janela que ficou de fora:
+            os números abaixo são um piso, não o total. Escolha um período mais curto para ter a
+            contagem fechada.
+          </p>
         </Callout>
       )}
 
@@ -431,7 +440,11 @@ export function PainelDeEventos() {
           titulo="Nenhum evento chegou neste período"
           motivo="A caixa de entrada desta empresa está vazia na janela escolhida. Se o webhook acabou de ser instalado, o primeiro evento aparece aqui assim que a primeira venda entrar."
           acao={
-            <Button variant="outline" size="sm" onClick={() => setDias('90')}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPeriodo({ dias: '90', de: null, ate: null })}
+            >
               Olhar os últimos 90 dias
             </Button>
           }
@@ -631,7 +644,7 @@ export function PainelDeEventos() {
         <Section
           id="recorte-do-painel"
           title={`Eventos: ${recorte.rotulo}`}
-          description="A mesma caixa de entrada, já filtrada pelo card que você clicou."
+          description={`A mesma caixa de entrada, no período "${rotuloDoPeriodo(periodo)}", já filtrada pelo card que você clicou.`}
           icon={Inbox}
           action={
             <Button variant="ghost" size="sm" onClick={() => setRecorte(null)}>
@@ -640,7 +653,24 @@ export function PainelDeEventos() {
             </Button>
           }
         >
-          <InboxList key={recorte.chave} filtrosIniciais={recorte.filtros} limite={1000} />
+          {/* A MESMA janela que contou o card. Sem isto o card dizia "3 no
+              período" e a lista abria com tudo o que existe na caixa — dois
+              números diferentes para a mesma pergunta, na mesma tela. */}
+          <InboxList
+            key={recorte.chave}
+            filtrosIniciais={recorte.filtros}
+            janela={resumo.janela}
+            acaoJanelaVazia={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPeriodo({ dias: '90', de: null, ate: null })}
+              >
+                Olhar os últimos 90 dias
+              </Button>
+            }
+            limite={1000}
+          />
         </Section>
       )}
     </div>

@@ -47,6 +47,7 @@ import {
   IntegrationFlow,
   type IntegrationTab,
 } from './IntegrationFlow';
+import { ChaveDoAutomatico } from './ChaveDoAutomatico';
 const ROTULO_EVENTO: Record<EventoRelay, string> = {
   'dispatch.success': 'Disparo aceito pela Meta',
   'dispatch.error': 'Disparo recusado',
@@ -409,6 +410,15 @@ export function IntegrationsPage({
 
   return (
     <div className="min-w-0">
+      {/* A trava do Pixel, no topo da tela que fala de automatico. A trava da
+          REGRA continua na aba Regras — a chave so mostra a contagem dela, e
+          por isso recebe `cfg.regras`, que e a lista que aquela aba edita. */}
+      <div className="mb-6 min-w-0">
+        <ChaveDoAutomatico
+          regras={cfg.regras ?? []}
+          onIrParaRegras={() => selecionarAba('regras')}
+        />
+      </div>
       <IntegrationFlow onNavigate={selecionarAba} />
       <Tabs
         value={aba}
@@ -417,7 +427,7 @@ export function IntegrationsPage({
       >
         <div
           ref={faixaDeAbas}
-          className="max-w-full overflow-x-auto rounded-panel border border-line-strong bg-surface-1/95 p-1.5"
+          className="max-w-full overflow-x-auto rounded-panel border border-line-strong bg-surface-1 p-1.5"
         >
           {/* Os grupos sao divisoria visual (P6, proximidade) e nao semantica:
               `role="presentation"` mantem a `tablist` com abas como unicos

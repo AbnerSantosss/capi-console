@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-import { ehNomePadraoMeta, nomePadraoParecido } from './meta-events';
+import { nomePadraoParecido } from './meta-events';
 
 const GRAPH_VERSION_PADRAO = 'v26.0';
 

@@ -21,11 +21,10 @@ import { PixelsPanel } from '@/components/pixels/PixelsPanel';
  */
 export default function Pixels() {
   return (
-    <main className={consoleStyles.page}>
+    <main className={consoleStyles.page} data-area="pixels">
       <ConsolePageHeader
-        eyebrow="Para onde o evento vai"
         title="Pixels"
-        description="Os destinos e a trava de cada um. Cada Pixel guarda o número, o token da API de Conversões e o código de teste — e é o código de teste que decide se o evento entra nas métricas reais."
+        description="Cada Pixel guarda o número, o token da API de Conversões e o código de teste — é ele que separa teste de venda real."
         icon={Target}
       />
       <PixelsPanel />

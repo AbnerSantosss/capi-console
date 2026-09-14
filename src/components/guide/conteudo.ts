@@ -161,7 +161,6 @@ export interface Caminho {
   id: 'manual' | 'auto';
   hue: Hue;
   icone: Icon;
-  eyebrow: string;
   titulo: string;
   definicao: string;
   quandoUsar: string;
@@ -174,7 +173,6 @@ export const CAMINHOS: Caminho[] = [
     id: 'manual',
     hue: 'manual',
     icone: CursorClickIcon,
-    eyebrow: 'Caminho 1',
     titulo: 'Disparo manual',
     definicao:
       'Você monta o evento no formulário, ou carrega um da caixa de entrada, confere e envia.',
@@ -187,7 +185,6 @@ export const CAMINHOS: Caminho[] = [
     id: 'auto',
     hue: 'auto',
     icone: LightningIcon,
-    eyebrow: 'Caminho 2',
     titulo: 'Disparo automático',
     definicao:
       'A plataforma manda o webhook, a regra escolhe o evento da Meta e o app envia sozinho.',

@@ -8,7 +8,6 @@ import { Building2, Check, ChevronDown, Pencil, Plus } from 'lucide-react';
 
 import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
 import { EmpresaDialog } from '@/components/empresa/EmpresaDialog';
-import { NOME_PRODUTO } from '@/lib/produto';
 import { cn } from '@/lib/utils';
 
 /**
@@ -23,6 +22,10 @@ import { cn } from '@/lib/utils';
  * errar de empresa custa um evento real disparado para o Pixel errado — entao
  * quem esta ativo precisa ser a primeira coisa legivel do cabecalho, nao a
  * segunda.
+ *
+ * v3: o cabecalho virou UMA linha de 56px, entao o gatilho perdeu a segunda
+ * linha (a legenda com o nome do produto) e ganhou contorno de controle. O
+ * nome do produto nao sumiu: ele mora na marca, a esquerda deste seletor.
  *
  * 🔴 Nenhum `fetch` aqui (E-8): a leitura e a gravacao moram no
  * `useEmpresaStore`. Este componente so pede e mostra.
@@ -174,27 +177,39 @@ export function SeletorDeEmpresa(): React.JSX.Element {
                   ? `Empresa ativa: ${ativa.nome}. Trocar de empresa`
                   : 'Trocar de empresa'
               }
-              className="flex h-control-sm shrink-0 cursor-pointer items-center gap-2.5 rounded-control px-1.5 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text aria-expanded:bg-surface-2"
+              title={ativa?.nome}
+              // Gatilho de 36px com contorno próprio: no cabeçalho de uma
+              // linha ele precisa se ler como controle, e não como texto solto.
+              /* `shrink-0`, e não `shrink`: enquanto este era o único item
+                 encolhível do cabeçalho, o flex despejava nele toda a sobra da
+                 linha e o botão ia de 10,5rem para 0,1rem — o nome da empresa
+                 desaparecia e sobrava uma lasca clicável. Errar de empresa
+                 custa evento real no Pixel errado, então esta é a última coisa
+                 da linha que pode encolher. Quem cede agora é a busca.
+                 Só a partir de 80rem, veja bem: é de lá para cima que o menu
+                 divide a linha com o seletor. No celular não há menu nenhum
+                 aqui em cima e o `shrink` continua sendo o que faz o nome
+                 caber em 375px. */
+              className="flex h-control-sm min-w-0 shrink cursor-pointer items-center gap-2 rounded-control border border-line bg-surface-1 py-0 pr-2 pl-1.5 text-left shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text aria-expanded:bg-surface-2 xl:shrink-0"
             />
           }
         >
           {ativa ? (
-            <Insignia empresa={ativa} className="size-7" />
+            <Insignia empresa={ativa} className="size-[1.375rem] rounded-control" />
           ) : (
             <span
               aria-hidden
-              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-fg-muted"
+              className="flex size-[1.375rem] shrink-0 items-center justify-center rounded-control bg-surface-2 text-fg-muted"
             >
-              <Building2 className="size-4" strokeWidth={1.75} />
+              <Building2 className="size-3.5" strokeWidth={1.75} />
             </span>
           )}
-          <span className="hidden min-w-0 flex-col leading-none sm:flex">
-            <span className="max-w-40 truncate text-label font-semibold text-fg-strong">
-              {ativa ? ativa.nome : NOME_PRODUTO}
-            </span>
-            <span className="mt-0.5 truncate text-caption text-fg-muted">
-              {ativa ? NOME_PRODUTO : 'lendo as empresas…'}
-            </span>
+          {/* O nome da empresa aparece em TODA largura — inclusive no celular,
+              onde ele vivia escondido abaixo de 640px. Errar de empresa custa
+              um evento real no Pixel errado, então o nome não é enfeite. O
+              produto desceu para a marca, à esquerda deste seletor. */}
+          <span className="max-w-28 min-w-0 truncate text-label font-medium text-fg-strong sm:max-w-40">
+            {ativa ? ativa.nome : 'lendo as empresas…'}
           </span>
           <ChevronDown className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
         </Menu.Trigger>

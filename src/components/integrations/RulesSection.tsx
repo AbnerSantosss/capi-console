@@ -161,7 +161,7 @@ export function RulesSection({
         </Callout>
       )}
 
-      <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/70 p-3">
+      <div className="flex flex-col gap-3 rounded-panel border border-line bg-surface-2 p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Buscar regra</span>
@@ -272,7 +272,7 @@ export function RulesSection({
             <AccordionItem
               key={r.id}
               value={r.id}
-              className="overflow-hidden rounded-xl border border-line-strong bg-surface-2/55 last:border-b"
+              className="overflow-hidden rounded-panel border border-line-strong bg-surface-2 last:border-b"
             >
               <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5 pr-3 text-left">
