@@ -49,9 +49,10 @@ config/
 # segredos de operacao gerados na maquina do operador (nunca versionar)
 *.local
 
-# design-sync (Claude Design): scripts preparados, saida do conversor e estado de maquina
+# Estado de ferramenta de design na maquina do operador. Nada em src/ importa
+# estas pastas e o `.dockerignore` nao as exclui -- se fossem versionadas
+# entrariam no contexto do build sem servir para nada. Ficam fora.
 /.ds-sync/
 /ds-bundle/
-/.design-sync/.cache/
-/.design-sync/learnings/
-/.design-sync/node_modules
+/.design-sync/
+/.impeccable/
