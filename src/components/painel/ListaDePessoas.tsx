@@ -4,7 +4,17 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
+  createColumnHelper,
+  createSortedRowModel,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
+  type SortingState,
+} from '@tanstack/react-table';
+import {
   ArrowLeft,
+  ChevronDown,
+  ChevronUpIcon,
   CircleSlash,
   Clock,
   FlaskConical,
@@ -46,6 +56,26 @@ import { cn } from '@/lib/utils';
  * 🔴 E-mail sai MASCARADO da rota (`/api/inbox/pessoas`) e o nome sai inteiro.
  * Não é descuido nos dois sentidos: e-mail é credencial de acesso ao produto,
  * nome é como o operador acha a pessoa no backoffice.
+ *
+ * FASE 5 do redesign v4 — DADO TABULAR É TABELA.
+ *
+ * Isto aqui é uma planilha de compras: mesmos campos, uma linha por pessoa,
+ * valores que só querem ser comparados de cima para baixo. Em cartão empilhado
+ * o valor de cada linha nascia numa coluna diferente, e comparar R$ 497 com
+ * R$ 1.497 virava trabalho de olho. A partir de 48rem a lista é uma `<table>`
+ * de verdade, montada com `@tanstack/react-table` v9: cabeçalho fixo em cada
+ * coluna, ordenação por quem/evento/valor/quando, dinheiro em `font-mono` +
+ * `tabular-nums` alinhado à direita (o separador decimal cai sempre no mesmo
+ * lugar) e separação por FILETE (`divide-y divide-line`) — nunca zebra, que é
+ * pintar metade das linhas de uma cor que não quer dizer nada.
+ *
+ * 🔴 A ordem que chega do servidor é a ordem de estreia: `sorting` nasce vazio.
+ * Ordenar é ESCOLHA de quem olha, e nenhuma coluna ordena sozinha — senão a
+ * lista mentiria sobre qual recorte o card do Painel contou.
+ *
+ * Abaixo de 48rem a tabela dá lugar ao cartão de sempre, com os MESMOS dados e
+ * a mesma ordem: numa tela de 390px seis colunas viram seis colunas de uma
+ * palavra, e nada do que a linha diz pode sumir só porque o vidro encolheu.
  */
 
 /* ------------------------------------------------------------------ */
@@ -149,52 +179,69 @@ const ROTULO_MOTIVO: Record<MotivoDeTeste, string> = {
   'email-repetido': 'mesmo e-mail em várias compras',
 };
 
+const ehDaEquipe = (p: PessoaDoEvento) => p.testeInterno === true || p.testePlataforma === true;
+
 /* ------------------------------------------------------------------ */
-/* A linha                                                             */
+/* Pedaços de célula, reaproveitados pela tabela e pelo cartão          */
 /* ------------------------------------------------------------------ */
 
-function LinhaDaPessoa({ p, mostrarEvento }: { p: PessoaDoEvento; mostrarEvento: boolean }) {
-  const ehTeste = p.testeInterno === true || p.testePlataforma === true;
-
+function Quem({ p }: { p: PessoaDoEvento }) {
   return (
-    <li
-      className={cn(
-        'flex min-w-0 flex-col gap-2 rounded-control border p-3',
-        ehTeste ? 'border-line bg-surface-2/60' : 'border-line bg-surface-2'
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="min-w-0 break-words text-label font-medium text-fg-strong">
+        {p.nomeCliente || 'sem nome no evento'}
+      </span>
+      {(p.emailMascarado || p.orderId) && (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-fg-muted">
+          {p.emailMascarado && (
+            <span className="wrap-token min-w-0 font-mono">{p.emailMascarado}</span>
+          )}
+          {p.orderId && <span className="wrap-token min-w-0 font-mono">pedido {p.orderId}</span>}
+        </span>
       )}
-    >
-      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="min-w-0 break-words text-label font-medium text-fg-strong">
-          {p.nomeCliente || 'sem nome no evento'}
-        </span>
-        <span className="shrink-0 text-label font-semibold text-fg-strong tabular-nums">
-          {dinheiro(p.valor, p.moeda)}
-        </span>
-      </div>
+    </div>
+  );
+}
 
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-muted">
-        {p.emailMascarado && (
-          <span className="wrap-token min-w-0 font-mono">{p.emailMascarado}</span>
-        )}
-        <span className="inline-flex shrink-0 items-center gap-1">
-          <Clock className="size-3" aria-hidden />
-          {quando(p.recebidoEm)}
+/**
+ * Dinheiro e EMQ na mesma pilha, os dois à direita e os dois tabulares: é a
+ * coluna que existe para ser lida na vertical, e um número que balança de meio
+ * pixel por linha destrói exatamente essa leitura.
+ */
+function Valor({ p }: { p: PessoaDoEvento }) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className="font-mono text-label font-semibold whitespace-nowrap text-fg-strong tabular-nums">
+        {dinheiro(p.valor, p.moeda)}
+      </span>
+      {typeof p.emq === 'number' && (
+        <span className="font-mono text-caption whitespace-nowrap text-fg-muted tabular-nums">
+          EMQ {p.emq}
         </span>
-        {p.orderId && <span className="wrap-token min-w-0 font-mono">pedido {p.orderId}</span>}
-        {typeof p.emq === 'number' && <span className="shrink-0">EMQ {p.emq}</span>}
-      </div>
+      )}
+    </div>
+  );
+}
 
+function Quando({ p }: { p: PessoaDoEvento }) {
+  return (
+    <span className="inline-flex items-center gap-1 font-mono text-caption whitespace-nowrap text-fg-muted tabular-nums">
+      <Clock className="size-3 shrink-0" aria-hidden />
+      {quando(p.recebidoEm)}
+    </span>
+  );
+}
+
+/** O estado do evento mais as ressalvas que explicam por que ele está assim. */
+function Situacao({ p }: { p: PessoaDoEvento }) {
+  const equipe = ehDaEquipe(p);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {mostrarEvento && (
-          <Badge variant="neutro" className="font-mono">
-            {p.evento}
-          </Badge>
-        )}
         <Badge variant={TOM_STATUS[p.status] ?? 'neutro'}>
           {ROTULO_STATUS[p.status] ?? p.status}
         </Badge>
-        <Badge variant={TOM_ATRIBUICAO[p.atribuicao]}>{ROTULO_ATRIBUICAO[p.atribuicao]}</Badge>
-        {ehTeste && (
+        {equipe && (
           <Badge variant="aviso">
             <FlaskConical aria-hidden />
             teste
@@ -208,10 +255,268 @@ function LinhaDaPessoa({ p, mostrarEvento }: { p: PessoaDoEvento; mostrarEvento:
         )}
         {p.motivoDeTeste && <Badge variant="neutro">{ROTULO_MOTIVO[p.motivoDeTeste]}</Badge>}
       </div>
-
       {p.explicacaoDeTeste && (
         <p className="min-w-0 text-caption break-words text-fg-muted">{p.explicacaoDeTeste}</p>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* A tabela                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * O que cada coluna VESTE. Largura e alinhamento moram aqui, num só lugar, e
+ * valem ao mesmo tempo para o `<th>` e para o `<td>` — é isso que faz a coluna
+ * do valor ficar reta de cima a baixo sem ninguém repetir `text-right` seis
+ * vezes.
+ *
+ * O slot `columnMeta` do `tableFeatures` é a forma v9 de tipar isto por tabela;
+ * a alternativa é `declare module` global, que valeria para o produto inteiro
+ * para servir a uma tela só.
+ */
+interface MetaColuna {
+  celula: string;
+}
+
+/**
+ * 🔴 API da v9, que NÃO é a da v8: não existe `useReactTable` nem
+ * `getCoreRowModel()` como opção. As features entram uma a uma em
+ * `tableFeatures()` — sem `rowSortingFeature` registrado, `column.getCanSort`
+ * simplesmente não existe — e os row models são SLOTS dessa mesma chamada.
+ * Fora do render de propósito: recriar isto a cada passada invalida os modelos.
+ */
+const recursos = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  columnMeta: {} as MetaColuna,
+});
+
+const ajudante = createColumnHelper<typeof recursos, PessoaDoEvento>();
+
+/** Array estável: `?? []` solto nasceria novo a cada render (v9, §data). */
+const SEM_PESSOAS: PessoaDoEvento[] = [];
+
+function montarColunas(mostrarEvento: boolean) {
+  const colunas = [
+    ajudante.accessor((p) => p.nomeCliente ?? '', {
+      id: 'quem',
+      header: 'Quem',
+      meta: { celula: 'min-w-0' },
+      cell: ({ row }) => <Quem p={row.original} />,
+    }),
+    ajudante.accessor((p) => p.evento, {
+      id: 'evento',
+      header: 'Evento',
+      meta: { celula: 'w-[9rem]' },
+      cell: ({ row }) => (
+        <Badge variant="neutro" className="font-mono">
+          {row.original.evento}
+        </Badge>
+      ),
+    }),
+    ajudante.accessor((p) => (typeof p.valor === 'number' && Number.isFinite(p.valor) ? p.valor : null), {
+      id: 'valor',
+      header: 'Valor',
+      sortDescFirst: true,
+      meta: { celula: 'w-[7.5rem] text-right' },
+      cell: ({ row }) => <Valor p={row.original} />,
+    }),
+    ajudante.accessor((p) => new Date(p.recebidoEm).getTime(), {
+      id: 'quando',
+      header: 'Quando',
+      sortDescFirst: true,
+      meta: { celula: 'w-[8rem]' },
+      cell: ({ row }) => <Quando p={row.original} />,
+    }),
+    /* Situação e atribuição NÃO ordenam: ordenariam pelo slug guardado
+       (`novo`, `nenhuma`), que não é a palavra que está na tela — uma coluna
+       que ordena por um critério invisível é pior do que uma que não ordena. */
+    ajudante.accessor((p) => p.status, {
+      id: 'situacao',
+      header: 'Situação',
+      enableSorting: false,
+      meta: { celula: 'w-[13rem]' },
+      cell: ({ row }) => <Situacao p={row.original} />,
+    }),
+    ajudante.accessor((p) => p.atribuicao, {
+      id: 'atribuicao',
+      header: 'Atribuição',
+      enableSorting: false,
+      meta: { celula: 'w-[9.5rem]' },
+      cell: ({ row }) => (
+        <Badge variant={TOM_ATRIBUICAO[row.original.atribuicao]}>
+          {ROTULO_ATRIBUICAO[row.original.atribuicao]}
+        </Badge>
+      ),
+    }),
+  ];
+
+  // Quando a tela inteira já é de um evento só, a coluna repetiria o título em
+  // todas as linhas. Some a COLUNA, não o dado: o nome continua no cabeçalho.
+  return ajudante.columns(mostrarEvento ? colunas : colunas.filter((c) => c.id !== 'evento'));
+}
+
+const COLUNAS_COM_EVENTO = montarColunas(true);
+const COLUNAS_SEM_EVENTO = montarColunas(false);
+
+function TabelaDePessoas({
+  pessoas,
+  mostrarEvento,
+  legenda,
+}: {
+  pessoas: PessoaDoEvento[];
+  mostrarEvento: boolean;
+  legenda: string;
+}) {
+  /**
+   * Nasce VAZIO, e é o ponto do parágrafo de cima: a lista estreia na ordem em
+   * que o servidor mandou, que é a ordem com que o card do Painel contou.
+   */
+  const [ordem, setOrdem] = useState<SortingState>([]);
+
+  const tabela = useTable({
+    features: recursos,
+    columns: mostrarEvento ? COLUNAS_COM_EVENTO : COLUNAS_SEM_EVENTO,
+    data: pessoas.length > 0 ? pessoas : SEM_PESSOAS,
+    getRowId: (p) => p.id,
+    state: { sorting: ordem },
+    onSortingChange: setOrdem,
+  });
+
+  const linhas = tabela.getRowModel().rows;
+
+  return (
+    <Panel className="min-w-0 p-0">
+      {/* A tabela só a partir de 48rem: abaixo disso seis colunas viram seis
+          colunas de uma palavra, e o cartão diz o mesmo sem picotar nada. */}
+      <div className="hidden min-w-0 overflow-x-auto md:block">
+        <table className="w-full border-collapse text-label">
+          <caption className="sr-only">{legenda}</caption>
+          {/* O degrau de tamanho mora aqui, e não no `<th>`: `tailwind-merge`
+              trata `text-caption` e `text-fg-muted` como a mesma família
+              `text-*` e descartaria o primeiro ao passar os dois pelo `cn`.
+              No `<thead>`, sozinho e fora do `cn`, ele sobrevive. */}
+          <thead className="text-caption">
+            {tabela.getHeaderGroups().map((grupo) => (
+              <tr key={grupo.id} className="border-b border-line">
+                {grupo.headers.map((cabecalho) => {
+                  const coluna = cabecalho.column;
+                  const meta = coluna.columnDef.meta;
+                  const sentido = coluna.getIsSorted();
+                  return (
+                    <th
+                      key={cabecalho.id}
+                      scope="col"
+                      aria-sort={
+                        !coluna.getCanSort()
+                          ? undefined
+                          : sentido === 'asc'
+                            ? 'ascending'
+                            : sentido === 'desc'
+                              ? 'descending'
+                              : 'none'
+                      }
+                      /* Sem `uppercase tracking-wide`: caixa alta espaçada em
+                         cabeçalho é a assinatura de template que a §10 do plano
+                         proíbe. Quem separa o rótulo do dado é o tom
+                         (`fg-muted`) e o filete de baixo. */
+                      className={cn(
+                        'px-3 py-2 text-left font-medium text-fg-muted',
+                        meta?.celula
+                      )}
+                    >
+                      {cabecalho.isPlaceholder ? null : coluna.getCanSort() ? (
+                        <button
+                          type="button"
+                          onClick={coluna.getToggleSortingHandler()}
+                          title={`Ordenar por ${String(coluna.columnDef.header)}`}
+                          className={cn(
+                            'group inline-flex max-w-full items-center gap-1 rounded-control text-fg-muted transition-colors hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
+                            meta?.celula?.includes('text-right') && 'flex-row-reverse'
+                          )}
+                        >
+                          <tabela.FlexRender header={cabecalho} />
+                          {sentido === 'asc' ? (
+                            <ChevronUpIcon className="size-3 shrink-0 text-tinta-texto" aria-hidden />
+                          ) : sentido === 'desc' ? (
+                            <ChevronDown className="size-3 shrink-0 text-tinta-texto" aria-hidden />
+                          ) : (
+                            <ChevronDown
+                              className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                              aria-hidden
+                            />
+                          )}
+                        </button>
+                      ) : (
+                        <tabela.FlexRender header={cabecalho} />
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+          {/* Filete entre linhas, nunca zebra: a FASE 3a decidiu que superfície
+              se separa por LUZ, e pintar uma linha sim outra não é inventar um
+              significado para uma cor que não tem nenhum. */}
+          <tbody className="divide-y divide-line">
+            {linhas.map((linha) => (
+              <tr key={linha.id} className="transition-colors hover:bg-tinta/6">
+                {linha.getAllCells().map((celula) => (
+                  <td
+                    key={celula.id}
+                    className={cn('px-3 py-2.5 align-top', celula.column.columnDef.meta?.celula)}
+                  >
+                    <tabela.FlexRender cell={celula} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ul className="flex min-w-0 list-none flex-col gap-3 p-3 md:hidden">
+        {linhas.map((linha) => (
+          <CartaoDaPessoa key={linha.id} p={linha.original} mostrarEvento={mostrarEvento} />
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* O cartão de celular — os mesmos dados, em pé                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Abaixo de 48rem não há tabela, e também não há dado a menos: o cartão mostra
+ * exatamente as seis colunas, empilhadas.
+ *
+ * Perdeu a borda e o `bg-surface-2/60` da FASE 3b: contorno virou vocabulário
+ * de CONTROLE, e opacidade em cor de superfície é justamente o que as receitas
+ * de `primitives.tsx` proíbem. Quem separa um cartão do outro é o degrau de luz
+ * do `surface-2` sobre o painel, mais o espaço entre eles.
+ */
+function CartaoDaPessoa({ p, mostrarEvento }: { p: PessoaDoEvento; mostrarEvento: boolean }) {
+  return (
+    <li className="flex min-w-0 flex-col gap-2 rounded-control bg-surface-2 p-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <Quem p={p} />
+        <Valor p={p} />
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <Quando p={p} />
+        {mostrarEvento && (
+          <Badge variant="neutro" className="font-mono">
+            {p.evento}
+          </Badge>
+        )}
+        <Badge variant={TOM_ATRIBUICAO[p.atribuicao]}>{ROTULO_ATRIBUICAO[p.atribuicao]}</Badge>
+      </div>
+      <Situacao p={p} />
     </li>
   );
 }
@@ -300,7 +605,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
 
   // `useMemo` e não `?? []` solto: o array vazio nasceria novo a cada render e
   // faria a soma abaixo recalcular sem que nada tenha mudado.
-  const pessoas = useMemo(() => dados?.pessoas ?? [], [dados]);
+  const pessoas = useMemo(() => dados?.pessoas ?? SEM_PESSOAS, [dados]);
   const atualizando = dados !== null && !respostaEhDoPeriodo(dados.periodo, periodo);
 
   /** A soma da própria lista — não vem do painel, para não haver dois números. */
@@ -428,13 +733,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
             }
           />
         ) : (
-          <Panel className="min-w-0 p-0">
-            <ul className="flex min-w-0 list-none flex-col gap-2 p-3">
-              {pessoas.map((p) => (
-                <LinhaDaPessoa key={p.id} p={p} mostrarEvento={soCompras} />
-              ))}
-            </ul>
-          </Panel>
+          <TabelaDePessoas pessoas={pessoas} mostrarEvento={soCompras} legenda={titulo} />
         )}
       </Section>
     </div>

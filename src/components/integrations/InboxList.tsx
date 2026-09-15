@@ -33,6 +33,14 @@ import { parseWebhook, type ClassificacaoEvento, type MotivoIgnorar } from '@/li
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Menu,
+  MenuContent,
+  MenuDetalhe,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { StatusDot, Callout } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import {
@@ -890,7 +898,7 @@ export function InboxList({
               {[0, 1, 2].map((i) => (
                 <li
                   key={i}
-                  className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-2 p-3"
+                  className="flex flex-col gap-2 rounded-control bg-surface-2 p-3"
                 >
                   <Esqueleto className="h-[20px] w-3/4 bg-surface-3" />
                   <div className="flex gap-1.5">
@@ -1112,7 +1120,7 @@ export function InboxList({
             </DialogDescription>
           </DialogHeader>
 
-          <p className="rounded-control border border-line-strong bg-surface-2 p-2.5 text-caption text-fg-muted">
+          <p className="rounded-control bg-surface-2 p-2.5 text-caption text-fg-muted">
             No Gerenciador de Eventos isto aparece com o nome{' '}
             <span className="font-mono text-fg-body">{parDoAlvo?.tecnico ?? '—'}</span>.{' '}
             {parDoAlvo?.descricao}
@@ -1246,12 +1254,6 @@ function LinhaEntrada({
   aoDisparar: () => void;
   aoVerPayload: () => void;
 }) {
-  /**
-   * Só a gaveta de ações do celular. Nenhuma decisão de disparo depende dela:
-   * os mesmos botões, com os mesmos `disabled`, aparecem abertos em `lg+`.
-   */
-  const [maisAberto, setMaisAberto] = useState(false);
-
   const naoLido = ehNaoLido(item);
   const teste = item.testePlataforma || item.classificacao === 'teste-plataforma';
   const par = parMeta(item.eventoMeta);
@@ -1269,309 +1271,335 @@ function LinhaEntrada({
 
   const disparavel = podeDisparar(item);
   const ehNovo = item.status === 'novo';
-  /** Em `lg+` todas as ações ficam à vista; no celular a gaveta guarda o resto. */
-  const secundarias = (disparavel ? 1 : 0) + (naoLido ? 0 : 1);
+
+  /**
+   * Envio que deu errado em algum Pixel. Antes isso só se via desdobrando a
+   * lista de resultados no pé da linha; com a lista dentro do menu, a linha
+   * precisa de um selo dizendo que há algo para abrir.
+   */
+  const falhas = (item.resultados ?? []).filter((r) => TOM_RESULTADO[r.status] === 'danger');
+
+  /** Quem comprou: o nome quando existe, senão o e-mail mascarado. */
+  const quem = item.nomeCliente ?? item.emailMascarado ?? 'sem identificação';
+
+  /**
+   * Uma coluna de ação comporta UM botão. O escolhido é o passo mais provável
+   * para o estado do item; os outros dois continuam inteiros dentro do menu.
+   */
+  const acao = disparavel
+    ? { rotulo: 'Disparar direto', Icone: Send, ao: aoDisparar, principal: true }
+    : !naoLido
+      ? { rotulo: 'Carregar', Icone: ArrowDownToLine, ao: aoCarregar, principal: false }
+      : { rotulo: 'Ver payload', Icone: FileJson, ao: aoVerPayload, principal: false };
+  const IconeAcao = acao.Icone;
 
   return (
     <div
       className={cn(
-        /* Grade explícita no lugar do flex-wrap de oito elementos: valor à
-           direita, "vira" e metadados em faixas próprias, ações em coluna
-           própria a partir de 64rem. */
-        'relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5 rounded-control border bg-surface-2 p-3',
-        'lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-x-4',
-        ehNovo
-          ? /* Linha de tinta de 2px na borda esquerda + o gradiente que morre
-               em 40%: o que acabou de chegar se destaca sem virar outra cor. */
-            'border-line-strong bg-linear-to-r from-tinta/10 to-transparent to-40% before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:rounded-l-control before:bg-tinta/70 before:content-[""]'
-          : 'border-line-strong',
-        naoLido && 'border-danger/40',
+        /* QUATRO colunas fixas no lugar das oito zonas empilhadas: quem ·
+           evento→regra · valor · ação. Colunas fixas é o que permite ler a
+           lista na vertical — comparar dez valores exige que os dez estejam
+           na mesma faixa de pixels. O que não coube foi para o menu `…`. */
+        'relative grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 rounded-control bg-surface-2 p-3',
+        'md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_7rem_13rem] md:gap-x-4',
+        /* Superfície separada por luz, não por contorno (G3'). O que sobra de
+           borda é o filete de 2px — e ele agora carrega DOIS avisos, porque a
+           borda inteira que marcava "não deu para ler" saiu junto. */
+        (ehNovo || naoLido) &&
+          'before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:rounded-l-control before:content-[""]',
+        ehNovo && !naoLido && 'before:bg-tinta/70',
+        naoLido && 'before:bg-danger/70',
         /* Ping da plataforma não é venda: recua um degrau inteiro de atenção. */
         teste && 'opacity-70'
       )}
     >
-      {/* (a) Plataforma + nome do evento + selos de natureza. */}
-      <div className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      {/* COLUNA 1 — quem. Nome em cima, hora e porta de entrada embaixo.
+          O e-mail mascarado só sobe para cá quando não há nome; caso
+          contrário fica no menu, junto do pedido. */}
+      <div className="col-start-1 row-start-1 flex min-w-0 flex-col gap-0.5">
+        <span className="min-w-0 truncate text-label font-medium text-fg-strong">{quem}</span>
         {/* Por onde o evento entrou. Era "xWinner" fixo aqui: a caixa passou
             a receber também a tag do site, e nome de plataforma fixo no
             código mente em metade das linhas. Agora o nome vem da empresa
             ativa — é dela que o webhook chegou. */}
-        {/* Sem `uppercase`: aqui dentro agora entra NOME PROPRIO. "WEBHOOK"
-            em caixa alta era rotulo generico e nao tinha dono; "XWINNER" e o
-            nome de uma empresa escrito errado, e o proximo cliente pode se
-            chamar "xPay" ou "e-Com". Grafia de marca nao e decoracao de
-            interface. */}
-        <span className="text-caption text-fg-muted">
+        <span className="min-w-0 truncate text-caption text-fg-muted">
+          <span className="tabular">{hora(item.recebidoEm)}</span> ·{' '}
           {item.origem === 'tag' ? 'Tag' : rotuloWebhook}
         </span>
-        {/* Nome vindo de fora, sem espaço nenhum e às vezes com 60+ chars
-            ("checkout.session.completed.with.algo"): sem `wrap-token` ele
-            estoura a coluna em 360px em vez de quebrar. */}
-        <span className="wrap-token min-w-0 font-mono text-label font-semibold text-fg-strong">
-          {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
-        </span>
-        {ehNovo && (
-          <Badge variant="info">
-            <Plus aria-hidden />
-            novo
-          </Badge>
-        )}
-        {teste && (
-          <Badge variant="aviso">
-            <FlaskConical aria-hidden />
-            teste
-          </Badge>
-        )}
-        {naoLido && (
-          <Badge variant="perigo">
-            <FileWarning aria-hidden />
-            não deu para ler
-          </Badge>
-        )}
       </div>
 
-      {/* (b) O valor da venda: único elemento em negrito deste lado da linha.
-          É o que separa uma compra de R$ 497 de um ping de teste. */}
+      {/* COLUNA 2 — evento que chegou → evento que sai para a Meta, e os selos
+          que mudam a decisão de quem opera. No celular ela desce inteira para
+          a segunda faixa, porque é a única que precisa de largura. */}
+      <div className="col-start-1 col-end-4 row-start-2 flex min-w-0 flex-col gap-1 md:col-start-2 md:col-end-3 md:row-start-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-label text-fg-body">
+          {/* Nome vindo de fora, sem espaço nenhum e às vezes com 60+ chars
+              ("checkout.session.completed.with.algo"): sem `wrap-token` ele
+              estoura a coluna em 360px em vez de quebrar. */}
+          <span className="wrap-token min-w-0 font-mono text-label font-semibold text-fg-strong">
+            {item.eventoOrigem ?? item.evento ?? 'sem nome de evento'}
+          </span>
+          {par ? (
+            <>
+              <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
+              {/* Sem contorno: a pastilha já está um degrau de luz acima. */}
+              <code className="wrap-token min-w-0 rounded-control bg-surface-3 px-1.5 py-0.5 font-mono text-caption text-fg-body">
+                {par.tecnico}
+              </code>
+            </>
+          ) : teste ? (
+            <span className="inline-flex items-center gap-1.5 text-fg-muted">
+              <FlaskConical className="size-3.5 shrink-0" aria-hidden />
+              teste de conexão — nada a enviar
+            </span>
+          ) : naoLido ? (
+            <span className="inline-flex items-center gap-1.5 text-danger">
+              <FileWarning className="size-3.5 shrink-0" aria-hidden />
+              corpo não pôde ser lido
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-fg-muted">
+              <Ban className="size-3.5 shrink-0" aria-hidden />
+              não enviar
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {ehNovo && (
+            <Badge variant="info">
+              <Plus aria-hidden />
+              novo
+            </Badge>
+          )}
+          {teste && (
+            <Badge variant="aviso">
+              <FlaskConical aria-hidden />
+              teste
+            </Badge>
+          )}
+          {naoLido && (
+            <Badge variant="perigo">
+              <FileWarning aria-hidden />
+              não deu para ler
+            </Badge>
+          )}
+          {par && !par.padrao && (
+            <Badge variant="aviso">
+              <AlertTriangle aria-hidden />
+              fora do padrão da Meta
+            </Badge>
+          )}
+          {item.status === 'carregado' && (
+            <Badge>
+              <ArrowDownToLine aria-hidden />
+              carregado no formulário
+            </Badge>
+          )}
+          {item.status === 'disparado' && (
+            <Badge variant="sucesso">
+              <Check aria-hidden />
+              enviado à Meta
+            </Badge>
+          )}
+          {item.modo && (
+            <Badge>
+              {React.createElement(ICONE_MODO[item.modo], { 'aria-hidden': true })}
+              {ROTULO_MODO[item.modo]}
+            </Badge>
+          )}
+          {/* A lista de resultados por Pixel foi para o menu. Sem este selo,
+              um envio recusado passaria a não ter nenhum sinal na linha. */}
+          {falhas.length > 0 && (
+            <Badge variant="perigo">
+              <AlertTriangle aria-hidden />
+              {falhas.length === 1 ? 'falhou em 1 Pixel' : `falhou em ${falhas.length} Pixels`}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* COLUNA 3 — o valor da venda. Mono, tabular e alinhado à direita: é a
+          coluna que se lê de cima a baixo somando. */}
       <div
         className={cn(
-          'col-start-2 row-start-1 justify-self-end font-mono text-label font-semibold tabular whitespace-nowrap',
+          'col-start-2 row-start-1 justify-self-end text-right font-mono text-label font-semibold tabular whitespace-nowrap md:col-start-3',
           teste || naoLido ? 'text-fg-muted' : 'text-fg-strong'
         )}
       >
         {teste || naoLido ? '—' : dinheiro(item.valor, item.moeda)}
       </div>
 
-      {/* (c) Para onde isto vai, em uma frase, mais o selo de estado. */}
-      <div className="col-start-1 col-end-3 row-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-fg-body">
-        {par ? (
-          <>
-            <ArrowRight className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-            <span>vira</span>
-            <code className="rounded border border-line bg-surface-3 px-1.5 py-0.5 font-mono text-caption text-fg-body">
-              {par.tecnico}
-            </code>
-            <span className="text-caption text-fg-muted">{par.pt}</span>
-            {!par.padrao && (
-              <Badge variant="aviso">
-                <AlertTriangle aria-hidden />
-                fora do padrão da Meta
-              </Badge>
-            )}
-          </>
-        ) : teste ? (
-          <span className="inline-flex items-center gap-1.5 text-fg-muted">
-            <FlaskConical className="size-3.5 shrink-0" aria-hidden />
-            teste de conexão — nada a enviar
-          </span>
-        ) : naoLido ? (
-          <span className="inline-flex items-center gap-1.5 text-danger">
-            <FileWarning className="size-3.5 shrink-0" aria-hidden />
-            corpo não pôde ser lido
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-fg-muted">
-            <Ban className="size-3.5 shrink-0" aria-hidden />
-            não enviar
-          </span>
-        )}
+      {/* COLUNA 4 — ação. Um botão com o passo mais provável e o menu `…` com
+          tudo o mais: as outras duas ações E os dados que saíram da linha.
+          Abaixo de 48rem sobra só o `…`, porque quatro colunas e um botão de
+          rótulo longo não cabem em 360px sem voltar ao empilhamento. */}
+      <div className="col-start-3 row-start-1 flex items-center justify-end gap-1 justify-self-end md:col-start-4">
+        <Button
+          size="sm"
+          variant={acao.principal ? 'default' : 'outline'}
+          className="hidden md:inline-flex"
+          onClick={acao.ao}
+        >
+          <IconeAcao className="size-3.5" aria-hidden />
+          {acao.rotulo}
+        </Button>
 
-        {item.status === 'carregado' && (
-          <Badge>
-            <ArrowDownToLine aria-hidden />
-            carregado no formulário
-          </Badge>
-        )}
-        {item.status === 'disparado' && (
-          <Badge variant="sucesso">
-            <Check aria-hidden />
-            enviado à Meta
-          </Badge>
-        )}
-        {item.modo && (
-          <Badge>
-            {React.createElement(ICONE_MODO[item.modo], { 'aria-hidden': true })}
-            {ROTULO_MODO[item.modo]}
-          </Badge>
-        )}
-        {item.testeInterno && (
-          <Badge variant="aviso">
-            <FlaskConical aria-hidden />
-            teste da equipe
-          </Badge>
-        )}
-        {item.classificacao === 'desconhecido' && (
-          <Badge variant="aviso">
-            <HelpCircle aria-hidden />
-            nome novo, sem regra
-          </Badge>
-        )}
-        {item.rotuloDivergente && (
-          <Badge variant="aviso">
-            <History aria-hidden />
-            apelido antigo{item.rotuloRecebido ? `: ${item.rotuloRecebido}` : ''}
-          </Badge>
-        )}
-      </div>
-
-      {/* (d) Metadados: hora, cliente, pedido e sinais de atribuição. */}
-      <p className="col-start-1 col-end-3 row-start-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-muted">
-        <span className="tabular">{hora(item.recebidoEm)}</span>
-        {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono. Dá
-            para reconhecer o cliente sem o endereço completo aberto na tela. */}
-        {item.nomeCliente && (
-          <span className="min-w-0 break-words text-fg-body">{item.nomeCliente}</span>
-        )}
-        {item.emailMascarado && (
-          <span className="wrap-token min-w-0 font-mono">{item.emailMascarado}</span>
-        )}
-        {item.orderId && (
-          <span className="wrap-token min-w-0 font-mono">pedido {item.orderId}</span>
-        )}
-        {!naoLido && (
-          <StatusDot tone={item.temFbc ? 'success' : 'danger'}>
-            {item.temFbc ? 'com fbc' : 'sem fbc'}
-          </StatusDot>
-        )}
-        {/* Só quando existe: um "sem fbclid" em toda linha de venda orgânica
-            viraria ruído vermelho constante. A ausência já é dita pelo fbc. */}
-        {!naoLido && item.temFbclid && <StatusDot tone="success">fbclid</StatusDot>}
-        {!naoLido && item.temGclid && <StatusDot tone="neutral">gclid</StatusDot>}
-        {item.formato && <span>{FORMATO_TEXTO[item.formato]}</span>}
-        {item.emq !== undefined && <span className="tabular">EMQ {item.emq.toFixed(1)}</span>}
-      </p>
-
-      {/* O motivo, com todas as letras: "IGNORAR" sozinho não explica nada. */}
-      {motivo && (
-        <p className="col-start-1 col-end-3 text-caption text-fg-muted">
-          {classificacao ? <span className="text-fg-body">{classificacao.rotulo}. </span> : null}
-          {motivo}
-        </p>
-      )}
-
-      {parSugerido && !par && (
-        <p className="col-start-1 col-end-3 text-caption text-fg-muted">
-          Palpite: pareceria{' '}
-          <span className="font-mono text-fg-body">{parSugerido.tecnico}</span> ({parSugerido.pt}).
-          Nada é enviado por palpite — crie a regra na aba Regras para valer.
-        </p>
-      )}
-
-      {item.resultados && item.resultados.length > 0 && (
-        <ul className="col-start-1 col-end-3 flex flex-col gap-1 border-t border-line pt-2">
-          {item.resultados.map((r, j) => (
-            <li
-              key={`${r.marcaId}-${j}`}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption"
-            >
-              <StatusDot tone={TOM_RESULTADO[r.status]}>
-                {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
-                {ROTULO_RESULTADO[r.status] ?? r.status}
-              </StatusDot>
-              {r.httpStatus ? (
-                <span className="font-mono text-fg-muted tabular">{r.httpStatus}</span>
-              ) : null}
-              {r.fbtraceId && (
-                <span className="font-mono text-caption text-fg-muted">
-                  fbtrace {r.fbtraceId.slice(0, 12)}…
-                </span>
-              )}
-              {r.modoTeste && (
-                <Badge variant="aviso">
-                  <FlaskConical aria-hidden />
-                  teste
-                </Badge>
-              )}
-              {r.herdados.length > 0 && (
-                <span className="text-fg-muted">
-                  herdou {r.herdados.join(', ')} do pré-checkout
-                </span>
-              )}
-              {r.erro && <span className="text-danger">{r.erro}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Ações. Em 64rem+ coluna própria com botões pequenos empilhados; abaixo
-          disso um botão de largura total com a ação mais provável e a gaveta
-          dos três pontos — nunca três botões de 36px lado a lado no celular. */}
-      <div className="col-start-1 col-end-3 mt-1 lg:col-start-3 lg:col-end-4 lg:row-start-1 lg:row-span-3 lg:mt-0 lg:w-48 lg:self-center">
-        <div className="hidden lg:flex lg:flex-col lg:gap-2">
-          {disparavel && (
-            <Button size="sm" onClick={aoDisparar}>
-              <Send className="size-3.5" aria-hidden />
-              Disparar direto
-            </Button>
-          )}
-          {!naoLido && (
-            <Button size="sm" variant="outline" onClick={aoCarregar}>
-              <ArrowDownToLine className="size-3.5" aria-hidden />
-              Carregar no formulário
-            </Button>
-          )}
-          {/* Sempre presente, inclusive no item que não pôde ser lido — é
-              justamente nele que ver o corpo cru resolve o problema. */}
-          <Button size="sm" variant="ghost" onClick={aoVerPayload}>
-            <FileJson className="size-3.5" aria-hidden />
-            Ver payload
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-2 lg:hidden">
-          <div className="flex items-center gap-2">
-            {disparavel ? (
-              <Button className="min-h-control-lg flex-1" onClick={aoDisparar}>
-                <Send className="size-4" aria-hidden />
-                Disparar direto
-              </Button>
-            ) : (
+        <Menu>
+          <MenuTrigger
+            render={
               <Button
-                variant="outline"
-                className="min-h-control-lg flex-1"
-                onClick={aoVerPayload}
-              >
-                <FileJson className="size-4" aria-hidden />
-                Ver payload
-              </Button>
-            )}
-            {secundarias > 0 && (
-              <Button
-                size="icon"
+                size="icon-sm"
                 variant="ghost"
-                className="min-h-control-lg min-w-control-lg"
-                aria-expanded={maisAberto}
-                aria-label={maisAberto ? 'Fechar as outras ações' : 'Ver as outras ações'}
-                onClick={() => setMaisAberto((v) => !v)}
-              >
-                <MoreHorizontal className="size-4" aria-hidden />
-              </Button>
+                className="max-md:min-h-control-lg max-md:min-w-control-lg"
+                aria-label={`Detalhes e ações de ${quem}`}
+              />
+            }
+          >
+            <MoreHorizontal className="size-4" aria-hidden />
+          </MenuTrigger>
+
+          <MenuContent>
+            {/* Tudo o que a linha deixou de mostrar mora aqui, com endereço. */}
+            <MenuDetalhe>
+              {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono.
+                  Dá para reconhecer o cliente sem o endereço completo aberto
+                  na tela. */}
+              {item.nomeCliente && <span className="text-fg-body">{item.nomeCliente}</span>}
+              {item.emailMascarado && (
+                <span className="wrap-token min-w-0 font-mono">{item.emailMascarado}</span>
+              )}
+              {item.orderId && (
+                <span className="wrap-token min-w-0 font-mono">pedido {item.orderId}</span>
+              )}
+              {par && (
+                <span>
+                  vira <span className="font-mono text-fg-body">{par.tecnico}</span> — {par.pt}
+                </span>
+              )}
+              {item.formato && <span>{FORMATO_TEXTO[item.formato]}</span>}
+              {item.emq !== undefined && <span className="tabular">EMQ {item.emq.toFixed(1)}</span>}
+            </MenuDetalhe>
+
+            {!naoLido && (
+              <MenuDetalhe className="flex-row flex-wrap items-center gap-x-3 gap-y-1">
+                <StatusDot tone={item.temFbc ? 'success' : 'danger'}>
+                  {item.temFbc ? 'com fbc' : 'sem fbc'}
+                </StatusDot>
+                {/* Só quando existe: um "sem fbclid" em toda linha de venda
+                    orgânica viraria ruído vermelho constante. A ausência já é
+                    dita pelo fbc. */}
+                {item.temFbclid && <StatusDot tone="success">fbclid</StatusDot>}
+                {item.temGclid && <StatusDot tone="neutral">gclid</StatusDot>}
+              </MenuDetalhe>
             )}
-          </div>
-          {maisAberto && (
-            <div className="flex flex-col gap-2">
-              {!naoLido && (
-                <Button
-                  variant="outline"
-                  className="min-h-control-lg justify-start"
-                  onClick={aoCarregar}
-                >
-                  <ArrowDownToLine className="size-4" aria-hidden />
-                  Carregar no formulário
-                </Button>
-              )}
-              {disparavel && (
-                <Button
-                  variant="ghost"
-                  className="min-h-control-lg justify-start"
-                  onClick={aoVerPayload}
-                >
-                  <FileJson className="size-4" aria-hidden />
-                  Ver payload
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+
+            {(item.testeInterno ||
+              item.classificacao === 'desconhecido' ||
+              item.rotuloDivergente) && (
+              <MenuDetalhe className="flex-row flex-wrap items-center gap-1">
+                {item.testeInterno && (
+                  <Badge variant="aviso">
+                    <FlaskConical aria-hidden />
+                    teste da equipe
+                  </Badge>
+                )}
+                {item.classificacao === 'desconhecido' && (
+                  <Badge variant="aviso">
+                    <HelpCircle aria-hidden />
+                    nome novo, sem regra
+                  </Badge>
+                )}
+                {item.rotuloDivergente && (
+                  <Badge variant="aviso">
+                    <History aria-hidden />
+                    apelido antigo{item.rotuloRecebido ? `: ${item.rotuloRecebido}` : ''}
+                  </Badge>
+                )}
+              </MenuDetalhe>
+            )}
+
+            {/* O motivo, com todas as letras: "IGNORAR" sozinho não explica nada. */}
+            {motivo && (
+              <MenuDetalhe>
+                <span>
+                  {classificacao ? (
+                    <span className="text-fg-body">{classificacao.rotulo}. </span>
+                  ) : null}
+                  {motivo}
+                </span>
+              </MenuDetalhe>
+            )}
+
+            {parSugerido && !par && (
+              <MenuDetalhe>
+                <span>
+                  Palpite: pareceria{' '}
+                  <span className="font-mono text-fg-body">{parSugerido.tecnico}</span> (
+                  {parSugerido.pt}). Nada é enviado por palpite — crie a regra na aba Regras
+                  para valer.
+                </span>
+              </MenuDetalhe>
+            )}
+
+            {item.resultados && item.resultados.length > 0 && (
+              <>
+                <MenuSeparator />
+                <MenuDetalhe>
+                  <span className="text-fg-body">Resultado por Pixel</span>
+                  {item.resultados.map((r, j) => (
+                    <span
+                      key={`${r.marcaId}-${j}`}
+                      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5"
+                    >
+                      <StatusDot tone={TOM_RESULTADO[r.status]}>
+                        {nomeDoPixel(marcas.find((m) => m.id === r.marcaId), r.pixelId)} ·{' '}
+                        {ROTULO_RESULTADO[r.status] ?? r.status}
+                      </StatusDot>
+                      {r.httpStatus ? <span className="font-mono tabular">{r.httpStatus}</span> : null}
+                      {r.fbtraceId && (
+                        <span className="wrap-token min-w-0 font-mono">
+                          fbtrace {r.fbtraceId.slice(0, 12)}…
+                        </span>
+                      )}
+                      {r.modoTeste && (
+                        <Badge variant="aviso">
+                          <FlaskConical aria-hidden />
+                          teste
+                        </Badge>
+                      )}
+                      {r.herdados.length > 0 && (
+                        <span>herdou {r.herdados.join(', ')} do pré-checkout</span>
+                      )}
+                      {r.erro && <span className="text-danger">{r.erro}</span>}
+                    </span>
+                  ))}
+                </MenuDetalhe>
+              </>
+            )}
+
+            <MenuSeparator />
+
+            {disparavel && (
+              <MenuItem onClick={aoDisparar}>
+                <Send aria-hidden />
+                Disparar direto
+              </MenuItem>
+            )}
+            {!naoLido && (
+              <MenuItem onClick={aoCarregar}>
+                <ArrowDownToLine aria-hidden />
+                Carregar no formulário
+              </MenuItem>
+            )}
+            {/* Sempre presente, inclusive no item que não pôde ser lido — é
+                justamente nele que ver o corpo cru resolve o problema. */}
+            <MenuItem onClick={aoVerPayload}>
+              <FileJson aria-hidden />
+              Ver payload
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       </div>
     </div>
   );
