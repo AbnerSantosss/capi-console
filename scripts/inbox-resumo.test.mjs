@@ -24,6 +24,8 @@
  * 14. Período livre: duas datas, inclusivo nas duas pontas, sem futuro
  * 15. periodoValido com de/ate — data impossível e lixo caem no padrão
  * 16. A amostra pode ser menor que a janela, e o resumo diz isso
+ * 17. O destaque de compras: quantidade, valor e a divisão da campanha da Meta
+ * 18. Compras com moeda misturada e com nome de evento traduzido
  *
  * Uso: npm run test:inbox-resumo
  */
@@ -327,6 +329,85 @@ console.log('\n  Resumo do Painel de eventos\n');
     alcanca.amostraCobreJanela === true,
     'se a leitura alcanca algo ANTERIOR ao inicio, a contagem esta fechada'
   );
+}
+
+/* ---------------- 17. O destaque de compras ---------------- */
+{
+  // Quatro compras reais, duas com clique da Meta, uma outra coisa qualquer e
+  // um teste da equipe que NAO pode entrar em lugar nenhum da conta.
+  const itens = [
+    item({ evento: 'Purchase', valor: 100, moeda: 'BRL', temFbclid: true, status: 'disparado' }),
+    item({ evento: 'Purchase', valor: 50.5, moeda: 'BRL', temFbc: true, status: 'disparado' }),
+    item({ evento: 'Purchase', valor: 20, moeda: 'BRL' }),
+    item({ evento: 'Purchase', valor: 9.5, moeda: 'BRL', temGclid: true }),
+    item({ evento: 'Lead' }),
+    item({ evento: 'Purchase', valor: 999, moeda: 'BRL', testeInterno: true, temFbclid: true }),
+  ];
+  const r = resumirInbox(itens, AGORA, 30);
+
+  ok(r.compras.total === 4, 'quatro compras reais', String(r.compras.total));
+  ok(r.compras.valor === 180, 'a soma e 100 + 50,50 + 20 + 9,50', String(r.compras.valor));
+  ok(r.compras.moeda === 'BRL', 'moeda unica volta nomeada');
+  ok(r.compras.enviadas === 2, 'duas ja aceitas pela Meta', String(r.compras.enviadas));
+
+  // 🔴 O teste da equipe nao aparece em NENHUMA das linhas: nem no total, nem
+  // no valor, nem nas duas metades. Se entrasse, o painel diria que entraram
+  // R$ 999 que nunca existiram.
+  ok(r.compras.valor !== 1179, '🔴 teste da equipe fica fora do valor das compras');
+
+  // A divisao da campanha e META-ONLY: fbclid ou fbc. O gclid de 9,50 cai no
+  // lado SEM atribuicao da Meta de proposito — a campanha desta tela e a da
+  // Meta, e cobrar dela uma venda que veio do Google seria inventar resultado.
+  ok(r.compras.atribuidasMeta.total === 2, 'duas compras com clique da Meta');
+  ok(
+    r.compras.atribuidasMeta.valor === 150.5,
+    'valor atribuido a Meta e 150,50',
+    String(r.compras.atribuidasMeta.valor)
+  );
+  ok(r.compras.semAtribuicaoMeta.total === 2, '🔴 a compra com gclid conta como SEM atribuicao da Meta');
+  ok(
+    r.compras.semAtribuicaoMeta.valor === 29.5,
+    'valor sem atribuicao da Meta e 29,50',
+    String(r.compras.semAtribuicaoMeta.valor)
+  );
+
+  // As duas metades fecham o total: nenhuma compra some no meio da divisao.
+  ok(
+    r.compras.atribuidasMeta.total + r.compras.semAtribuicaoMeta.total === r.compras.total,
+    '🔴 as duas metades somam o total de compras'
+  );
+  ok(
+    Math.round((r.compras.atribuidasMeta.valor + r.compras.semAtribuicaoMeta.valor) * 100) / 100 ===
+      r.compras.valor,
+    '🔴 as duas metades somam o valor total'
+  );
+}
+
+/* ---------------- 18. Compras: moeda misturada e nome traduzido ---------------- */
+{
+  // Duas moedas na mesma janela: somar seria inventar um numero. O total de
+  // QUANTIDADE continua valendo — o que morre e so o dinheiro.
+  const r = resumirInbox(
+    [
+      item({ evento: 'Purchase', valor: 100, moeda: 'BRL' }),
+      item({ evento: 'Purchase', valor: 100, moeda: 'USD' }),
+    ],
+    AGORA,
+    30
+  );
+  ok(r.compras.total === 2, 'moeda misturada: a quantidade continua de pe');
+  ok(r.compras.valor === null, '🔴 moeda misturada: valor e null, nunca uma soma de laranja com maca');
+  ok(r.compras.moeda === null, 'moeda misturada: nenhuma moeda para nomear');
+  ok(r.compras.atribuidasMeta.valor === null, 'moeda misturada: as metades tambem ficam sem valor');
+
+  // O nome da origem pode ser qualquer coisa; quem manda e o `eventoMeta`,
+  // porque e ele que a Meta vai receber.
+  const traduzido = resumirInbox(
+    [item({ evento: 'compra_aprovada', eventoMeta: 'Purchase', valor: 10, moeda: 'BRL' })],
+    AGORA,
+    30
+  );
+  ok(traduzido.compras.total === 1, '🔴 evento traduzido para Purchase conta como compra');
 }
 
 /* ---------------- Fechamento ---------------- */

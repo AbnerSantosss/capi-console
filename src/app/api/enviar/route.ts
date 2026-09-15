@@ -34,13 +34,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ erros, eventoMontado: evento }, { status: 400 });
     }
 
-    // Enviar duas vezes o mesmo event_id no mesmo pixel conta a venda em dobro:
+    // Enviar a mesma venda duas vezes no mesmo pixel conta a conversão em dobro:
     // a Meta só deduplica Pixel×CAPI, não CAPI×CAPI. Só passa com forcar: true.
-    if (body.forcar !== true && (await jaEnviado(pixelId, evento.event_name, evento.event_id))) {
+    //
+    // A identidade é a inteira, e não mais só o `event_id`: o mesmo pedido
+    // reenviado com um id novo (retry da plataforma, reprocesso pelo n8n) não
+    // era pego por nada. Ver `dedup.ts`.
+    const identidade = {
+      eventId: evento.event_id,
+      orderId: evento.custom_data?.order_id as string | undefined,
+      email: body.event?.user?.email,
+      valor: evento.custom_data?.value as number | undefined,
+      eventTime: evento.event_time,
+    };
+
+    if (body.forcar !== true && (await jaEnviado(pixelId, evento.event_name, identidade))) {
       return NextResponse.json(
         {
           erros: [
-            'Este event_id já foi aceito pela Meta neste pixel. Reenviar contaria a conversão duas vezes.',
+            'Este evento já foi aceito pela Meta neste pixel. Reenviar contaria a conversão duas vezes.',
           ],
           duplicado: true,
           eventoMontado: evento,
@@ -74,7 +86,7 @@ export async function POST(request: NextRequest) {
       error?: { message?: string };
     };
     const ok = r.httpStatus === 200 && (resposta?.events_received ?? 0) > 0;
-    if (ok) await marcarEnviado(pixelId, evento.event_name, evento.event_id);
+    if (ok) await marcarEnviado(pixelId, evento.event_name, identidade);
 
     const ud = evento.user_data as Record<string, unknown>;
     const emq = calcularEmq({

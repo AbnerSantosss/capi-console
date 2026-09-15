@@ -92,9 +92,19 @@ ok(credenciaisConferem('admin'.repeat(10), 'senha'.repeat(20)) === false, 'compr
 ok(credenciaisConferem('', '') === false, 'credenciais vazias falham');
 
 /* ---------------- 8. validarDestino ---------------- */
-ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 7, 'DESTINOS_PERMITIDOS possui 7 rotas');
+ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 9, 'DESTINOS_PERMITIDOS possui 9 rotas');
 ok(validarDestino('/') === '/', 'destino / permitido');
 ok(validarDestino('/painel') === '/painel', 'destino /painel permitido');
+ok(validarDestino('/painel/compras') === '/painel/compras', 'destino /painel/compras permitido');
+ok(validarDestino('/painel/eventos') === '/painel/eventos', 'destino /painel/eventos permitido');
+// O recorte das duas telas novas viaja na query, e a allowlist compara pathname
+// inteiro: o destino volta limpo, sem o `?evento=`, e continua sendo uma tela.
+ok(
+  validarDestino('/painel/eventos?evento=Purchase') === '/painel/eventos',
+  'query do recorte descartada, pathname preservado'
+);
+// Prefixo NAO basta: a comparacao continua sendo do caminho inteiro.
+ok(validarDestino('/painel/inventada') === '/', 'sub-rota desconhecida do painel -> /');
 ok(validarDestino('/instalacao') === '/instalacao', 'destino /instalacao permitido');
 ok(validarDestino('/pixels') === '/pixels', 'destino /pixels permitido');
 ok(validarDestino('/automatico') === '/automatico', 'destino /automatico permitido');

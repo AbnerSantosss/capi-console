@@ -16,6 +16,10 @@ import type { NomeEventoMetaPadrao } from './meta-events';
 import type { ConfigTag } from './tag-dominios';
 import { regrasSementeTag } from './tag-eventos';
 
+// Mesmo motivo: so a FORMA da lista de testes interessa aqui. A regra que decide
+// quem e teste mora em `deteccao-de-teste.ts` e e usada tambem pelo navegador.
+import type { ListaDeTeste } from './deteccao-de-teste';
+
 // Escrita atômica com backup (B-1) e fila de escrita por arquivo (B-2).
 // Nenhum `fs.writeFile` direto pode voltar para este arquivo: o teste C15
 // (`scripts/persistencia-atomica.test.mjs`) reprova o build se voltar.
@@ -492,6 +496,22 @@ export interface Integracoes {
    * intacta, porque nao depende dela.
    */
   tag: ConfigTag;
+  /**
+   * Quem e testador, na palavra do operador.
+   *
+   * O console ja reconhecia sozinho o padrao obvio (`@example.com`,
+   * `evt_preview…`, cupom de centavos). O que ele NAO tinha como adivinhar e o
+   * e-mail pessoal que o testador da equipe usa para bater no checkout — esse
+   * so a pessoa que opera sabe, e e por isso que ele se cadastra aqui.
+   *
+   * 🔴 Opcional de proposito, e `lerListaDeTeste` trata ausencia como lista
+   * vazia. Instalacao que nunca abriu a tela nao pode quebrar, e um arquivo
+   * editado a mao sem o bloco tem que continuar entregando venda.
+   *
+   * Nada aqui e credencial: sao nomes e e-mails de gente da propria equipe, e o
+   * arquivo ja vive em `config/`, fora do git (regra 2 do CLAUDE.md).
+   */
+  testes?: ListaDeTeste;
 }
 
 /* ------------------------------------------------------------------ */
@@ -790,6 +810,32 @@ async function resolverIntegracoes(
     }
     if (!Array.isArray(atual.tag.dominios)) {
       atual.tag.dominios = [];
+      mudou = true;
+    }
+
+    // Migracao do bloco de testes, no mesmo molde do bloco da tag — com uma
+    // diferenca deliberada: aqui NAO se grava nada quando o bloco falta.
+    //
+    // O bloco da tag precisa nascer porque tem uma chave dentro; este so tem
+    // listas, e lista ausente ja significa "vazia" para `lerListaDeTeste`.
+    // Gravar um `{ emails: [], nomes: [] }` inutil em toda instalacao existente
+    // seria uma reescrita do arquivo que entrega venda, em troca de nada.
+    //
+    // O que se conserta e o bloco PRESENTE e torto (editado a mao, campo virou
+    // string): ai a forma errada fica gravada certa, uma vez so.
+    if (atual.testes && typeof atual.testes === 'object') {
+      if (atual.testes.emails !== undefined && !Array.isArray(atual.testes.emails)) {
+        atual.testes.emails = [];
+        mudou = true;
+      }
+      if (atual.testes.nomes !== undefined && !Array.isArray(atual.testes.nomes)) {
+        atual.testes.nomes = [];
+        mudou = true;
+      }
+    } else if (atual.testes !== undefined) {
+      // Veio como string, numero ou null. Some: `undefined` e a ausencia que o
+      // resto do codigo ja sabe tratar.
+      delete atual.testes;
       mudou = true;
     }
 

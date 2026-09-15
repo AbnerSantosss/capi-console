@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   ArrowDownRight,
+  ArrowRight,
   CheckCircle2,
   Clock,
   FlaskConical,
@@ -90,6 +92,31 @@ interface ResumoInbox {
   };
   porEvento: Array<{ evento: string; total: number; pct: number | null }>;
   receitaEnviada: { total: number; moeda: string } | null;
+  compras: ComprasDoPeriodo;
+}
+
+interface ValorDeCompras {
+  total: number;
+  /** `null` quando o período misturou moedas — somar seria inventar um número. */
+  valor: number | null;
+}
+
+interface ComprasDoPeriodo extends ValorDeCompras {
+  moeda: string | null;
+  enviadas: number;
+  /**
+   * 🔴 Aqui, e só aqui, "atribuído" é `fbclid || fbc` — sinal DA META. Os cards
+   * de "De onde veio o tráfego" contam os cinco sinais, e de propósito: naquela
+   * seção a pergunta é de onde veio o tráfego todo; nesta, o que pode ser
+   * cobrado da campanha da Meta, que é a campanha que este console serve.
+   */
+  atribuidasMeta: ValorDeCompras;
+  /**
+   * O resto — e ele CONTINUA SENDO ENVIADO à Meta. São as vendas PIX sem rastro
+   * de clique, que é exatamente a venda que este produto existe para recuperar.
+   * O que elas não fazem é entrar no número de resultado da campanha.
+   */
+  semAtribuicaoMeta: ValorDeCompras;
 }
 
 /** Só eventos reais: o recorte que todo card de métrica abre. */
@@ -207,6 +234,124 @@ function CardPainel({
     >
       {conteudo}
     </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* O destaque de compras                                               */
+/* ------------------------------------------------------------------ */
+
+function dinheiro(valor: number | null, moeda: string | null): string {
+  if (valor === null) return 'moedas misturadas';
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: moeda ?? 'BRL' });
+}
+
+/**
+ * O cartão principal do Painel: quantas compras e quanto em dinheiro.
+ *
+ * É o único Destaque da tela (receita `tinta`, no máximo um por página) porque
+ * é a única pergunta que se faz antes de todas as outras. Os outros cartões
+ * medem o funcionamento do console; este mede o negócio.
+ *
+ * O corpo inteiro é um link para `/painel/compras`, levando o período junto na
+ * URL — a lista que abre lá tem que ter o tamanho do número que foi clicado
+ * aqui, e é a query que garante isso.
+ *
+ * A divisão embaixo é a resposta ao "sem atribuição não pode contabilizar na
+ * campanha": o número do meio é o que a campanha da Meta pode reivindicar, o da
+ * direita é o que chegou sem rastro de clique. Os dois somam o total de cima, e
+ * os dois foram enviados à Meta — separar aqui é contabilidade, não filtro.
+ */
+function DestaqueDeCompras({
+  compras,
+  periodo,
+  href,
+}: {
+  compras: ComprasDoPeriodo;
+  periodo: string;
+  href: string;
+}) {
+  const plural = compras.total === 1 ? 'compra' : 'compras';
+
+  return (
+    <Section
+      title="Compras no período"
+      description={`${periodo}. Clique para ver quem comprou.`}
+      icon={ShoppingBag}
+      variant="card"
+      tinta
+    >
+      <Link
+        href={href}
+        aria-label={`${compras.total} ${plural}, ${dinheiro(compras.valor, compras.moeda)}. Abrir a lista de quem comprou.`}
+        className={cn(
+          'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
+          'hover:border-accent-text hover:bg-surface-3',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
+        )}
+      >
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-caption text-fg-muted">Quantidade</span>
+            <span className="flex items-baseline gap-2">
+              <NumeroAnimado
+                valor={compras.total}
+                casas={0}
+                className="text-data font-semibold text-fg-strong"
+              />
+              <span className="text-label text-fg-muted">{plural}</span>
+            </span>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-caption text-fg-muted">Valor</span>
+            <span className="text-data font-semibold text-fg-strong tabular-nums">
+              {dinheiro(compras.valor, compras.moeda)}
+            </span>
+          </div>
+
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-accent-text">
+            Ver quem comprou
+            <ArrowRight
+              className="size-4 transition-transform group-hover:translate-x-0.5"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          </span>
+        </div>
+
+        <div className="grid min-w-0 grid-cols-1 gap-3 border-t border-line pt-3 sm:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-caption text-fg-muted">Contam para a campanha da Meta</span>
+            <span className="text-label font-semibold text-fg-strong tabular-nums">
+              {compras.atribuidasMeta.total} · {dinheiro(compras.atribuidasMeta.valor, compras.moeda)}
+            </span>
+            <span className="text-caption text-fg-muted">Chegaram com fbclid ou cookie _fbc.</span>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-caption text-fg-muted">Sem atribuição da Meta</span>
+            <span className="text-label font-semibold text-fg-strong tabular-nums">
+              {compras.semAtribuicaoMeta.total} ·{' '}
+              {dinheiro(compras.semAtribuicaoMeta.valor, compras.moeda)}
+            </span>
+            <span className="text-caption text-fg-muted">
+              Fora do resultado da campanha — mas enviadas à Meta do mesmo jeito.
+            </span>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-caption text-fg-muted">Já aceitas pela Meta</span>
+            <span className="text-label font-semibold text-fg-strong tabular-nums">
+              {compras.enviadas} de {compras.total}
+            </span>
+            <span className="text-caption text-fg-muted">
+              O resto está na fila ou foi marcado para não enviar.
+            </span>
+          </div>
+        </div>
+      </Link>
+    </Section>
   );
 }
 
@@ -395,7 +540,7 @@ export function PainelDeEventos() {
 
   if (!resumo) return null;
 
-  const { volume, qualidade, porEvento, receitaEnviada } = resumo;
+  const { volume, qualidade, porEvento, receitaEnviada, compras } = resumo;
   const vazio = volume.recebidos === 0;
   // Derivado, não estado: o resumo na tela ainda é da janela anterior, logo a
   // resposta da nova ainda não chegou. Dizer isso com todas as letras evita o
@@ -451,6 +596,15 @@ export function PainelDeEventos() {
         />
       ) : (
         <>
+          {/* ---------------- o destaque: compra ---------------- */}
+          {/* Primeiro de tudo, antes de qualquer métrica de funcionamento:
+              quem abre o console quer saber se entrou venda. */}
+          <DestaqueDeCompras
+            compras={compras}
+            periodo={rotuloDoPeriodo(periodo)}
+            href={`/painel/compras?${busca}`}
+          />
+
           {/* ---------------- volume ---------------- */}
           <Section
             title="O que chegou e o que saiu"
@@ -548,37 +702,41 @@ export function PainelDeEventos() {
           {porEvento.length > 0 && (
             <Section
               title="Quais eventos chegaram"
-              description="Os oito nomes mais frequentes, do maior para o menor."
+              description="Os oito nomes mais frequentes, do maior para o menor. Clique num nome para ver quem mandou."
               icon={ShoppingBag}
             >
               <Panel className="flex min-w-0 flex-col gap-2">
+                {/* Estas linhas viraram LINK, e não mais um recorte aberto
+                    embaixo: a pergunta "quem mandou este evento" tem tela
+                    própria, com URL, para poder ser mandada a alguém. O período
+                    vai junto na query — é o que faz a lista de lá ter o tamanho
+                    do número daqui. */}
                 {porEvento.map((e) => (
-                  <button
+                  <Link
                     key={e.evento}
-                    type="button"
-                    onClick={() =>
-                      abrirRecorte({ ...SO_REAIS, evento: e.evento }, `evento ${e.evento}`)
-                    }
-                    aria-label={`Evento ${e.evento}: ${e.total} eventos. Abrir a lista.`}
+                    href={`/painel/eventos?evento=${encodeURIComponent(e.evento)}&${busca}`}
+                    aria-label={`Evento ${e.evento}: ${e.total} eventos. Ver quem mandou.`}
                     className={cn(
-                      'flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-control border p-2 text-left transition-colors',
+                      'group flex min-w-0 flex-col gap-1.5 rounded-control border border-transparent p-2 text-left transition-colors',
                       'hover:border-accent-text hover:bg-surface-2',
-                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
-                      recorte?.rotulo === `evento ${e.evento}`
-                        ? 'border-accent-text'
-                        : 'border-transparent'
+                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
                     )}
                   >
                     <span className="flex min-w-0 items-baseline justify-between gap-3">
                       <span className="wrap-token min-w-0 font-mono text-label text-fg-body">
                         {e.evento}
                       </span>
-                      <span className="shrink-0 text-label font-semibold text-fg-strong">
-                        {e.total}
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <span className="text-label font-semibold text-fg-strong">{e.total}</span>
+                        <ArrowRight
+                          className="size-3.5 text-fg-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent-text"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
                       </span>
                     </span>
                     <BarraAnimada percentual={e.pct ?? 0} corBarra="bg-chart-2" className="h-1.5" />
-                  </button>
+                  </Link>
                 ))}
               </Panel>
             </Section>

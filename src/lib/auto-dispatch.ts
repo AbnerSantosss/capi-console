@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { acharMarca, EMPRESA_DEFAULT_ID } from './config-store';
+import { acharMarca, lerIntegracoes, EMPRESA_DEFAULT_ID } from './config-store';
 import { montarEvento, validar, enviarParaMeta, type EventInput } from './meta-capi';
 import { calcularEmq } from './emq';
 import { extrairAtribuicao, registrarDisparo } from './attribution-log';
@@ -9,6 +9,7 @@ import { jaEnviado, marcarEnviado } from './dedup';
 import { transmitir } from './relay';
 import { marcarStatus, anotarResultado, type ItemInbox } from './inbox';
 import { ehTesteInterno } from './parser';
+import { avaliarTeste } from './deteccao-de-teste';
 import { pixelAceitaAuto } from './modo-por-marca';
 
 /**
@@ -19,10 +20,14 @@ import { pixelAceitaAuto } from './modo-por-marca';
  * porque um pixel sem token nao pode impedir o outro de receber a conversao.
  *
  * A ordem das travas e deliberada:
- *   1. teste interno   -> nunca chega na Meta (regras 1 e 4 do CLAUDE.md)
- *   2. enriquecimento  -> herda fbc/fbp/ip/ua do pre-checkout pelo e-mail
- *   3. validacao       -> janela de 7 dias e campos obrigatorios
- *   4. deduplicacao    -> o mesmo event_id no mesmo pixel nunca vai duas vezes
+ *   1.  teste            -> nunca chega na Meta (regras 1 e 4 do CLAUDE.md).
+ *                           Padrao conhecido + a lista que o operador cadastrou.
+ *   1-B. suspeita        -> so barra o AUTOMATICO; o botao continua funcionando
+ *   2.  enriquecimento   -> herda fbc/fbp/ip/ua do pre-checkout pelo e-mail
+ *   3.  validacao        -> janela de 7 dias e campos obrigatorios
+ *   4.  deduplicacao     -> o mesmo pedido no mesmo pixel nunca vai duas vezes,
+ *                           por `event_id`, por `order_id` ou por
+ *                           `e-mail|valor|dia` quando nao ha nenhum dos dois
  *
  * Sobre a trava do Pixel da FASE 6 (autoDisparo): quem DECIDE e
  * `modo-por-marca.ts`, chamado pelos handlers; esta funcao recebe a lista de
@@ -42,7 +47,14 @@ export interface ResultadoDisparoAuto {
     | 'teste-ignorado'
     | 'sem-token'
     /** O Pixel esta com o disparo automatico desligado. Nao e erro, nao e falha. */
-    | 'pixel-desligado';
+    | 'pixel-desligado'
+    /**
+     * O item esta sob SUSPEITA de teste (mesmo e-mail em varias compras) e o
+     * disparo era automatico. Diferente de `teste-ignorado`: ali o console tem
+     * certeza e o item morre; aqui ele so nao sai sozinho, e o botao "Disparar
+     * agora" continua funcionando normalmente.
+     */
+    | 'suspeita-de-teste';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -88,8 +100,43 @@ export async function dispararItem(params: {
   const empresaDoItem = item.empresaId ?? EMPRESA_DEFAULT_ID;
   const texto = (k: string) => (typeof params.campos[k] === 'string' ? (params.campos[k] as string) : undefined);
 
-  // 1. Teste interno nunca vai para a Meta.
-  if (ehTesteInterno(params.campos, texto('eventId'))) {
+  /**
+   * A lista de testes do operador. `undefined` em toda instalacao que nunca
+   * abriu a tela, e `.catch` porque `lerIntegracoes` LANCA quando o arquivo de
+   * configuracao esta indisponivel (B1-e) — e ficar sem a lista nao pode
+   * impedir uma venda real de sair. Sem ela, a trava volta a ser exatamente a
+   * de antes: o padrao conhecido, que nunca dependeu de arquivo nenhum.
+   */
+  const listaDeTeste = await lerIntegracoes(empresaDoItem)
+    .then((cfg) => cfg.testes)
+    .catch(() => undefined);
+
+  const veredicto = avaliarTeste(
+    {
+      email: texto('email'),
+      nome: item.nomeCliente,
+      firstName: texto('firstName'),
+      lastName: texto('lastName'),
+      valor: texto('value') !== undefined ? Number(texto('value')) : undefined,
+      eventId: texto('eventId'),
+      // A contagem de compras repetidas NAO entra aqui de proposito: ela e
+      // decidida no recebimento, onde o item ainda esta chegando, e o resultado
+      // dela ja veio gravado em `item.autoBloqueadoPorSuspeita`. Recontar no
+      // disparo daria um numero diferente (a caixa andou) para a mesma venda.
+    },
+    listaDeTeste
+  );
+
+  /**
+   * 1. Teste nunca vai para a Meta — nem pelo automatico, nem pelo botao.
+   *
+   * O `||` com `ehTesteInterno` e cinto e suspensorio: `avaliarTeste` ja
+   * reaplica o mesmo padrao por dentro, mas se um dia as duas reguas
+   * divergirem, quem ganha e a que BARRA. Deixar um teste passar suja o
+   * aprendizado da campanha (regra 1 do CLAUDE.md); barrar de mais so obriga um
+   * clique.
+   */
+  if (veredicto.ehTeste || ehTesteInterno(params.campos, texto('eventId'))) {
     await marcarStatus(item.id, 'ignorado');
     // P-12: mesmo sem enviar nada, o registro guarda PARA ONDE teria ido. Sem o
     // ID do Pixel aqui a tela so teria o id interno da marca, que vira um
@@ -107,6 +154,38 @@ export async function dispararItem(params: {
     await anotarResultado(item.id, ignorados);
     console.log(`[auto-dispatch] ${eventoMeta} inbox=${item.id} -> teste interno, nada enviado`);
     return ignorados;
+  }
+
+  /**
+   * 1-B. Suspeita: nao sai SOZINHO, mas continua vivo.
+   *
+   * Cinto de seguranca, no mesmo espirito da conferencia B4-a logo abaixo: quem
+   * DECIDE e o recebimento (`webhook-handler`), que nem agenda o disparo. Esta
+   * trava existe para o chamador futuro que esqueca disso — a fila reprocessada
+   * em lote, por exemplo.
+   *
+   * 🔴 `origem === 'auto'` e obrigatorio. O botao "Disparar agora" e um humano
+   * com o item na frente e a explicacao na tela; se a suspeita barrasse o
+   * manual tambem, nao haveria saida nenhuma e uma venda real presa aqui
+   * morreria na fila — o oposto do que esta trava existe para fazer.
+   */
+  if (params.origem === 'auto' && item.autoBloqueadoPorSuspeita === true) {
+    const barrados = await Promise.all(
+      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => ({
+        marcaId: m,
+        pixelId: ((await acharMarca(m))?.pixelId || '').trim(),
+        status: 'suspeita-de-teste',
+        erro:
+          item.explicacaoDeTeste ??
+          'Este evento está sob suspeita de teste. Confira e dispare pelo botão se for uma venda real.',
+        modoTeste: false,
+        herdados: [],
+        emq: 0,
+      }))
+    );
+    await anotarResultado(item.id, barrados);
+    console.log(`[auto-dispatch] ${eventoMeta} inbox=${item.id} -> suspeita de teste, automático barrado`);
+    return barrados;
   }
 
   // 2. Enriquecimento pelo perfil guardado no pre-checkout.
@@ -163,6 +242,23 @@ export async function dispararItem(params: {
     eventId: t('eventId'),
   });
 
+  /**
+   * A identidade deste envio para a deduplicacao, montada uma vez so.
+   *
+   * O `event_id` sozinho nao bastava: a MESMA venda chegando por dois caminhos
+   * (webhook direto e n8n, ou um reenvio depois de a plataforma trocar o id)
+   * carrega ids diferentes e passava duas vezes. O `order_id` e a identidade de
+   * NEGOCIO e nao muda; o par `e-mail|valor|dia` so entra quando nao ha nem um
+   * nem outro. Ver `dedup.ts`.
+   */
+  const identidade = {
+    eventId: evento.event_id,
+    orderId: evento.custom_data?.order_id as string | undefined,
+    email: t('email'),
+    valor: evento.custom_data?.value as number | undefined,
+    eventTime: evento.event_time,
+  };
+
   const resultados: ResultadoDisparoAuto[] = [];
 
   for (const marcaId of alvos) {
@@ -203,8 +299,12 @@ export async function dispararItem(params: {
       resultados.push({ ...base, status: 'invalido', erro: erros.join(' ') });
       continue;
     }
-    if (await jaEnviado(pixelId, evento.event_name, evento.event_id)) {
-      resultados.push({ ...base, status: 'duplicado', erro: 'event_id já aceito pela Meta neste pixel.' });
+    if (await jaEnviado(pixelId, evento.event_name, identidade)) {
+      resultados.push({
+        ...base,
+        status: 'duplicado',
+        erro: 'Este evento já foi aceito pela Meta neste Pixel.',
+      });
       continue;
     }
 
@@ -241,7 +341,7 @@ export async function dispararItem(params: {
         marcaId,
       }).catch((e) => console.error('[auto-dispatch] falha ao gravar log:', e));
 
-      if (ok) await marcarEnviado(pixelId, evento.event_name, evento.event_id);
+      if (ok) await marcarEnviado(pixelId, evento.event_name, identidade);
 
       resultados.push({
         ...base,

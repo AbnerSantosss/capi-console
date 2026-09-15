@@ -48,7 +48,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // = --surface-0 de globals.css. O gate (G7) reprova se os dois divergirem:
   // a barra do navegador precisa ser a mesma cor do fundo da aplicacao.
-  themeColor: '#0b0f17',
+  themeColor: '#0d0b08',
   colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,

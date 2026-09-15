@@ -20,6 +20,10 @@
  *   C16b PUT /api/integracoes PRESERVA campo que ele não conhece (diff do
  *        arquivo antes/depois), não zera `saida` nem o contador de hits da tag,
  *        e nunca troca o segredo de entrada
+ *   C16c a lista de testes é normalizada e validada antes de gravar. É o único
+ *        campo desta rota que PARA uma venda de chegar à Meta: item escrito
+ *        errado aqui descarta venda PIX real em silêncio, então o servidor
+ *        recusa antes, em vez de gravar e deixar o estrago acontecer
  *   C32  erro forçado em cada rota sai como JSON `{ erro }` — nunca o 500 do
  *        Next em HTML, que quebra o `.json()` da tela
  *
@@ -67,6 +71,9 @@ const { assinarSessao, COOKIE_SESSAO } = await import(
 const rotaInbox = await import(new URL('../src/app/api/inbox/route.ts', import.meta.url).href);
 const rotaResumo = await import(
   new URL('../src/app/api/inbox/resumo/route.ts', import.meta.url).href
+);
+const rotaPessoas = await import(
+  new URL('../src/app/api/inbox/pessoas/route.ts', import.meta.url).href
 );
 const rotaRelay = await import(new URL('../src/app/api/relay/route.ts', import.meta.url).href);
 const rotaMarcas = await import(new URL('../src/app/api/marcas/route.ts', import.meta.url).href);
@@ -170,6 +177,7 @@ const OITO = [
 const PROTEGIDAS = [
   ...OITO,
   ['GET    /api/inbox/resumo', (s) => rotaResumo.GET(req('/api/inbox/resumo', { sessao: s }))],
+  ['GET    /api/inbox/pessoas', (s) => rotaPessoas.GET(req('/api/inbox/pessoas', { sessao: s }))],
 ];
 
 for (const [nome, chamar] of PROTEGIDAS) {
@@ -281,6 +289,36 @@ ok(
 ok(
   JSON.stringify(corpoResumo30).includes('"payload"') === false,
   '🔴 o corpo do resumo NÃO traz a chave `payload`: contagem não carrega dado de cliente'
+);
+
+/* ------------------------------------------------------------------ */
+/* GET /api/inbox/pessoas — a lista que o clique no card abre.          */
+/*                                                                      */
+/* 🔴 A MESMA trava do resumo, e aqui ela é mais importante, não menos:  */
+/* esta rota devolve ITEM, não contagem. É o lugar onde "já que estou    */
+/* devolvendo o item, devolvo inteiro" é a tentação natural — e é        */
+/* exatamente assim que e-mail e telefone de comprador chegariam à tela. */
+/* ------------------------------------------------------------------ */
+const pessoas30 = await rotaPessoas.GET(req('/api/inbox/pessoas?dias=30', { sessao: true }));
+const corpoPessoas30 = await corpoDe(pessoas30);
+ok(
+  pessoas30.status === 200 && Array.isArray(corpoPessoas30?.pessoas),
+  'GET /api/inbox/pessoas?dias=30 → 200 e `pessoas` é uma lista',
+  `status=${pessoas30.status}`
+);
+ok(
+  JSON.stringify(corpoPessoas30).includes('"payload"') === false,
+  '🔴 o corpo de /pessoas NÃO traz a chave `payload`: a lista mostra pessoa, não payload'
+);
+
+const pessoasDataPodre = await rotaPessoas.GET(
+  req('/api/inbox/pessoas?de=2026-02-30&ate=nao-e-data', { sessao: true })
+);
+const corpoPessoasPodre = await corpoDe(pessoasDataPodre);
+ok(
+  pessoasDataPodre.status === 200 && corpoPessoasPodre?.periodo === 30,
+  'data impossível na URL de /pessoas cai no mesmo padrão 30 do resumo, sem derrubar a rota',
+  `status=${pessoasDataPodre.status}`
 );
 
 /* ================================================================== */
@@ -515,6 +553,127 @@ const resProto = await rotaIntegracoes.PUT(
 );
 await corpoDe(resProto);
 ok(({}).poluido === undefined, 'chave __proto__ no corpo não polui o Object.prototype');
+
+/* ================================================================== */
+/* C16c — a lista de testes, o unico campo que PARA uma venda          */
+/* ================================================================== */
+console.log('\n  -- C16c: PUT /api/integracoes valida a lista de testes --');
+
+// Este bloco e o inverso de todos os outros deste arquivo. Um dominio torto ou
+// uma regra invalida fazem o console DEIXAR DE agir; um item torto aqui faz o
+// console DESCARTAR venda PIX real, em silencio e para sempre. Por isso o que
+// se prova aqui e que o servidor recusa o item perigoso ANTES de gravar.
+
+const resTestes = await rotaIntegracoes.PUT(
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: {
+      testes: {
+        // Maiusculas, espaco em volta e um repetido: tudo isso chega do
+        // copiar-e-colar do backoffice e nenhum deles pode virar item novo.
+        emails: ['  Jairo@Exemplo.com.BR ', 'jairo@exemplo.com.br', 'qa@loja.com'],
+        nomes: ['  Jairo   Silva  '],
+        comprasParaSuspeitar: 4,
+      },
+    },
+  })
+);
+await corpoDe(resTestes);
+const comTestes = JSON.parse(lerArq(ARQ));
+ok(resTestes.status === 200, 'PUT com `testes` válido → 200', `status=${resTestes.status}`);
+ok(
+  comTestes.testes?.emails?.length === 2,
+  'e-mail repetido só por causa de maiúscula/espaço entra UMA vez',
+  JSON.stringify(comTestes.testes?.emails)
+);
+ok(
+  comTestes.testes?.emails?.[0] === 'jairo@exemplo.com.br',
+  'o e-mail é gravado em minúsculas e sem espaço — a comparação lá na frente é exata'
+);
+ok(
+  comTestes.testes?.nomes?.[0] === 'Jairo Silva',
+  'o espaço duplicado do nome é achatado',
+  JSON.stringify(comTestes.testes?.nomes)
+);
+ok(comTestes.testes?.comprasParaSuspeitar === 4, 'o limite do operador foi gravado');
+
+// A mesma regra de `saida`: ausente significa "não mexi nisto".
+const resSemTestes = await rotaIntegracoes.PUT(
+  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { saida: [] } })
+);
+await corpoDe(resSemTestes);
+ok(
+  JSON.parse(lerArq(ARQ)).testes?.emails?.length === 2,
+  '🔴 um save de OUTRA aba, sem `testes` no corpo, não apaga a lista de testes'
+);
+
+// 🔴 O nome casa por CONTER. "a" marcaria praticamente todo comprador do Brasil
+// como teste, e nenhuma venda voltaria à Meta — sem erro em lugar nenhum.
+const antesNomeCurto = lerArq(ARQ);
+const resNomeCurto = await rotaIntegracoes.PUT(
+  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { testes: { nomes: ['a'] } } })
+);
+const corpoNomeCurto = await corpoDe(resNomeCurto);
+ok(
+  resNomeCurto.status === 400 && Array.isArray(corpoNomeCurto.erros) && corpoNomeCurto.erros.length > 0,
+  '🔴 nome de 1 letra → 400: ele casa por CONTER e barraria todo comprador',
+  `status=${resNomeCurto.status}`
+);
+ok(lerArq(ARQ) === antesNomeCurto, 'e o arquivo está byte a byte igual ao de antes da tentativa');
+
+const resEmailQuebrado = await rotaIntegracoes.PUT(
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: { testes: { emails: ['jairo'] } },
+  })
+);
+await corpoDe(resEmailQuebrado);
+ok(
+  resEmailQuebrado.status === 400,
+  'pedaço de e-mail → 400: a comparação é exata e um pedaço nunca casaria',
+  `status=${resEmailQuebrado.status}`
+);
+
+const resLimite1 = await rotaIntegracoes.PUT(
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: { testes: { comprasParaSuspeitar: 1 } },
+  })
+);
+await corpoDe(resLimite1);
+ok(
+  resLimite1.status === 400,
+  '🔴 limite 1 → 400: toda primeira compra viraria suspeita e o produto travava',
+  `status=${resLimite1.status}`
+);
+ok(
+  JSON.parse(lerArq(ARQ)).testes?.comprasParaSuspeitar === 4,
+  'e o limite que já estava gravado continua o mesmo'
+);
+
+// Esvaziar é uma decisão legítima — e explícita, como em `saida: []`.
+const resEsvaziar = await rotaIntegracoes.PUT(
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: { testes: { emails: [], nomes: [] } },
+  })
+);
+await corpoDe(resEsvaziar);
+const semTestes = JSON.parse(lerArq(ARQ));
+ok(
+  resEsvaziar.status === 200 &&
+    semTestes.testes.emails.length === 0 &&
+    semTestes.testes.nomes.length === 0,
+  'um `testes` EXPLÍCITO com listas vazias esvazia a lista'
+);
+ok(
+  semTestes.chaveDeVersaoFutura?.ligado === false,
+  'e a chave desconhecida continua lá depois de mexer nos testes'
+);
 
 /* ================================================================== */
 /* C32 / D33 — todo erro sai em JSON, e 401 nunca vira 503             */

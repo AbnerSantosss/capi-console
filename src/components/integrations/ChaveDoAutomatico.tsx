@@ -27,8 +27,10 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { GitBranch, Zap } from 'lucide-react';
+import { GitBranch, Zap, ZapOff } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import {
   contarRegrasAuto,
@@ -227,15 +229,48 @@ export function ChaveDoAutomatico({
 
   /* ---------------------------------------------------------------- */
 
-  const moldura =
-    'relative overflow-hidden rounded-panel border border-line-strong bg-surface-1 p-5 shadow-realce sm:p-6 ' +
-    'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-tinta/70';
+  /**
+   * A moldura muda de COR com o estado — pedido literal de quem opera: a chave
+   * é o primeiro elemento de /automatico e o estado dela tem de ser legível do
+   * outro lado da sala, antes de qualquer leitura.
+   *
+   * 🔴 Cor é REFORÇO, nunca o portador do estado (SC 1.4.1): o título em texto
+   * ("Disparo automático ligado/desligado"), o selo com palavra e o ícone que
+   * troca de glifo continuam dizendo tudo sem depender de enxergar a cor.
+   *
+   * Vermelho no desligado é uma divergência DELIBERADA do selo
+   * `pixel-desligado` da caixa de entrada, que é neutro de propósito. Lá o
+   * desligado é escolha de rota de um evento; aqui é o produto inteiro parado —
+   * venda PIX real entrando na fila e não chegando à Meta. Isso é vermelho.
+   *
+   * 🔴 A cor segue `ligadoNoServidor`, e não o `ligado` otimista da chavinha:
+   * o quadro colorido não pode dizer verde enquanto o título ao lado ainda diz
+   * "desligado". Quem dá o retorno imediato do clique é a própria Switch, que
+   * já tem estado de `salvando`.
+   */
+  const MOLDURA_BASE =
+    'relative overflow-hidden rounded-panel border bg-surface-1 p-5 shadow-realce sm:p-6 ' +
+    'before:absolute before:inset-x-0 before:top-0 before:h-1';
+
+  const moldura = cn(
+    MOLDURA_BASE,
+    ligadoNoServidor ? 'border-success/50 before:bg-success' : 'border-danger/50 before:bg-danger'
+  );
+
+  const IconeDoEstado = ligadoNoServidor ? Zap : ZapOff;
 
   // A tinta desta área fica no próprio cartão: assim ele nasce violeta mesmo
   // se o <main> da rota ainda não declarar `data-area`.
+  //
+  // Enquanto carrega a moldura é NEUTRA: pintar de vermelho antes de ler o
+  // servidor seria anunciar "desligado" sem saber — e essa é a resposta mais
+  // cara desta tela para se errar.
   if (!carregado) {
     return (
-      <section data-area="automatico" className={moldura}>
+      <section
+        data-area="automatico"
+        className={cn(MOLDURA_BASE, 'border-line-strong before:bg-tinta/70')}
+      >
         <RegiaoDeEspera rotulo="Lendo o estado do disparo automático">
           <div className="flex flex-col gap-3">
             <Esqueleto className="h-5 w-56" />
@@ -251,13 +286,24 @@ export function ChaveDoAutomatico({
     <section data-area="automatico" className={moldura}>
       <div className="flex items-start gap-3">
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-control bg-tinta/12 text-fg-strong"
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-control',
+            ligadoNoServidor ? 'bg-success/12 text-success' : 'bg-danger/12 text-danger'
+          )}
           aria-hidden
         >
-          <Zap className="size-4" strokeWidth={1.75} />
+          <IconeDoEstado className="size-4" strokeWidth={1.75} />
         </span>
 
         <div className="min-w-0 flex-1">
+          {/* O selo de estado antes de tudo, na cor do estado e com a palavra
+              dentro dele — é a leitura de um segundo que o pedido cobrava. */}
+          {/* Sem caixa alta: o selo v3 abandonou o `uppercase` de propósito, e
+              quem carrega o contraste aqui é a cor, que era o que se pediu. */}
+          <Badge variant={ligadoNoServidor ? 'sucesso' : 'perigo'} className="mb-2">
+            <IconeDoEstado aria-hidden />
+            {ligadoNoServidor ? 'Ligado' : 'Desligado'}
+          </Badge>
           <Switch
             checked={ligado}
             disabled={!alvo || (!ligado && !podeLigar)}

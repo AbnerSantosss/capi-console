@@ -109,6 +109,52 @@ export interface ResumoInbox {
   porEvento: Array<{ evento: string; total: number; pct: number | null }>;
   /** Soma do valor dos enviados — só quando há UMA moeda; senão `null`. */
   receitaEnviada: { total: number; moeda: string } | null;
+  /**
+   * COMPRA — o evento que paga a conta, separado de todos os outros.
+   *
+   * Está fora de `porEvento` de propósito: lá ele é o quarto ou quinto item de
+   * uma lista ordenada por frequência, do lado de `ViewContent`, e é justamente
+   * o número que ninguém deveria precisar procurar.
+   */
+  compras: ComprasDoPeriodo;
+}
+
+export interface ValorDeCompras {
+  /** Quantas compras. Sempre confiável. */
+  total: number;
+  /**
+   * Soma dos valores — `null` quando as compras do recorte estão em mais de uma
+   * moeda, pela mesma razão de `receitaEnviada`: somar real com dólar dá um
+   * número que não é dinheiro nenhum.
+   */
+  valor: number | null;
+}
+
+export interface ComprasDoPeriodo extends ValorDeCompras {
+  /** Moeda única do período, quando existe. A tela formata com ela. */
+  moeda: string | null;
+  /** Quantas dessas compras a Meta já aceitou (status `disparado`). */
+  enviadas: number;
+  /**
+   * O recorte que PODE ser lido como resultado de campanha: compra que trouxe
+   * clique da Meta (`fbclid` ou `fbc`).
+   *
+   * 🔴 O critério aqui é mais estreito que o do bloco `atribuicao` acima, e é
+   * deliberado. Lá "sem atribuição" significa nenhum dos cinco sinais — uma
+   * compra vinda do Google conta como atribuída. Campanha, nesta tela, é
+   * campanha DA META: contar uma venda do Google no ROAS do Gerenciador seria
+   * exatamente o número mentiroso que este bloco existe para evitar.
+   */
+  atribuidasMeta: ValorDeCompras;
+  /**
+   * O resto — e ele NÃO é lixo.
+   *
+   * É a venda PIX que o Pixel do navegador perdeu, que é a razão de o produto
+   * existir. Ela continua sendo enviada à Meta (a Meta é quem reconcilia pelo
+   * `fbp`, pelo e-mail e pelo telefone); o que ela não faz é entrar no número
+   * que a tela chama de resultado de campanha.
+   */
+  semAtribuicaoMeta: ValorDeCompras;
 }
 
 const PERIODOS: readonly Periodo[] = ['hoje', 'ontem', 7, 30, 90];
@@ -261,6 +307,41 @@ function ehTeste(i: ItemResumivel): boolean {
 }
 
 /**
+ * É uma compra?
+ *
+ * Olha o evento da META, não o nome que a plataforma usou: `purchase_approved`,
+ * `checkout.session.completed` e `order_approved` são a mesma coisa vista de
+ * três plataformas, e o parser já reduziu as três a `Purchase`.
+ *
+ * Item com regra `ignorar` não tem `eventoMeta` e fica de fora — está certo:
+ * compra que o operador mandou ignorar não é resultado de campanha nenhuma.
+ *
+ * Exportada porque a tela de `/painel/compras` precisa aplicar EXATAMENTE a
+ * mesma régua que produziu o número em que a pessoa clicou.
+ */
+export function ehCompra(i: Pick<ItemResumivel, 'evento' | 'eventoMeta'>): boolean {
+  return i.eventoMeta === 'Purchase' || i.evento === 'Purchase';
+}
+
+/** Clique da Meta — o que faz uma compra poder ser lida como resultado de campanha. */
+function temCliqueDaMeta(i: ItemResumivel): boolean {
+  return i.temFbclid === true || i.temFbc === true;
+}
+
+/**
+ * Quantidade e valor de um punhado de compras. Valor `null` quando há mais de
+ * uma moeda dentro — ver `ValorDeCompras`.
+ */
+function somar(itens: ItemResumivel[], moedaUnica: string | null): ValorDeCompras {
+  if (moedaUnica === null) return { total: itens.length, valor: null };
+  const soma = itens.reduce(
+    (s, i) => (typeof i.valor === 'number' && Number.isFinite(i.valor) ? s + i.valor : s),
+    0
+  );
+  return { total: itens.length, valor: Math.round(soma * 100) / 100 };
+}
+
+/**
  * Conta o que chegou, o que saiu e de onde veio.
  *
  * `agoraIso` entra por parâmetro (e não como `new Date()`) para o teste poder
@@ -320,6 +401,17 @@ export function resumirInbox(
     .slice(0, 8)
     .map(([evento, total]) => ({ evento, total, pct: pct(total, base) }));
 
+  // Compras do período, já sem teste da equipe nem da plataforma (elas saíram
+  // em `reais`). É esse recorte que o card de destaque mostra e que a rota
+  // `/painel/compras` reconstrói item a item.
+  const compras = reais.filter(ehCompra);
+  const moedasDeCompra = new Set(
+    compras.filter((i) => typeof i.valor === 'number' && Number.isFinite(i.valor)).map((i) => i.moeda ?? 'BRL')
+  );
+  const moedaDeCompra = moedasDeCompra.size === 1 ? [...moedasDeCompra][0] : null;
+  const comprasComClique = compras.filter(temCliqueDaMeta);
+  const comprasSemClique = compras.filter((i) => !temCliqueDaMeta(i));
+
   const comValor = enviados.filter((i) => typeof i.valor === 'number' && Number.isFinite(i.valor));
   const moedas = new Set(comValor.map((i) => i.moeda ?? 'BRL'));
   const receitaEnviada =
@@ -354,5 +446,12 @@ export function resumirInbox(
     qualidade: { emqMedio, enviadosComEmq: comEmq.length },
     porEvento,
     receitaEnviada,
+    compras: {
+      ...somar(compras, moedaDeCompra),
+      moeda: moedaDeCompra,
+      enviadas: compras.filter((i) => i.status === 'disparado').length,
+      atribuidasMeta: somar(comprasComClique, moedaDeCompra),
+      semAtribuicaoMeta: somar(comprasSemClique, moedaDeCompra),
+    },
   };
 }

@@ -5,6 +5,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import type { ClassificacaoEvento, MotivoIgnorar } from './parser';
+import type { MotivoDeTeste } from './deteccao-de-teste';
+import { ehCompra } from './inbox-resumo';
 import { sinaisDoPayload } from './inbox-sinais';
 import { gravarAtomico, naFila } from './arquivo-atomico';
 import { EMPRESA_DEFAULT_ID } from './config-store';
@@ -161,6 +163,25 @@ export interface ItemInbox {
   testePlataforma?: boolean;
   /** true quando o payload e de teste da equipe (cupom de R$ 0,01, @example.com). */
   testeInterno?: boolean;
+  /**
+   * Por que o console achou que isto e teste. Preenchido junto com
+   * `testeInterno` e tambem — e SO ai esta a novidade — quando ele NAO e teste
+   * mas ficou sob suspeita (o mesmo e-mail em varias compras).
+   *
+   * 🔴 Suspeita NAO e `testeInterno`. Item suspeito continua contando nas
+   * metricas e continua disparavel por clique; o que ele perde e o direito de
+   * sair sozinho. Fundir os dois campos faria uma venda real que so PARECE
+   * teste sumir das porcentagens — e o produto existe para nao perder venda.
+   */
+  motivoDeTeste?: MotivoDeTeste;
+  /** Frase pronta explicando a marca acima. Texto de tela, em portugues. */
+  explicacaoDeTeste?: string;
+  /**
+   * true = o automatico foi barrado por suspeita e o item esperou clique humano.
+   * Gravado no recebimento para a tela conseguir dizer POR QUE aquela venda
+   * ficou na fila num dia em que o automatico estava ligado.
+   */
+  autoBloqueadoPorSuspeita?: boolean;
   /** Formato do payload reconhecido: A (plataforma, ex. xWinner), B (gateway) ou outro. */
   formato?: 'A' | 'B' | 'outro';
   /** Apelido que veio na URL. null = chegou pela URL antiga, de um segmento so. */
@@ -329,6 +350,41 @@ export async function registrarEntrada(
   avisar(item, 'novo');
 
   return item;
+}
+
+/**
+ * Quantas COMPRAS ja existem na caixa com este mesmo e-mail — o numero que
+ * `avaliarTeste` usa para desconfiar de um checkout sendo martelado.
+ *
+ * 🔴 A chave e o e-mail MASCARADO, e isso e o ponto. `mascararEmail` e
+ * deterministica (`jairo@x.com` sempre vira `ja***@x.com`), entao ela serve de
+ * chave de agrupamento sem que e-mail em texto claro precise existir em lugar
+ * nenhum alem do payload que ja esta gravado. Somar por e-mail cru obrigaria a
+ * decifrar 1000 payloads a cada webhook, e ainda espalharia PII pela memoria.
+ *
+ * O preco e uma colisao teorica: dois e-mails com as mesmas duas primeiras
+ * letras E o mesmo dominio (`joao@x.com` e `jose@x.com`) contam juntos. Como o
+ * resultado de uma suspeita e "espera um clique humano" — nunca "descarta" —,
+ * o pior caso e uma venda a mais na fila, que e o lado seguro do erro.
+ *
+ * Nao conta o item que esta chegando: quem chama soma 1 se quiser incluir.
+ */
+export async function contarComprasDoEmail(
+  emailMascarado: string | undefined,
+  empresaId?: string
+): Promise<number> {
+  if (!emailMascarado) return 0;
+  await carregarDoDisco();
+  let n = 0;
+  for (const i of memoria) {
+    if (i.emailMascarado !== emailMascarado) continue;
+    if (empresaId !== undefined && (i.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) continue;
+    // `ehCompra` olha o evento da Meta, a mesma regua do painel: duas contas de
+    // "compra" diferentes no mesmo produto seriam duas respostas para a mesma
+    // pergunta.
+    if (ehCompra(i)) n++;
+  }
+  return n;
 }
 
 /**

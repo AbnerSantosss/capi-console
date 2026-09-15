@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import {
   ArrowUpRight,
+  FlaskConical,
   GitBranch,
   History,
   Inbox,
@@ -48,6 +49,8 @@ import {
   type IntegrationTab,
 } from './IntegrationFlow';
 import { ChaveDoAutomatico } from './ChaveDoAutomatico';
+import { ListaDeTestes } from './ListaDeTestes';
+import type { ListaDeTeste } from '@/lib/deteccao-de-teste';
 const ROTULO_EVENTO: Record<EventoRelay, string> = {
   'dispatch.success': 'Disparo aceito pela Meta',
   'dispatch.error': 'Disparo recusado',
@@ -76,6 +79,10 @@ const GRUPOS: Array<{
     abas: [
       { value: 'inbox', label: 'Caixa de entrada', icon: Inbox },
       { value: 'regras', label: 'Regras', icon: GitBranch },
+      // Fica junto de Regras porque responde a mesma pergunta — "o que decide
+      // o destino deste evento?" —, so que pelo lado de quem mandou em vez do
+      // lado do que foi mandado.
+      { value: 'testes', label: 'Testes da equipe', icon: FlaskConical },
     ],
   },
   {
@@ -461,7 +468,13 @@ export function IntegrationsPage({
                         ? cfg.regras.length
                         : item.value === 'retornos'
                           ? cfg.saida.length
-                          : undefined;
+                          : item.value === 'testes'
+                            ? // Os dois somados: para quem olha a aba, a
+                              // pergunta é "quantas pessoas estão barradas",
+                              // e não por qual dos dois campos cada uma entrou.
+                              (cfg.testes?.emails?.length ?? 0) +
+                              (cfg.testes?.nomes?.length ?? 0)
+                            : undefined;
                     return (
                       <TabsTrigger
                         key={item.value}
@@ -500,13 +513,19 @@ export function IntegrationsPage({
               <Callout tone="warning" icon={ShieldAlert} className="mt-3">
                 Eventos de teste da plataforma (<code className="font-mono">lead@example.com</code>,{' '}
                 <code className="font-mono">evt_preview…</code>, cupons de R$ 0,01)
-                são barrados antes da Meta, mesmo em modo automático.
+                são barrados antes da Meta, mesmo em modo automático. O e-mail pessoal que a equipe
+                usa para testar o checkout, o console não adivinha — esse se cadastra em{' '}
+                <strong className="text-fg-body">Testes da equipe</strong>.
               </Callout>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => selecionarAba('regras')}>
                   <GitBranch className="size-4" aria-hidden />
                   Ver regras
+                </Button>
+                <Button variant="outline" onClick={() => selecionarAba('testes')}>
+                  <FlaskConical className="size-4" aria-hidden />
+                  Testes da equipe
                 </Button>
                 <Link
                   href="/instalacao#webhook"
@@ -542,6 +561,27 @@ export function IntegrationsPage({
           regras={cfg.regras ?? []}
           onChange={(regras) => setCfg({ ...cfg, regras })}
           onSalvar={(regras) => salvar({ ...cfg, regras })}
+          salvando={salvando}
+        />
+      </Section>
+        </TabsContent>
+
+      {/* ---------------------------------------------------------- */}
+        <TabsContent value="testes" className="min-w-0 outline-none">
+      <Section
+        icon={FlaskConical}
+        variant="card"
+        title="Testes da equipe"
+        description="Quem da equipe bate no checkout para testar. O que casa com esta lista nunca chega à Meta."
+      >
+        {/* 🔴 A gravação passa pelo MESMO `salvar` das outras abas, e manda a
+            configuração inteira. Um PUT só com `testes` funcionaria — o
+            servidor mescla sobre o disco —, mas duas rotas de gravação para o
+            mesmo arquivo é como se perde um campo no dia em que uma delas
+            esquecer de reenviar algo. */}
+        <ListaDeTestes
+          testes={cfg.testes}
+          onSalvar={(testes: ListaDeTeste) => void salvar({ ...cfg, testes })}
           salvando={salvando}
         />
       </Section>

@@ -332,9 +332,22 @@ export async function dispararFila(params: {
 
     // O lote roda sobre um histórico inteiro de entregas: sem esta trava, um
     // evento já enviado num lote anterior seria contado de novo.
-    if (await jaEnviado(pixelId, ev.metaEvent.event_name, ev.metaEvent.event_id)) {
+    //
+    // A identidade vai inteira (`event_id`, `order_id` e, na falta dos dois,
+    // `e-mail|valor|dia`). É aqui que ela mais importa: o lote reprocessa
+    // exportações antigas, onde o mesmo pedido costuma reaparecer com um
+    // `event_id` recalculado. Ver `dedup.ts`.
+    const identidade = {
+      eventId: ev.metaEvent.event_id,
+      orderId: ev.orderId,
+      email: ev.userEmail,
+      valor: ev.value,
+      eventTime: ev.metaEvent.event_time,
+    };
+
+    if (await jaEnviado(pixelId, ev.metaEvent.event_name, identidade)) {
       ev.status = 'ignorado';
-      ev.respostaMeta = { httpStatus: 0, erro: 'event_id já aceito pela Meta neste pixel.' };
+      ev.respostaMeta = { httpStatus: 0, erro: 'Este evento já foi aceito pela Meta neste pixel.' };
       resultados.push(ev);
       continue;
     }
@@ -365,7 +378,7 @@ export async function dispararFila(params: {
 
       if (ok) {
         sucesso++;
-        await marcarEnviado(pixelId, ev.metaEvent.event_name, ev.metaEvent.event_id);
+        await marcarEnviado(pixelId, ev.metaEvent.event_name, identidade);
       } else {
         falhas++;
       }

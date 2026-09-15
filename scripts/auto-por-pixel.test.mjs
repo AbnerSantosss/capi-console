@@ -27,7 +27,8 @@
  *           fechamento ponta a ponta com a Meta exige autorização do dono)
  *   C26  nenhuma leitura de `autoDisparo` fora de `=== true`
  *   C28  `publicarMarca` normaliza o campo para booleano de verdade
- *   MIG-4 o repositório termina a FASE 6 com o switch DESLIGADO
+ *   MIG-4 o repositório não embarca marca nenhuma (`config/` é gitignored),
+ *         e o estado local do operador é apenas relatado — ver a seção
  *
  * Roda num diretório temporário (nunca toca `config/` nem `logs/` de verdade),
  * sem rede e sem disparar evento nenhum para a Meta.
@@ -439,6 +440,35 @@ ok(
 /* ================================================================== */
 console.log('\n  -- MIG-4: o repositório termina com tudo desligado --');
 
+// 🔴 O que esta seção prova é que o REPOSITÓRIO não embarca um switch ligado —
+// não que a máquina de quem roda o teste esteja com o automático desligado.
+//
+// A distinção não é preciosismo: `config/` inteiro está no `.gitignore`, e em
+// produção ele é um volume nomeado (`capi_config`). O arquivo que existe aqui
+// do lado é estado do OPERADOR, escrito por um clique humano na tela de Pixels
+// — que é exatamente o clique que o resto deste arquivo existe para exigir.
+// Falhar porque alguém ligou o produto seria o teste cobrando que o produto
+// nunca tivesse entrado no ar.
+//
+// A garantia de que nada sai sozinho continua inteira e continua sendo provada
+// por código, não por arquivo de configuração: T1 (campo ausente = desligado),
+// T8 (a marca do `.env` nasce `false` explícito), C26 (nenhuma leitura
+// permissiva) e C28 (o booleano que chega à tela é de verdade).
+const gitignore = (() => {
+  try {
+    return fs.readFileSync(path.join(RAIZ, '.gitignore'), 'utf8');
+  } catch {
+    return '';
+  }
+})();
+const configIgnorado = /^\s*config\/?\s*$/m.test(gitignore);
+
+ok(
+  configIgnorado,
+  '🔴 MIG-4: `config/` está no .gitignore — o repositório não embarca marca nenhuma',
+  configIgnorado ? 'nada de config/ vai para o git' : 'ATENÇÃO: config/ saiu do .gitignore'
+);
+
 const marcasReais = path.join(RAIZ, 'config', 'marcas.json');
 if (fs.existsSync(marcasReais)) {
   let conteudo = [];
@@ -448,10 +478,12 @@ if (fs.existsSync(marcasReais)) {
     conteudo = [];
   }
   const ligadas = (Array.isArray(conteudo) ? conteudo : []).filter((m) => m?.autoDisparo === true);
-  ok(
-    ligadas.length === 0,
-    '🔴 MIG-4: nenhuma marca em config/marcas.json está com `autoDisparo: true`',
-    ligadas.map((m) => m.id).join(',') || 'todas desligadas'
+  // Relatório, não veredito: esta linha existe para que quem roda o teste veja
+  // o estado da própria máquina antes de mexer em disparo automático.
+  console.log(
+    ligadas.length === 0
+      ? '  --    config/marcas.json local: nenhum Pixel com automático ligado'
+      : `  --    config/marcas.json local: automático LIGADO em ${ligadas.map((m) => m.id).join(', ')} (estado do operador, não do repositório)`
   );
 } else {
   ok(true, 'MIG-4: não há config/marcas.json local — a marca do `.env` já nasce desligada (T8)');

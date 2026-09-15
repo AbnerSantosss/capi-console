@@ -133,6 +133,77 @@ const dominiosSchema = z
     message: 'há domínio repetido na lista',
   });
 
+/* ------------------------------------------------------------------ */
+/* Lista de testes — o unico campo desta rota que PARA uma venda        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 🔴 Este bloco e o inverso de todos os outros desta rota.
+ *
+ * Um dominio mal formado, uma regra torta ou um destino sem URL fazem o console
+ * DEIXAR DE agir. A lista de testes faz o contrario: tudo que casa com ela para
+ * de ir a Meta. Um item escrito errado aqui nao gera erro em lugar nenhum — ele
+ * silenciosamente descarta venda PIX real, que e exatamente o que o produto
+ * inteiro existe para nao perder. Por isso a validacao aqui e mais dura, e nao
+ * mais frouxa, que a dos vizinhos.
+ */
+
+/**
+ * 🔴 PISO DE 3 LETRAS, e ele nao e estetico.
+ *
+ * `avaliarTeste` casa nome por CONTER, de proposito: o operador cadastra
+ * "Jairo" e pega "Jairo Silva". A mesma regra torna um nome de 1 ou 2 letras
+ * uma catastrofe silenciosa — cadastrar "a" marcaria como teste praticamente
+ * todo comprador do Brasil, e nenhuma venda voltaria a chegar a Meta, sem
+ * nenhuma mensagem de erro em lugar nenhum. Tres letras e o menor pedaco de
+ * nome que ainda diz respeito a uma pessoa.
+ */
+const NOME_MIN = 3;
+const TETO_DA_LISTA = 200;
+
+const emailDeTeste = z
+  .string()
+  .transform((s) => s.trim().toLowerCase())
+  .refine((s) => s.length > 0, 'e-mail vazio')
+  .refine(
+    (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s),
+    'escreva o e-mail inteiro — a comparação é exata, um pedaço nunca casa'
+  );
+
+const nomeDeTeste = z
+  .string()
+  // Espaco duplicado sobrevive a um copiar-e-colar do backoffice e nunca
+  // casaria com o nome achatado do evento.
+  .transform((s) => s.trim().replace(/\s+/g, ' '))
+  .refine(
+    (s) => s.length >= NOME_MIN,
+    `o nome precisa de pelo menos ${NOME_MIN} letras — pedaço curto demais marcaria compradores de verdade como teste`
+  );
+
+const testesSchema = z
+  .object({
+    emails: z.array(emailDeTeste).max(TETO_DA_LISTA, `máximo de ${TETO_DA_LISTA} e-mails`).optional(),
+    nomes: z.array(nomeDeTeste).max(TETO_DA_LISTA, `máximo de ${TETO_DA_LISTA} nomes`).optional(),
+    /**
+     * Piso de 2 aqui e em `limiteDeCompras`, pelo mesmo motivo nos dois lugares:
+     * `1` faria de TODA primeira compra uma suspeita e travaria o produto. O
+     * teto de 50 existe so para que um numero digitado torto (500) nao vire uma
+     * regra que nunca dispara e pareca estar ligada.
+     */
+    comprasParaSuspeitar: z
+      .number()
+      .int('use um número inteiro de compras')
+      .min(2, 'o mínimo é 2 — com 1 toda primeira compra viraria suspeita')
+      .max(50, 'o máximo é 50')
+      .optional(),
+  })
+  .passthrough();
+
+/** Sem repetidos, na ordem em que o operador digitou. Lista que cresce sozinha ninguém revisa. */
+function unicos(lista: string[]): string[] {
+  return [...new Set(lista)];
+}
+
 /** Corpo do POST. Sem corpo = gira o segredo de entrada, como era antes. */
 const alvoSchema = z.object({
   alvo: z.enum(['entrada', 'tag']).default('entrada'),
@@ -278,6 +349,26 @@ export async function PUT(request: NextRequest) {
         tag = { ...atual.tag, chave: atual.tag.chave, dominios };
       }
 
+      // Ausente significa "nao mexi nisto", como em `saida`. Só um `testes`
+      // EXPLICITO no corpo altera a lista — e um save vindo da aba de Regras,
+      // que nem sabe que ela existe, nao pode apagar o que alguem cadastrou.
+      let testes = atual.testes;
+      if (body.testes !== undefined) {
+        const t = testesSchema.safeParse(body.testes);
+        if (!t.success) {
+          const erros = t.error.issues.map((i) => {
+            const onde = i.path[0] === 'emails' ? 'e-mail' : i.path[0] === 'nomes' ? 'nome' : 'lista de testes';
+            return `${onde}: ${i.message}`;
+          });
+          throw respostaErro('Não foi possível salvar a lista de testes — nada foi alterado.', 400, erros);
+        }
+        testes = {
+          emails: unicos(t.data.emails ?? []),
+          nomes: unicos(t.data.nomes ?? []),
+          comprasParaSuspeitar: t.data.comprasParaSuspeitar,
+        };
+      }
+
       return {
         // 1) tudo o que ja estava no disco, na ordem em que estava;
         ...atual,
@@ -302,6 +393,7 @@ export async function PUT(request: NextRequest) {
         regras,
         saida,
         tag,
+        testes,
       } satisfies Integracoes;
     }, empresaId);
 

@@ -61,6 +61,33 @@ export function buscaDoPeriodo(p: PeriodoEscolhido): string {
 }
 
 /**
+ * O caminho de volta: a escolha que uma URL está pedindo.
+ *
+ * É o inverso exato de `buscaDoPeriodo`, e existe porque as telas abertas por
+ * clique (`/painel/compras`, `/painel/eventos`) nascem com o período JÁ
+ * escolhido na tela anterior — ele viaja na URL. Sem esta função a lista abriria
+ * nos 30 dias padrão e mostraria um total diferente do número que foi clicado.
+ *
+ * 🔴 Só aceita o intervalo livre com as DUAS datas válidas, a mesma régua do
+ * `periodoValido` do servidor. URL pela metade cai no padrão em vez de virar um
+ * filtro meio aplicado — que é o jeito de a tela mentir sem avisar.
+ */
+export function periodoDaBusca(params: {
+  get(nome: string): string | null;
+}): PeriodoEscolhido {
+  const de = params.get('de');
+  const ate = params.get('ate');
+  if (dataIsoValida(de) && dataIsoValida(ate)) {
+    // Ordem invertida é o mesmo engano que `periodoValido` conserta do outro
+    // lado; consertar aqui também mantém os botões e o número de acordo.
+    return de <= ate ? { dias: 'livre', de, ate } : { dias: 'livre', de: ate, ate: de };
+  }
+  const dias = params.get('dias');
+  const conhecido = FIXOS.some((f) => f.valor === dias);
+  return conhecido ? { dias: dias as DiasEscolhidos, de: null, ate: null } : PERIODO_PADRAO;
+}
+
+/**
  * A resposta que chegou é desta escolha?
  *
  * Existe para a tela nunca mostrar número de uma janela com o rótulo de outra

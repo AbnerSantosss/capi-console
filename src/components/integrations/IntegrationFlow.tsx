@@ -16,8 +16,13 @@ import {
  * depois, na FASE A do plano multi-empresa: as duas eram INSTALACAO, e nao
  * disparo automatico, e viraram a rota `/instalacao`. Os dois `?aba=` antigos
  * continuam valendo — `IntegrationsPage` os traduz em redirecionamento.
+ *
+ * `testes` entrou depois, e NAO e uma estacao do trilho abaixo de proposito: o
+ * trilho conta o caminho que o evento percorre, e a lista de testes e o
+ * contrario disso — e onde o caminho termina antes da hora. Ela e aba, para
+ * quem vai cadastrar, e nunca um passo, para quem esta lendo o caminho.
  */
-export type IntegrationTab = 'inbox' | 'regras' | 'retornos';
+export type IntegrationTab = 'inbox' | 'regras' | 'testes' | 'retornos';
 
 /**
  * Um passo do trilho ou leva a uma aba desta tela, ou leva a outra rota. Os

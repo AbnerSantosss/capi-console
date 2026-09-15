@@ -23,6 +23,11 @@
 /** Destinos permitidos após o login (D5). */
 export const DESTINOS_PERMITIDOS = [
   '/painel',
+  // As duas telas de "quem" abertas por um clique no Painel. Entram aqui como
+  // pathname puro: o recorte delas (`?evento=`, `?compras=1`) e o período
+  // viajam na query, que esta lista nunca compara — ver a regra logo acima.
+  '/painel/compras',
+  '/painel/eventos',
   '/',
   '/instalacao',
   '/pixels',

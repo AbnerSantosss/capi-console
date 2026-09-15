@@ -10,7 +10,8 @@ import {
 } from '@/lib/config-store';
 import { acharEmpresaPorSegredo } from '@/lib/empresas';
 import { respostaConfigIndisponivel } from '@/lib/erro-api';
-import { registrarEntrada, mascararEmail } from '@/lib/inbox';
+import { registrarEntrada, mascararEmail, contarComprasDoEmail } from '@/lib/inbox';
+import { avaliarTeste } from '@/lib/deteccao-de-teste';
 import { sinaisDoPayload } from '@/lib/inbox-sinais';
 import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
 import { calcularEmq } from '@/lib/emq';
@@ -335,6 +336,52 @@ export async function processarWebhook(
   const sinais = sinaisDoPayload(payload);
   const nomeDosCampos = [texto('firstName'), texto('lastName')].filter(Boolean).join(' ');
 
+  /* ---------------------------------------------------------------- */
+  /* É teste? E, se não for, dá para confiar nele sozinho?             */
+  /* ---------------------------------------------------------------- */
+
+  const emailMascarado = mascararEmail(texto('email'));
+  const compraChegando = eventoFinal === 'Purchase';
+
+  /**
+   * Quantas compras este mesmo e-mail já tem, INCLUINDO esta.
+   *
+   * Só é contado para compra: o mesmo e-mail em vários `Lead` ou `ViewContent`
+   * é uma pessoa que voltou ao site, e desconfiar disso seria inventar
+   * problema. O `+ 1` entra porque o item ainda não foi gravado.
+   *
+   * O `.catch` segue a regra de ouro do caminho de recebimento: se a leitura da
+   * caixa falhar, a venda entra assim mesmo — sem suspeita, que é o lado que
+   * deixa a venda passar.
+   */
+  const comprasDoMesmoEmail = compraChegando
+    ? (await contarComprasDoEmail(emailMascarado, empresaId).catch(() => 0)) + 1
+    : 0;
+
+  const veredicto = avaliarTeste(
+    {
+      email: texto('email'),
+      nome: nomeDosCampos || sinais.nomeCliente,
+      firstName: texto('firstName'),
+      lastName: texto('lastName'),
+      valor: texto('value') ? Number(texto('value')) : undefined,
+      eventId: texto('eventId'),
+      ehCompra: compraChegando,
+      comprasDoMesmoEmail,
+    },
+    cfg.testes
+  );
+
+  /**
+   * Suspeita ≠ teste, e a distinção decide o que acontece com uma venda.
+   *
+   * `ehTeste` já era tratado (o item vira `ignorado` dentro de `dispararItem`).
+   * O que é novo é isto: o item que NÃO é teste mas está sob suspeita fica
+   * sendo um evento real, conta nas métricas, aparece na fila — e apenas não
+   * sai sozinho. Um clique humano ainda o envia.
+   */
+  const autoBloqueadoPorSuspeita = veredicto.bloqueiaAutomatico && !veredicto.ehTeste;
+
   const item = await registrarEntrada({
     origem,
     empresaId,
@@ -356,13 +403,21 @@ export async function processarWebhook(
     testePlataforma,
     // Marcado já no recebimento: antes só o disparo sabia disso, e o item de
     // teste da equipe ficava indistinguível de uma venda na fila.
-    testeInterno: ehTesteInterno(campos, texto('eventId')),
+    //
+    // O `||` mantém `ehTesteInterno` no lugar: `avaliarTeste` já reaplica o
+    // mesmo padrão, mas entre duas réguas quem ganha é a que BARRA.
+    testeInterno: veredicto.ehTeste || ehTesteInterno(campos, texto('eventId')),
+    motivoDeTeste: veredicto.motivo,
+    explicacaoDeTeste: veredicto.explicacao,
+    // Só gravado quando é `true`: um `false` em todo item seria ruído no
+    // histórico de uma coisa que quase nunca acontece.
+    ...(autoBloqueadoPorSuspeita ? { autoBloqueadoPorSuspeita: true } : {}),
     formato: formatoDoEvento(nomeOriginal, conhecido),
     rotuloRecebido,
     rotuloDivergente,
     valor: texto('value') ? Number(texto('value')) : undefined,
     moeda: texto('currency'),
-    emailMascarado: mascararEmail(texto('email')),
+    emailMascarado,
     orderId: texto('orderId'),
     temFbc: Boolean(texto('fbc')),
     temFbp: Boolean(texto('fbp')),
@@ -396,7 +451,14 @@ export async function processarWebhook(
   // regra. Agora entram no laco so os Pixels que aceitaram; se nenhum aceitou,
   // o after() nem e agendado e o item fica na fila — que e exatamente o
   // comportamento de hoje, com todo Switch desligado.
-  if (decisao.marcasAuto.length > 0 && eventoFinal) {
+  //
+  // 🔴 `!autoBloqueadoPorSuspeita` é a trava nova, e ela é a MAIS FRACA das
+  // três de propósito: a regra e o Switch do Pixel dizem "não dispare este tipo
+  // de evento"; esta diz "não dispare ESTE evento sozinho". O item continua na
+  // fila, com a explicação na tela, e o botão "Disparar agora" continua sendo
+  // uma saída — descartar uma venda que o console só ACHA que é teste seria
+  // perder exatamente o que o produto existe para não perder.
+  if (decisao.marcasAuto.length > 0 && eventoFinal && !autoBloqueadoPorSuspeita) {
     after(async () => {
       try {
         // A sonda substitui os campos: o `ping` chega vazio e um evento vazio
@@ -431,6 +493,12 @@ export async function processarWebhook(
       // Pixel vem aqui do lado: sem isto, um 202 dizendo "auto" sem nada ter
       // sido enviado seria uma resposta que mente.
       modoPorMarca: decisao.modoPorMarca,
+      // Pela mesma razão: com o automático ligado e a suspeita barrando, o
+      // `modoPorMarca` acima diria "auto" e nada teria saído. Aditivo — quem já
+      // lê esta resposta não vê diferença nenhuma quando não há suspeita.
+      ...(autoBloqueadoPorSuspeita
+        ? { autoBloqueadoPorSuspeita: true, motivoDeTeste: veredicto.motivo ?? null }
+        : {}),
       regra: regra?.id ?? null,
       rotulo: rotuloRecebido,
       rotuloDivergente,

@@ -13,6 +13,7 @@
 
 import type { RegraRoteamento } from '@/lib/config-store';
 import type { ConfigTag } from '@/lib/tag-dominios';
+import type { ListaDeTeste } from '@/lib/deteccao-de-teste';
 
 export type EventoRelay = 'dispatch.success' | 'dispatch.error' | 'inbox.received';
 
@@ -32,6 +33,14 @@ export interface Integracoes {
   saida: Destino[];
   /** Chave publica da tag do site e dominios autorizados a usa-la. */
   tag: ConfigTag;
+  /**
+   * Quem e testador, na palavra do operador.
+   *
+   * 🔴 Opcional, e a tela TEM que tratar ausencia como lista vazia: quase toda
+   * instalacao existente nunca abriu esta aba, e o bloco so aparece no arquivo
+   * depois do primeiro save. `cfg.testes?.emails ?? []` em todo lugar.
+   */
+  testes?: ListaDeTeste;
 }
 
 export interface Entrega {
