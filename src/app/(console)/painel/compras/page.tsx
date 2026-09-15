@@ -24,7 +24,10 @@ export default function ComprasDoPainel() {
     <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
         title="Quem comprou"
-        description="As pessoas por trás das compras do período. O e-mail aparece mascarado; o nome, inteiro, para você achar a pessoa no backoffice."
+        // Teto de 120 caracteres na descrição (FASE 2 do v4): esta tinha 128 e
+        // repetia no meio o que o título já diz. Ficou o que só a descrição
+        // diz — que o e-mail sai mascarado e o nome não.
+        description="Quem comprou no período. E-mail mascarado; nome inteiro, para achar a pessoa no backoffice."
         icon={ShoppingBag}
       />
       {/* `useSearchParams` precisa de fronteira de suspense mesmo em rota

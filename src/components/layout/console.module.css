@@ -165,15 +165,28 @@
   vertical-align: baseline;
 }
 
+/* Peso 700 e tracking mais fechado (-0.03em), e NAO uma familia diferente: o
+   dono decidiu contra o Plex Serif que o plano oferecia. A hierarquia do
+   titulo sai do peso e do avanco entre letras dentro da mesma Plex Sans —
+   em 600 o titulo da pagina lia igual ao titulo de cartao, que tambem e 600.
+   O tracking negativo existe porque corpo grande com espacamento de corpo
+   pequeno parece frouxo; fechar -0.03em devolve a mancha compacta. */
 .pageTitle {
   color: var(--fg-strong);
   font-size: var(--text-pagina);
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1.15;
   text-wrap: balance;
 }
 
+/* TETO DE 120 CARACTERES por descricao (FASE 2 do redesign v4). Nao e limite
+   tecnico e o CSS nao o impoe: e regra de redacao para quem escreve a pagina.
+   A descricao ocupa a linha logo abaixo do h1, que e onde o operador decide
+   se esta na tela certa — passando de ~duas linhas ela vira paragrafo, e
+   paragrafo nesse lugar ninguem le. O que nao couber e for instrucao de
+   verdade vai para o Guia (/guia#ancora-do-assunto); o que nao couber e for
+   repeticao do titulo sai fora. */
 .pageDescription {
   max-width: 40rem;
   margin-top: 0.375rem;

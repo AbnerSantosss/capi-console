@@ -15,6 +15,13 @@ import styles from './console.module.css';
  * Agora o titulo e a primeira coisa da pagina, e o icone da area entra DENTRO
  * dele, na mesma linha, so como glifo na tinta do assunto — sem caixa, sem
  * borda, sem fundo. A tinta vem do `data-area` que cada <main> declara.
+ *
+ * 🔴 `description`: TETO DE 120 CARACTERES no texto renderizado. Nao ha como o
+ * tipo cobrar isso (ela aceita ReactNode, porque duas telas precisam de um
+ * <span className="font-mono"> no meio), entao a regra vive aqui e na revisao.
+ * Motivo em `console.module.css` (.pageDescription): passando disso a linha
+ * abaixo do h1 vira paragrafo, e paragrafo nesse lugar ninguem le. Instrucao
+ * que nao couber vai para o Guia, na ancora do assunto.
  */
 export function ConsolePageHeader({
   title,
@@ -23,6 +30,7 @@ export function ConsolePageHeader({
   action,
 }: {
   title: string;
+  /** Uma frase, no maximo 120 caracteres renderizados. Veja o bloco acima. */
   description: ReactNode;
   icon: ElementType;
   action?: ReactNode;

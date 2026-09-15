@@ -188,7 +188,7 @@ function CardPainel({
   const conteudo = (
     <>
       <span className="flex w-full min-w-0 items-start justify-between gap-2">
-        <span className="min-w-0 text-label font-medium text-fg-strong">{titulo}</span>
+        <span className="min-w-0 text-label font-medium text-fg-muted">{titulo}</span>
         <span
           aria-hidden
           className={cn('flex size-7 shrink-0 items-center justify-center rounded-control', FUNDO_DO_MATIZ[matiz])}
@@ -212,9 +212,17 @@ function CardPainel({
     </>
   );
 
+  /* Grade de NÚMEROS, não grade de cartões. O KPI secundário perdeu a caixa
+     (borda em volta + fundo + raio) e ficou com um filete no topo: quando
+     dezoito retângulos iguais dividem a tela, a linha fina deixa de separar
+     e vira textura, e nenhum deles é mais importante que o outro. O filete
+     horizontal alinha a leitura na régua de cima — os números ficam numa
+     mesma pauta — e devolve ao Destaque o papel de único objeto com forma.
+     O estado ativo/hover pinta o próprio filete na tinta da área: é o mesmo
+     sinal de antes, num traço em vez de num contorno. */
   const classes = cn(
-    'flex min-w-0 flex-col items-start gap-2 rounded-panel border bg-surface-2 p-4 text-left',
-    ativo ? 'border-tinta-texto' : 'border-line-strong'
+    'flex min-w-0 flex-col items-start gap-2 border-t pt-3 text-left',
+    ativo ? 'border-tinta-texto' : 'border-line'
   );
 
   if (!aoClicar) {
@@ -228,7 +236,7 @@ function CardPainel({
       aria-label={descricao}
       className={cn(
         classes,
-        'cursor-pointer transition-colors hover:border-tinta-texto hover:bg-surface-3',
+        'cursor-pointer transition-colors hover:border-tinta-texto',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
       )}
     >
@@ -291,22 +299,27 @@ function DestaqueDeCompras({
         )}
       >
         <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          {/* O rótulo vem ACIMA do número, e o número é o maior objeto da
+              tela (--text-display, o sétimo degrau, fluido de 40 a 56px).
+              Quem abre o console lê primeiro QUANTO entrou; o rótulo só é
+              procurado por quem já viu o número. Invertido — rótulo embaixo —
+              o olho pousa no texto pequeno antes do dado, que é exatamente o
+              "sem contraste" que o dono descreveu: nada dominava a tela.
+              Mono + tabular porque dinheiro se lê pela coluna do separador. */}
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-caption text-fg-muted">Quantidade</span>
-            <span className="flex items-baseline gap-2">
-              <NumeroAnimado
-                valor={compras.total}
-                casas={0}
-                className="text-data font-semibold text-fg-strong"
-              />
-              <span className="text-label text-fg-muted">{plural}</span>
-            </span>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-caption text-fg-muted">Valor</span>
-            <span className="text-data font-semibold text-fg-strong tabular-nums">
-              {dinheiro(compras.valor, compras.moeda)}
+            <span className="text-label text-fg-muted">Valor no período</span>
+            <span className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+              <span className="min-w-0 font-mono text-display font-medium text-fg-strong tabular-nums">
+                {dinheiro(compras.valor, compras.moeda)}
+              </span>
+              {/* A quantidade acompanha o valor na mesma linha de base, um
+                  degrau abaixo: é a mesma frase ("R$ X em N compras"), não um
+                  segundo indicador. `number-flow` continua aqui — é o número
+                  que troca quando o período muda. */}
+              <span className="flex shrink-0 items-baseline gap-1.5 text-data text-fg-body">
+                <NumeroAnimado valor={compras.total} casas={0} className="tabular-nums" />
+                <span className="text-label text-fg-muted">{plural}</span>
+              </span>
             </span>
           </div>
 
@@ -320,8 +333,12 @@ function DestaqueDeCompras({
           </span>
         </div>
 
-        <div className="grid min-w-0 grid-cols-1 gap-3 border-t border-line pt-3 sm:grid-cols-3">
-          <div className="flex min-w-0 flex-col gap-0.5">
+        {/* UMA linha com três pares rótulo·valor, divididos por filete — e não
+            três caixas. Três caixas diziam "três coisas diferentes"; o filete
+            diz "a mesma conta, repartida". Abaixo de sm o filete sai e os três
+            empilham, porque filete vertical em coluna única não divide nada. */}
+        <div className="grid min-w-0 grid-cols-1 gap-y-3 border-t border-line pt-3 sm:grid-cols-3 sm:gap-y-0 sm:divide-x sm:divide-line">
+          <div className="flex min-w-0 flex-col gap-0.5 sm:pr-4">
             <span className="text-caption text-fg-muted">Contam para a campanha da Meta</span>
             <span className="text-label font-semibold text-fg-strong tabular-nums">
               {compras.atribuidasMeta.total} · {dinheiro(compras.atribuidasMeta.valor, compras.moeda)}
@@ -329,7 +346,7 @@ function DestaqueDeCompras({
             <span className="text-caption text-fg-muted">Chegaram com fbclid ou cookie _fbc.</span>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-col gap-0.5 sm:px-4">
             <span className="text-caption text-fg-muted">Sem atribuição da Meta</span>
             <span className="text-label font-semibold text-fg-strong tabular-nums">
               {compras.semAtribuicaoMeta.total} ·{' '}
@@ -340,7 +357,7 @@ function DestaqueDeCompras({
             </span>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-col gap-0.5 sm:pl-4">
             <span className="text-caption text-fg-muted">Já aceitas pela Meta</span>
             <span className="text-label font-semibold text-fg-strong tabular-nums">
               {compras.enviadas} de {compras.total}
@@ -507,14 +524,17 @@ export function PainelDeEventos() {
   if (carregando && !resumo) {
     return (
       <div className="flex min-w-0 flex-col gap-4" aria-busy="true" aria-label="Montando o painel">
+        {/* O esqueleto imita a forma que vai chegar: sem caixa e sem raio de
+            painel, senão a tela pisca de "grade de cartões" para "grade de
+            números" no instante em que o dado entra. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           {Array.from({ length: 5 }, (_, i) => (
-            <Esqueleto key={i} className="h-28 rounded-panel" />
+            <Esqueleto key={i} className="h-24 rounded-control" />
           ))}
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {Array.from({ length: 6 }, (_, i) => (
-            <Esqueleto key={i} className="h-32 rounded-panel" />
+            <Esqueleto key={i} className="h-28 rounded-control" />
           ))}
         </div>
       </div>
@@ -765,10 +785,13 @@ export function PainelDeEventos() {
                   abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
                 }
               />
+              {/* Mesma forma do CardPainel ao lado — filete no topo, sem
+                  caixa. Ele não usa o componente porque o valor aqui é
+                  dinheiro formatado, não contagem animada. */}
               {receitaEnviada && (
-                <div className="flex min-w-0 flex-col items-start gap-2 rounded-panel border border-line-strong bg-surface-2 p-4">
+                <div className="flex min-w-0 flex-col items-start gap-2 border-t border-line pt-3">
                   <span className="flex w-full min-w-0 items-start justify-between gap-2">
-                    <span className="min-w-0 text-label font-medium text-fg-strong">
+                    <span className="min-w-0 text-label font-medium text-fg-muted">
                       Valor enviado à Meta
                     </span>
                     <span
@@ -781,7 +804,7 @@ export function PainelDeEventos() {
                       <ShoppingBag className="size-4" strokeWidth={1.75} />
                     </span>
                   </span>
-                  <span className="text-data font-semibold text-fg-strong">
+                  <span className="text-data font-semibold text-fg-strong tabular-nums">
                     {receitaEnviada.total.toLocaleString('pt-BR', {
                       style: 'currency',
                       currency: receitaEnviada.moeda,

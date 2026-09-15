@@ -36,10 +36,13 @@ export default async function EventosDoPainel({
     <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
         title="Quem mandou este evento"
+        // Teto de 120 caracteres (FASE 2 do v4): tinha 128 com um nome de
+        // evento curto. Encurtou o texto fixo, não o nome — é o nome que diz
+        // de qual evento é esta lista.
         description={
           <>
-            As pessoas por trás de <span className="font-mono">{evento}</span> no período. O e-mail
-            aparece mascarado; o nome, inteiro, para você achar a pessoa no backoffice.
+            Quem mandou <span className="font-mono">{evento}</span> no período. E-mail mascarado;
+            nome inteiro, para achar a pessoa no backoffice.
           </>
         }
         icon={Inbox}
