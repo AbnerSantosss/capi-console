@@ -593,43 +593,26 @@
 }
 
 /* =========================================================================
-   Fundo: malha estática de custo zero (substitui o canvas animado).
+   Fundo do <body>: uma cor, e só.
+
+   FASE 3b. Aqui moravam três radiais em --tinta (10%, 5%, 5%) fixas na
+   viewport, e mais uma classe (.app-mesh-vivo) que as fazia derivar 40s em
+   laço com @keyframes derivar-malha. Saiu tudo. Brilho radial de fundo é uma
+   das assinaturas de template que este redesenho existe para tirar (§8 do
+   plano): pinta a área no ar ATRÁS do dado, que é justamente onde cor de área
+   não deve acontecer. Quem diz em que área o operador está passou a ser o
+   sublinhado da aba (--tinta-texto), o glifo do título (--tinta) e o filete de
+   2px do Destaque — três marcas pequenas, todas em cima de algo que o operador
+   lê ou aciona.
+
+   A classe continua existindo no <body> (layout.tsx) porque é ela que garante
+   a cor da página inteira acima do <main>; o que ela não faz mais é desenhar.
+   Sem a malha animada, a preferência "Fundo com movimento" ficou sem nada para
+   ligar e saiu da tela de Preferências (o valor persistido virou no-op, veja
+   src/stores/useUserStore.ts).
    ========================================================================= */
 .app-mesh {
   background-color: var(--surface-0);
-  background-image:
-    radial-gradient(
-      ellipse 80% 50% at 15% -10%,
-      color-mix(in srgb, var(--tinta) 10%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 60% 45% at 92% 8%,
-      color-mix(in srgb, var(--tinta) 5%, transparent),
-      transparent 62%
-    ),
-    radial-gradient(
-      ellipse 70% 60% at 50% 105%,
-      color-mix(in srgb, var(--tinta) 5%, transparent),
-      transparent 65%
-    );
-  background-attachment: fixed;
-}
-
-/* Ligado só por quem marcar "Fundo com movimento" nas preferências.
-   O @media prefers-reduced-motion acima zera a animação de quem pediu. */
-.app-mesh-vivo {
-  background-size: 200% 200%;
-  animation: derivar-malha 40s ease-in-out infinite alternate;
-}
-
-@keyframes derivar-malha {
-  from {
-    background-position: 0% 0%;
-  }
-  to {
-    background-position: 100% 100%;
-  }
 }
 
 /* =========================================================================

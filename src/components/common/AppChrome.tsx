@@ -12,15 +12,14 @@ import { useUserStore } from '@/stores/useUserStore';
  */
 export function AppChrome() {
   const densidade = useUserStore((s) => s.densidade);
-  const fundoAnimado = useUserStore((s) => s.fundoAnimado);
 
   useEffect(() => {
     document.documentElement.dataset.densidade = densidade;
   }, [densidade]);
 
-  useEffect(() => {
-    document.body.classList.toggle('app-mesh-vivo', fundoAnimado);
-  }, [fundoAnimado]);
+  /* Aqui havia um segundo efeito ligando `app-mesh-vivo` no <body> conforme a
+     preferencia "Fundo com movimento". A classe deixou de existir na FASE 3b
+     (o fundo virou uma cor chapada), entao o efeito so podia ligar nada. */
 
   return null;
 }

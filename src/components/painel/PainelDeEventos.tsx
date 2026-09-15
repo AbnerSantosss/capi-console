@@ -401,7 +401,7 @@ export function PainelDeEventos() {
    *
    * 1. Nenhum `setState` síncrono dentro de efeito — é render em cascata, e o
    *    `react-hooks/set-state-in-effect` reprova no `npm run lint` (mesma
-   *    regra que o `Esqueleto` e o `animated-grid-pattern` já respeitam). Aqui
+   *    regra que o `Esqueleto` já respeita). Aqui
    *    todo `setState` acontece DEPOIS do `await`, dentro da continuação.
    * 2. `vivo` mata a corrida: trocar 7 → 30 → 90 depressa dispara três
    *    respostas, e sem a trava a primeira a voltar pode ser a última a

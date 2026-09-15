@@ -483,7 +483,12 @@ export function TagDoSite({
           </ul>
         )}
 
-        <div className="mt-4 flex flex-col gap-4 rounded-panel border border-line bg-surface-2 p-4">
+        {/* Sem contorno: este bloco é uma SUPERFÍCIE dentro do cartão, e no v4
+            superfície se separa por luz (surface-2 sobre surface-1, ΔL 0,053),
+            não por linha. Borda é vocabulário de controle — do campo, do botão,
+            do que se clica —, e a linha aqui competia com as bordas dos próprios
+            inputs que o bloco contém. */}
+        <div className="mt-4 flex flex-col gap-4 rounded-panel bg-surface-2 p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="tag-dominio-novo"

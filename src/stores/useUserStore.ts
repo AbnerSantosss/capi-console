@@ -4,9 +4,13 @@ import { persist } from 'zustand/middleware';
 /**
  * Preferencias locais do operador. Nada aqui e segredo.
  *
- * `fundoAnimado` vem desligado: o console mostra numeros e o fundo em
- * movimento competia com eles. Quem quiser pode religar nas preferencias — e
- * mesmo ligado, o CSS respeita prefers-reduced-motion.
+ * `fundoAnimado` e NO-OP desde a FASE 3b do redesign v4: o fundo do console
+ * virou uma cor chapada (sem malha, sem grade, sem rede), entao nao ha mais
+ * animacao para ligar e o controle saiu da tela de Preferencias. O campo e o
+ * setter ficam de proposito — o estado e persistido em localStorage
+ * (`capi_prefs_v3`) e remove-lo exigiria uma migracao do persist para nao
+ * quebrar quem ja tem a chave gravada. Ler o valor nao muda mais nada em
+ * lugar nenhum; nao volte a ligar comportamento nele.
  */
 export type Densidade = 'compacta' | 'padrao' | 'confortavel';
 

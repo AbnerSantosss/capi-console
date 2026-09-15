@@ -40,8 +40,6 @@ const DENSIDADES: {
 export function SettingsDialog({ open, onOpenChange }: Props) {
   const nome = useUserStore((s) => s.nome);
   const setNome = useUserStore((s) => s.setNome);
-  const fundoAnimado = useUserStore((s) => s.fundoAnimado);
-  const setFundoAnimado = useUserStore((s) => s.setFundoAnimado);
   const confeteSoEmTeste = useUserStore((s) => s.confeteSoEmTeste);
   const setConfeteSoEmTeste = useUserStore((s) => s.setConfeteSoEmTeste);
   const densidade = useUserStore((s) => s.densidade);
@@ -114,24 +112,13 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               Movimento
             </legend>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-control bg-surface-2 p-3">
-              <Checkbox
-                id="pref-fundo"
-                checked={fundoAnimado}
-                onCheckedChange={(v) => setFundoAnimado(Boolean(v))}
-                className="mt-0.5"
-              />
-              <span className="min-w-0">
-                <span className="block text-label font-medium text-fg-body">
-                  Fundo com movimento
-                </span>
-                <span className="mt-0.5 block text-caption text-fg-muted">
-                  Desligado por padrão: o movimento constante competia com os
-                  números. Quem pediu menos movimento no sistema continua sem ele.
-                </span>
-              </span>
-            </label>
-
+            {/* Aqui ficava "Fundo com movimento". Na FASE 3b o fundo do
+                console virou uma cor chapada — sem malha animada, sem grade,
+                sem rede —, então a preferência não tinha mais o que ligar.
+                Controle que não muda nada na tela é pior que controle nenhum:
+                o operador marca, não vê diferença e passa a desconfiar do
+                resto do painel. O valor gravado continua no localStorage como
+                no-op (ver src/stores/useUserStore.ts). */}
             <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line-control bg-surface-2 p-3">
               <Checkbox
                 id="pref-confete"

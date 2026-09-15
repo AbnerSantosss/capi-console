@@ -42,14 +42,12 @@ export type Hue =
   | 'qualidade'
   | 'regras';
 
-/** Textura da capa do card. Implementada em TopicBackdrop.tsx. */
-export type Textura =
-  | 'pontos'
-  | 'fluxo'
-  | 'trilha'
-  | 'grade-marcada'
-  | 'barras'
-  | 'listras';
+/* Aqui morava o type `Textura`: seis desenhos de capa (pontos, fluxo, trilha,
+   grade-marcada, barras, listras) implementados em TopicBackdrop.tsx. Os seis
+   sairam na FASE 3b e o arquivo junto. A capa do topico virou a tinta do
+   assunto a 8% num retangulo (`.cover`, guide.module.css): o assunto ja se
+   identifica pelo filete de 2px, pelo tile e pelo titulo, e desenho atras de
+   texto e ornamento, nao informacao. */
 
 export interface ItemGuia {
   id: string;
@@ -69,7 +67,6 @@ export interface Topico {
   /** Ancora da URL: /guia#<id>. */
   id: string;
   hue: Hue;
-  textura: Textura;
   icone: Icon;
   titulo: string;
   /** Uma linha, visivel com o card fechado. */
@@ -203,7 +200,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'conferir-envio',
     hue: 'conferencia',
-    textura: 'trilha',
     icone: SealCheckIcon,
     titulo: 'A venda foi para a Meta?',
     frase: 'Onde fica a prova, o que cada situação quer dizer e qual tela não responde isso.',
@@ -263,7 +259,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'como-usar',
     hue: 'manual',
-    textura: 'pontos',
     icone: CursorClickIcon,
     titulo: 'Disparo manual em 5 passos',
     frase: 'Sempre na mesma ordem. Você confere tudo antes de enviar.',
@@ -337,7 +332,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'webhook-automatico',
     hue: 'auto',
-    textura: 'fluxo',
     icone: LightningIcon,
     titulo: 'Disparo automático em 6 passos',
     frase: 'Ligar o recebimento direto da plataforma, sem copiar e colar.',
@@ -415,7 +409,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'onde-achar',
     hue: 'dados',
-    textura: 'grade-marcada',
     icone: MapTrifoldIcon,
     titulo: 'Onde achar cada dado',
     frase: 'O caminho exato dentro do Gerenciador de Eventos.',
@@ -481,7 +474,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'emq',
     hue: 'qualidade',
-    textura: 'barras',
     icone: GaugeIcon,
     titulo: 'Qualidade do evento',
     frase:
@@ -499,7 +491,6 @@ export const TOPICOS: Topico[] = [
   {
     id: 'regras',
     hue: 'regras',
-    textura: 'listras',
     icone: ShieldCheckIcon,
     titulo: 'Regras da Meta',
     frase: 'O que a API aceita e o que ela recusa.',

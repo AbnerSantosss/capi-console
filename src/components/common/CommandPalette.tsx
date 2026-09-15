@@ -61,7 +61,12 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm"
+      /* Sem `backdrop-blur`: o véu preto a 60% já separa a paleta do fundo, e
+         desfoque em véu é custo de GPU em toda a tela para um efeito que
+         ninguém consegue nomear. FASE 3b tirou os cinco do produto; só o
+         cabeçalho ficou com o dele, porque ali o conteúdo corre POR BAIXO de
+         uma barra translúcida e sem desfoque o texto se embaralha. */
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
       onClick={() => setAberta(false)}
     >
       <Command

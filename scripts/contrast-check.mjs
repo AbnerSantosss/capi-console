@@ -10,7 +10,8 @@
  *   G4  Token de cor fora do :root    DS-0.1              zero
  *   G5  Classe da ponte shadcn em componente vigiado       zero
  *   G6  font-size fora do @theme      DS-0.4              zero
- *   G7  Hexadecimal literal fora da lista de excecoes     zero
+ *   G7  Literal de cor fora da lista de excecoes          zero
+ *       (hexadecimal E TAMBEM rgb/rgba/hsl/hsla/oklch/oklab/lab/lch)
  *   G9  Token morto do v3 vivo em src/                    zero
  *
  * A numeracao pula o G8 de proposito: ela e a do `plano-redesign-visual-v4.md`,
@@ -218,16 +219,22 @@ const linhasDe = (rel) => ler(rel).split('\n');
    excecoes abaixo — o que e uma decisao visivel, e nao um esquecimento
    (DS-6.1).
 
-   Sao duas excecoes, e so duas.                                            */
+   Era duas excecoes; desde a FASE 3b e UMA so — os decorativos do Magic UI
+   sairam do repositorio e levaram junto a dispensa que tinham.              */
 
-// 1. Os DECORATIVOS. Malhas e feixes de luz: nao carregam texto nem estado,
-//    entao nao ha par de contraste a medir neles.
-const DECORATIVOS = [
-  'src/components/ui/dot-pattern.tsx',
-  'src/components/ui/grid-pattern.tsx',
-  'src/components/ui/animated-grid-pattern.tsx',
-  'src/components/ui/border-beam.tsx',
-];
+/* 1. Os DECORATIVOS — uma lista que agora esta VAZIA, e ficou assim de
+      proposito. Eram os quatro componentes do Magic UI (dot-pattern,
+      grid-pattern, animated-grid-pattern, border-beam): malhas e feixes de luz
+      que nao carregavam texto nem estado, entao nao havia par de contraste a
+      medir neles. A FASE 3b apagou os quatro do repositorio — eles eram a
+      assinatura de template mais literal que o produto tinha (§8 do plano), e
+      um ornamento que precisa de dispensa do gate para existir e, por
+      definicao, um ornamento que o gate nao consegue defender.
+
+      A lista fica aqui, vazia, em vez de sumir: e o lugar onde a proxima
+      excecao decorativa teria de ser escrita, e escrever uma e uma decisao
+      visivel, nao um esquecimento (DS-6.1). */
+const DECORATIVOS = [];
 
 /* 2. `src/components/auth/**`. A tela de login esta fora do escopo de
       qualquer redesenho desta temporada: e a DECISAO DE PRODUTO IRREVERSIVEL
@@ -412,7 +419,7 @@ function verificarFontSize() {
 }
 
 /* -------------------------------------------------------------------------
-   G7 — hexadecimal literal
+   G7 — literal de cor
    ------------------------------------------------------------------------- */
 
 /* Marca de terceiro e ornamento sem papel semantico ficam de fora: a cor da
@@ -423,13 +430,46 @@ function verificarFontSize() {
 const SEM_HEX = [
   'src/components/ui/brand-icons.tsx',
   'src/components/ui/app-mark.tsx',
-  'src/components/ui/border-beam.tsx',
-  'src/components/magicui/',
   'src/components/auth/',
   'src/app/login/',
 ];
 
 const HEX_LITERAL = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/;
+
+/* FASE 3b — o furo que o G7 tinha desde que nasceu.
+   ------------------------------------------------
+   Ate aqui esta regua so cacava `#`. Mas CSS tem meia duzia de outras formas
+   de escrever a mesma cor, e o navy do v3 sobreviveu a varredura de
+   hexadecimais da FASE 1 escondido em `rgb()` — 24 literais espalhados por
+   guide.module.css e console.module.css, incluindo o proprio azul de acao
+   (0 100 224) que o v4 deu por morto. Uma regra que so conhece uma notacao nao
+   e uma regra: e um convite a escrever a cor proibida na outra.
+
+   Agora reprovam tambem `rgb`, `rgba`, `hsl`, `hsla`, `oklch`, `oklab`, `lab`
+   e `lch`. As tres ultimas nem aparecem no produto, e e de proposito que
+   entrem: a regua existe para o dia em que alguem tentar.
+
+   A EXCECAO DO BRANCO E DO PRETO PUROS — por que ela nao afrouxa nada
+   ------------------------------------------------------------------
+   `rgb(255 255 255 / N%)` e `rgb(0 0 0 / N%)` continuam passando, e so eles.
+   O motivo e que branco e preto puros NAO TEM MATIZ: nao ha decisao de cor a
+   centralizar num token, ha decisao de LUZ. Sao os dois unicos valores que o
+   sistema usa como material fisico e nao como cor — o realce interno de uma
+   superficie (`--realce-interno`, uma aresta de luz de 7%) e a sombra que ela
+   projeta (`--sombra-cartao`). Escrever isso como token de cor seria pior: o
+   token diria "esta e a cor da sombra" quando o que existe e "a sombra e a
+   ausencia de luz a 35%", e a primeira pessoa a trocar o valor do token
+   pintaria sombra colorida no produto inteiro.
+
+   Qualquer outro componente reprova, inclusive os quase-pretos e os
+   quase-brancos: `rgb(18 21 26 / 97%)` e exatamente o tipo de valor que esta
+   excecao NAO cobre — ele tem matiz (e azulado), e foi assim que o navy
+   atravessou a FASE 1. E a excecao e so para `rgb`/`rgba`: `hsl(0 0% 0%)` e
+   `oklch(0 0 0)` tambem sao preto, mas notacao que existe PARA expressar matiz
+   nao tem por que ser usada onde nao ha matiz nenhum. */
+const COR_FUNCIONAL = /\b(?:oklch|oklab|rgba?|hsla?|lab|lch)\([^()]*\d[^()]*\)/g;
+const NEUTRO_PURO =
+  /^(?:rgba?)\(\s*(?:255[\s,]+255[\s,]+255|0[\s,]+0[\s,]+0)\s*(?:[/,]\s*[\d.]+%?\s*)?\)$/;
 
 function verificarHexLiteral() {
   const problemas = [];
@@ -447,18 +487,31 @@ function verificarHexLiteral() {
     linhas.forEach((linha, i) => {
       const inicioDaLinha = deslocamento;
       deslocamento += linha.length + 1;
-      if (!HEX_LITERAL.test(linha)) return;
-      // O :root de globals.css e o unico lugar do produto onde um hex e a
-      // definicao, e nao uma copia.
-      if (rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim)
-        return;
+
+      // O :root de globals.css e o unico lugar do produto onde um literal de
+      // cor e a definicao, e nao uma copia.
+      const naRaiz =
+        rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim;
+      if (naRaiz) return;
       // DS-1.5: os seis matizes do Guia. Excecao nomeada e auditada.
       if (/--hue\s*:/.test(linha)) return;
-      problemas.push([
-        `${rel}:${i + 1}`,
-        (linha.match(HEX_LITERAL) || [''])[0],
-        'use um token de globals.css',
-      ]);
+
+      if (HEX_LITERAL.test(linha)) {
+        problemas.push([
+          `${rel}:${i + 1}`,
+          (linha.match(HEX_LITERAL) || [''])[0],
+          'use um token de globals.css',
+        ]);
+      }
+
+      for (const achado of linha.match(COR_FUNCIONAL) ?? []) {
+        if (NEUTRO_PURO.test(achado.replace(/\s+/g, ' '))) continue;
+        problemas.push([
+          `${rel}:${i + 1}`,
+          achado,
+          'use um token de globals.css (so branco e preto puros passam)',
+        ]);
+      }
     });
   }
 
@@ -906,9 +959,10 @@ rodarLista(
 
 rodarLista(
   'G7',
-  'Hexadecimal literal fora do :root',
+  'Literal de cor fora do :root (hex, rgb, hsl, oklch...)',
   verificarHexLiteral(),
-  `nenhum hex solto; themeColor == --surface-0 (${S0})`
+  `nenhum literal cromatico solto — so branco e preto puros em rgb(); ` +
+    `themeColor == --surface-0 (${S0})`
 );
 
 rodarLista(

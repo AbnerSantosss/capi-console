@@ -15,12 +15,10 @@ import { TOPICOS } from '@/components/guide/conteudo';
 import { GuideHero } from '@/components/guide/GuideHero';
 import { GuideIndex } from '@/components/guide/GuideIndex';
 import { TopicCard } from '@/components/guide/TopicCard';
-import { useUserStore } from '@/stores/useUserStore';
 import consoleStyles from '@/components/layout/console.module.css';
 
 export default function Guia() {
   const [abertos, setAbertos] = useState<string[]>([]);
-  const animar = usePodeAnimar();
 
   // Ancora da URL manda: /guia#emq chega do console ja no assunto certo.
   useEffect(() => {
@@ -65,7 +63,7 @@ export default function Guia() {
 
   return (
     <main className={consoleStyles.page}>
-      <GuideHero animar={animar} />
+      <GuideHero />
 
       <div className={consoleStyles.guideGrid}>
         <GuideIndex onIr={irPara} />
@@ -77,7 +75,6 @@ export default function Guia() {
               topico={topico}
               aberto={abertos.includes(topico.id)}
               onToggle={alternar}
-              animar={animar}
             />
           ))}
         </div>
@@ -86,19 +83,9 @@ export default function Guia() {
   );
 }
 
-/** Movimento so com a preferencia ligada e sem prefers-reduced-motion. */
-function usePodeAnimar() {
-  const fundoAnimado = useUserStore((s) => s.fundoAnimado);
-  const [calmo, setCalmo] = useState(true);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const avaliar = () => setCalmo(mq.matches);
-    avaliar();
-    mq.addEventListener('change', avaliar);
-    return () => mq.removeEventListener('change', avaliar);
-  }, []);
-
-  return fundoAnimado && !calmo;
-}
+/* Aqui vivia o `usePodeAnimar`, que cruzava a preferencia "Fundo com
+   movimento" com o prefers-reduced-motion para decidir se as capas dos topicos
+   e o feixe dos caminhos podiam se mexer. Na FASE 3b nada mais se mexe nesta
+   pagina: as capas viraram retangulo de tinta e o feixe saiu. Hook que decide
+   sobre movimento inexistente e so mais um lugar para o proximo leitor achar
+   que existe animacao aqui. */

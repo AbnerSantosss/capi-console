@@ -10,7 +10,6 @@
 
 import { BookOpenIcon, LightningIcon, SignpostIcon } from '@phosphor-icons/react';
 
-import { DotPattern } from '@/components/ui/dot-pattern';
 import { useEstadoAutomatico } from '@/hooks/useEstadoAutomatico';
 import { CAMINHOS } from './conteudo';
 import { PathCard } from './PathCard';
@@ -24,16 +23,16 @@ const ESTADO_AUTO: Record<string, string> = {
   producao: 'Ligado em produção: as conversões entram nas métricas reais.',
 };
 
-export function GuideHero({ animar }: { animar: boolean }) {
+export function GuideHero() {
   const automatico = useEstadoAutomatico();
-  const autoAtivo = automatico.carregado && automatico.regrasAuto > 0;
 
+  /* O `ativo` saiu junto com o feixe de borda que ele acendia (ver PathCard).
+     Qual caminho esta em uso agora continua dito onde sempre esteve escrito:
+     na linha "Agora" de cada cartao. */
   const cards = CAMINHOS.map((caminho) => (
     <PathCard
       key={caminho.id}
       caminho={caminho}
-      animar={animar}
-      ativo={caminho.id === 'auto' ? autoAtivo : !autoAtivo}
       estado={
         caminho.id === 'auto'
           ? ESTADO_AUTO[automatico.situacao]
@@ -42,14 +41,12 @@ export function GuideHero({ animar }: { animar: boolean }) {
     />
   ));
 
+  /* Sem malha de pontos por tras do titulo: o DotPattern do Magic UI saiu do
+     repositorio na FASE 3b. Superficie do v4 se separa por luz, nao por
+     enfeite — e malha de pontos e a assinatura de template mais copiada que
+     existe. */
   return (
     <section className={styles.hero} aria-labelledby="guia-titulo">
-      <DotPattern
-        width={24}
-        height={24}
-        cr={1.1}
-        className={styles.heroPattern}
-      />
       <div className={styles.heroInner}>
         <p className="flex items-center gap-2 text-caption font-bold tracking-[0.14em] text-tinta-texto uppercase">
           <BookOpenIcon size={15} weight="duotone" aria-hidden />

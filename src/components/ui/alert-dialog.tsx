@@ -44,7 +44,11 @@ function AlertDialogBackdrop({
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-backdrop"
       className={cn(
-        'fixed inset-0 isolate z-50 bg-black/60 duration-100 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0',
+        // Véu preto a 60%, sem desfoque: FASE 3b tirou o `backdrop-blur` de
+        // todo o produto menos do cabeçalho. Aqui ele era condicionado a
+        // `supports-backdrop-filter`, ou seja, a tela já tinha de funcionar
+        // sem ele — e funcionava.
+        'fixed inset-0 isolate z-50 bg-black/60 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0',
         className
       )}
       {...props}

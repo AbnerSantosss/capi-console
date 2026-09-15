@@ -28,25 +28,21 @@
 
 /* ---------------------------------------------------------------- hero -- */
 
+/* FASE 3b. O topo do Guia tinha, empilhados, um veu azul de 22% (o azul de
+   acao do v3, escrito como rgb 0 100 224 a 22% — a mesma cor que a FASE 1
+   tirou dos hexadecimais e que sobreviveu aqui porque o gate G7 so cacava
+   `#`), um veu roxo de 14% e, por cima, uma malha de pontos do Magic UI
+   mascarada em elipse (`.heroPattern`). Saiu tudo. A superficie se separa da
+   pagina pela LUZ (surface-1 sobre surface-0, ΔL 0,061 — G3'), nao por veu
+   colorido nem por contorno: a borda de 1px tambem saiu, porque borda no v4 e
+   vocabulario de controle, nao de superficie. */
 .hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   margin-bottom: 28px;
-  border: 1px solid var(--border-default);
   border-radius: 16px;
-  background:
-    radial-gradient(ellipse 720px 260px at 12% 0%, rgb(0 100 224 / 22%), transparent 70%),
-    radial-gradient(ellipse 620px 240px at 92% 8%, rgb(167 139 250 / 14%), transparent 70%),
-    var(--surface-1);
-}
-
-.heroPattern {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  color: rgb(147 197 253 / 45%);
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black 10%, transparent 78%);
+  background: var(--surface-1);
 }
 
 .heroInner {
@@ -111,9 +107,11 @@
   border: 1px solid color-mix(in srgb, var(--hue) 38%, transparent);
   border-left: 3px solid var(--hue);
   border-radius: 12px;
-  background:
-    linear-gradient(120deg, color-mix(in srgb, var(--hue) 14%, transparent), transparent 58%),
-    rgb(14 18 25 / 94%);
+  /* Era um gradiente de 120deg sobre rgb 14 18 25 a 94% — o navy do v3
+     escrito a mao. Virou uma chapa so: a tinta do assunto a 8% sobre a
+     superficie do cartao. Gradiente nao e vocabulario do v4, e a cor de fundo
+     precisa vir de token para o gate conseguir medir o contraste do texto. */
+  background: color-mix(in srgb, var(--hue) 8%, var(--surface-1));
   padding: 14px 14px 14px 13px;
 }
 
@@ -210,19 +208,19 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--hue) 34%, transparent);
   border-radius: 14px;
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--hue) 12%, transparent), transparent 62%),
-    rgb(14 18 25 / 92%);
+  background: color-mix(in srgb, var(--hue) 8%, var(--surface-1));
   padding: 16px;
 }
 
+/* O filete de 2px do topo: a marca de assunto do cartao. Era um gradiente que
+   se dissolvia em 82%; virou linha cheia, como o filete do Destaque. */
 .pathCard::before {
   position: absolute;
   top: 0;
   right: 0;
   left: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--hue), transparent 82%);
+  background: var(--hue);
   content: '';
 }
 
@@ -274,8 +272,7 @@
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--hue) 32%, transparent);
   border-radius: 13px;
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--hue) 22%, transparent), rgb(18 21 26 / 88%));
+  background: color-mix(in srgb, var(--hue) 16%, var(--surface-2));
   /* DS-1.5: o matiz identifica o tile pela BORDA e pelo fundo, nunca pelo
      glifo. Como cor de glifo ele nao passa pelo contrast-check e reprovava
      em 4 dos 6 topicos. */
@@ -297,7 +294,7 @@
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: 14px;
-  background: rgb(18 21 26 / 97%);
+  background: var(--surface-1);
   box-shadow: 0 18px 48px rgb(0 0 0 / 16%);
   scroll-margin-top: 108px;
 }
@@ -308,21 +305,21 @@
   right: 0;
   left: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--hue), transparent 78%);
+  background: var(--hue);
   content: '';
   z-index: 2;
 }
 
+/* A capa do topico: a tinta do assunto a 8% num retangulo, e nada mais.
+   Aqui corriam seis texturas — pontos e grade do Magic UI, linhas tracejadas
+   que se moviam sozinhas, uma trilha com paradas, barras e listras — mais um
+   `.coverFade` que dissolvia a textura no cartao. O assunto se identifica pelo
+   filete de 2px, pelo tile e pelo titulo; o desenho atras nao dizia nada que o
+   texto ja nao dissesse e era ornamento com forma reconhecivel. Sem textura
+   para dissolver, o fade tambem perdeu a funcao. */
 .cover {
-  position: relative;
   height: 72px;
-  overflow: hidden;
-}
-
-.coverFade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, transparent 15%, rgb(18 21 26 / 97%) 96%);
+  background: color-mix(in srgb, var(--hue) 8%, transparent);
 }
 
 .topicHead {
@@ -440,16 +437,19 @@
   gap: 8px;
 }
 
+/* O passo se separa do corpo do topico pela luz (surface-2 sobre surface-1,
+   ΔL 0,053 — G3'), nao por contorno: a borda de 1px saiu. Aberto, ele ganha a
+   tinta do assunto a 10% — a diferenca de estado continua visivel sem que a
+   linha volte. Os dois fundos eram rgb 23 30 41 a 55% e a 78%: navy do v3
+   escrito a mao, invisivel para a varredura de hexadecimais da FASE 1. */
 .step {
-  border: 1px solid var(--border-subtle);
   border-radius: 11px;
-  background: rgb(23 30 41 / 55%);
+  background: var(--surface-2);
   overflow: hidden;
 }
 
 .stepOpen {
-  border-color: color-mix(in srgb, var(--hue) 34%, transparent);
-  background: rgb(23 30 41 / 78%);
+  background: color-mix(in srgb, var(--hue) 10%, var(--surface-2));
 }
 
 .stepHead {
@@ -666,9 +666,8 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border: 1px solid var(--border-default);
     border-radius: 12px;
-    background: rgb(18 21 26 / 94%);
+    background: var(--surface-1);
     padding: 10px;
   }
 

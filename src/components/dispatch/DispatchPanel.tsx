@@ -248,7 +248,11 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
   return (
     <>
       <div
-        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0/95 backdrop-blur-md xl:hidden"
+        /* Fundo OPACO, não 95% com desfoque: a translucidez só existia para
+           justificar o `backdrop-blur`, e a barra que carrega o botão de
+           disparar é o último lugar do produto onde o fundo deve tremer. Sem o
+           desfoque, 95% seria só uma chance de o número de trás vazar. */
+        className="sticky bottom-0 z-30 border-t border-line-strong bg-surface-0 xl:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">

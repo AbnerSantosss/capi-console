@@ -50,12 +50,29 @@ import { cn } from '@/lib/utils';
  * mostra exatamente as mesmas cinco seções com os rótulos curtos. Duas listas
  * paralelas seriam duas navegações que discordam na primeira mudança.
  */
+/* `area` é o mesmo valor que o <main> da rota declara em `data-area`. Ele entra
+   aqui na FASE 3b para que o sublinhado da aba ativa possa ser a tinta da área
+   de DESTINO: sem isso o cabeçalho fica fora de qualquer `[data-area]` e as
+   cinco abas herdariam a tinta padrão do :root, que é a do Painel — cinco
+   seções, uma cor só, e a régua deixaria de dizer onde você está. */
 export const SECOES = [
-  { href: '/painel', rotulo: 'Painel', curto: 'Painel', icon: Gauge },
-  { href: '/instalacao', rotulo: 'Instalação', curto: 'Instalar', icon: Plug },
-  { href: '/pixels', rotulo: 'Pixels', curto: 'Pixels', icon: Target },
-  { href: '/', rotulo: 'Disparo manual', curto: 'Manual', icon: Send },
-  { href: '/automatico', rotulo: 'Disparo automático', curto: 'Auto', icon: Workflow },
+  { href: '/painel', rotulo: 'Painel', curto: 'Painel', icon: Gauge, area: 'painel' },
+  {
+    href: '/instalacao',
+    rotulo: 'Instalação',
+    curto: 'Instalar',
+    icon: Plug,
+    area: 'instalacao',
+  },
+  { href: '/pixels', rotulo: 'Pixels', curto: 'Pixels', icon: Target, area: 'pixels' },
+  { href: '/', rotulo: 'Disparo manual', curto: 'Manual', icon: Send, area: 'manual' },
+  {
+    href: '/automatico',
+    rotulo: 'Disparo automático',
+    curto: 'Auto',
+    icon: Workflow,
+    area: 'automatico',
+  },
 ] as const;
 
 /** `/` só está ativo em `/`; as outras casam por prefixo (abas e âncoras). */
@@ -166,23 +183,25 @@ export function Header() {
           estreitas desceu para a barra de abas do rodapé, que é onde o polegar
           alcança, e o estado do automático entrou na pílula de ambiente. */}
       <div className="mx-auto flex h-[var(--altura-cabecalho)] w-full max-w-cabecalho items-center gap-2.5 px-4 sm:px-6 lg:px-8">
-        {/* Marca do produto. O vetor é o oficial (`ui/app-mark.tsx`) — a
-            moldura é só um quadrado de superfície, não um desenho novo.
-            O gradiente azul que estava aqui saiu por dois motivos somados:
-            a cor não existe mais (o acento virou papel) e "ícone claro dentro
-            de quadradinho com gradiente" é a assinatura de template que este
-            redesenho existe para tirar. A moldura inteira sai na FASE 3. */}
+        {/* Marca do produto: o vetor oficial (`ui/app-mark.tsx`) desenhado na
+            cor do texto forte, e mais nada.
+
+            FASE 3b, como estava previsto: caiu a moldura de 26px — quadrado de
+            superfície, cantos arredondados e realce interno — que sobrou da
+            FASE 1, quando só o gradiente azul de dentro dela tinha saído.
+            "Ícone dentro de quadradinho" é a assinatura de template do §8: o
+            quadrado não distinguia marca nenhuma (qualquer produto tem um), e
+            ainda fazia a marca disputar peso com o nome escrito ao lado. Sem
+            caixa, o vetor cresce de 16 para 22px e vira a coisa que ele é. */}
         <Link
           href="/painel"
           aria-label={`${NOME_PRODUTO} — ir para o Painel`}
           className="flex shrink-0 items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
         >
-          <span className="grid size-[1.625rem] shrink-0 place-items-center rounded-control bg-surface-2 text-fg-strong shadow-realce-forte">
-            <AppMark size={16} className="text-fg-strong" />
-          </span>
+          <AppMark size={22} className="shrink-0 text-fg-strong" />
           {/* Some só na faixa de 80rem a 92rem: é onde o menu já está na linha
-              e o espaço acaba. O quadrado com a marca fica, e o `aria-label`
-              do link continua dizendo o nome por extenso. */}
+              e o espaço acaba. A marca fica, e o `aria-label` do link continua
+              dizendo o nome por extenso. */}
           <span className="hidden text-label font-semibold tracking-tight text-fg-strong sm:inline xl:hidden barra:inline">
             {NOME_PRODUTO}
           </span>
@@ -206,14 +225,20 @@ export function Header() {
               <Link
                 key={item.href}
                 href={item.href}
+                data-area={item.area}
                 aria-current={ativo ? 'page' : undefined}
                 className={cn(
-                  // A linha de 2px na tinta da área assenta na borda de baixo
-                  // do cabeçalho: é a régua que diz onde você está, e não um
-                  // retângulo azul de fundo (azul é ação, não localização).
+                  // A linha de 2px assenta na borda de baixo do cabeçalho: é a
+                  // régua que diz onde você está, e não um retângulo de fundo
+                  // (cor cheia é ação, não localização — a pílula nunca volta).
+                  // Ela é `--tinta-texto`, e não `--tinta`: a tinta de fundo
+                  // mora entre 6% e 16% e, numa linha de 2px sobre o cabeçalho,
+                  // ficava fraca demais para ser lida como marca de lugar. A de
+                  // texto é a versão que existe justamente para aguentar pouco
+                  // pixel — é a mesma cor do link e do anel de foco da área.
                   'group relative flex h-[var(--altura-cabecalho)] items-center px-0.5',
                   ativo &&
-                    'after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-tinta'
+                    'after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-tinta-texto'
                 )}
               >
                 <span

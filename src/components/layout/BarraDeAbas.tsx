@@ -34,7 +34,11 @@ export function BarraDeAbas() {
   return (
     <nav
       aria-label="Seções"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface-0/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-md xl:hidden"
+      /* Fundo OPACO desde a FASE 3b. Os 92% existiam para dar o que desfocar
+         ao `backdrop-blur`; sem ele, translucidez aqui é só o conteúdo da
+         página aparecendo por trás dos rótulos de navegação. E a página já
+         reserva o espaço da barra, então não há nada correndo atrás dela. */
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface-0 pb-[env(safe-area-inset-bottom)] xl:hidden"
     >
       {SECOES.map((item) => {
         const Icon = item.icon;

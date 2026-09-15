@@ -3,8 +3,12 @@
 /**
  * Card de um dos dois caminhos ate a Meta.
  *
- * O feixe de borda (BorderBeam) so corre no caminho que esta ATIVO. Se ele
- * corresse nos dois viraria enfeite; correndo em um so, ele informa.
+ * FASE 3b: saiu daqui o feixe de luz que corria pela borda do caminho ativo
+ * (BorderBeam, do Magic UI, que saiu do repositorio junto). A intencao era boa
+ * — so o caminho em uso brilhava, entao o brilho informava —, mas quem ve a
+ * tela ve um feixe de gradiente correndo, que e a assinatura de template do §8;
+ * e a informacao "este e o caminho em uso" ja esta escrita em texto, na linha
+ * "Agora" do proprio cartao. Estado se le, nao se pisca.
  *
  * Icone: Phosphor duotone, e so aqui e nos tiles de topico. Todo controle
  * (botao, input, menu) continua em Lucide.
@@ -12,7 +16,6 @@
 
 import Link from 'next/link';
 
-import { BorderBeam } from '@/components/ui/border-beam';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Caminho } from './conteudo';
@@ -22,30 +25,15 @@ import styles from './guide.module.css';
 export function PathCard({
   caminho,
   estado,
-  ativo,
-  animar,
 }: {
   caminho: Caminho;
   /** Linha de estado: "sempre disponível", "Desligado", "1 em produção". */
   estado: string;
-  /** Este e o caminho em uso agora. */
-  ativo: boolean;
-  animar: boolean;
 }) {
   const Icone = caminho.icone;
 
   return (
     <div className={cn(styles.pathCard, CLASSE_HUE[caminho.hue])}>
-      {ativo && animar && (
-        <BorderBeam
-          size={110}
-          duration={9}
-          borderWidth={1.4}
-          colorFrom="transparent"
-          colorTo="var(--hue)"
-        />
-      )}
-
       <div className="flex items-start gap-3">
         <span className={cn(styles.tile, styles.tileSm)} aria-hidden>
           <Icone size={24} weight="duotone" />

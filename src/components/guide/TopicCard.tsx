@@ -20,7 +20,6 @@ import type { Topico } from './conteudo';
 import { CLASSE_HUE } from './hue';
 import { RichText } from './RichText';
 import { StepDisclosure } from './StepDisclosure';
-import { TopicBackdrop } from './TopicBackdrop';
 import styles from './guide.module.css';
 
 /** Pesos e descricoes vem de src/lib/emq.ts — fonte unica. */
@@ -30,12 +29,10 @@ export function TopicCard({
   topico,
   aberto,
   onToggle,
-  animar,
 }: {
   topico: Topico;
   aberto: boolean;
   onToggle: (id: string) => void;
-  animar: boolean;
 }) {
   const Icone = topico.icone;
   const idCorpo = `${topico.id}-corpo`;
@@ -46,11 +43,12 @@ export function TopicCard({
       aria-labelledby={`${topico.id}-titulo`}
       className={cn(styles.topic, CLASSE_HUE[topico.hue])}
     >
-      <TopicBackdrop
-        textura={topico.textura}
-        animar={animar}
-        pesos={PARAMETROS.map((p) => p.peso)}
-      />
+      {/* A capa: a tinta do assunto a 8% num retangulo de 72px. Antes cada
+          topico tinha um desenho proprio (pontos, linhas que corriam sozinhas,
+          trilha, grade, barras, listras), dissolvido no cartao por um fade. O
+          desenho nunca dizia nada que o texto ao lado ja nao dissesse — e uma
+          capa com forma reconhecivel e o que faz o produto parecer template. */}
+      <div className={styles.cover} aria-hidden />
 
       <button
         type="button"
