@@ -329,11 +329,12 @@ function temCliqueDaMeta(i: ItemResumivel): boolean {
 }
 
 /**
- * Quantidade e valor de um punhado de compras. Valor `null` quando há mais de
- * uma moeda dentro — ver `ValorDeCompras`.
+ * Quantidade e valor de um punhado de compras. Valor `null` SÓ quando o recorte
+ * tem mais de uma moeda dentro — ver `ValorDeCompras`. Recorte vazio soma zero:
+ * não ter compra nenhuma não é misturar moeda.
  */
-function somar(itens: ItemResumivel[], moedaUnica: string | null): ValorDeCompras {
-  if (moedaUnica === null) return { total: itens.length, valor: null };
+function somar(itens: ItemResumivel[], misturouMoedas: boolean): ValorDeCompras {
+  if (misturouMoedas) return { total: itens.length, valor: null };
   const soma = itens.reduce(
     (s, i) => (typeof i.valor === 'number' && Number.isFinite(i.valor) ? s + i.valor : s),
     0
@@ -408,6 +409,11 @@ export function resumirInbox(
   const moedasDeCompra = new Set(
     compras.filter((i) => typeof i.valor === 'number' && Number.isFinite(i.valor)).map((i) => i.moeda ?? 'BRL')
   );
+  // `> 1` e não `!== 1`: um recorte SEM nenhuma compra com valor não misturou
+  // moeda nenhuma — ele só não tem dinheiro para somar, e a soma de nada é
+  // zero. Tratar os dois casos como o mesmo fazia o painel de um período com
+  // zero compras exibir o aviso de "moedas diferentes", que é falso.
+  const misturouMoedas = moedasDeCompra.size > 1;
   const moedaDeCompra = moedasDeCompra.size === 1 ? [...moedasDeCompra][0] : null;
   const comprasComClique = compras.filter(temCliqueDaMeta);
   const comprasSemClique = compras.filter((i) => !temCliqueDaMeta(i));
@@ -447,11 +453,11 @@ export function resumirInbox(
     porEvento,
     receitaEnviada,
     compras: {
-      ...somar(compras, moedaDeCompra),
+      ...somar(compras, misturouMoedas),
       moeda: moedaDeCompra,
       enviadas: compras.filter((i) => i.status === 'disparado').length,
-      atribuidasMeta: somar(comprasComClique, moedaDeCompra),
-      semAtribuicaoMeta: somar(comprasSemClique, moedaDeCompra),
+      atribuidasMeta: somar(comprasComClique, misturouMoedas),
+      semAtribuicaoMeta: somar(comprasSemClique, misturouMoedas),
     },
   };
 }
