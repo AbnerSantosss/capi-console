@@ -11,6 +11,7 @@
  * precisam conseguir abrir um topico.
  */
 
+import Image from 'next/image';
 import { ChevronDown, Lock, ShieldCheck, Webhook } from '@/components/ui/icones';
 
 import { calcularEmq } from '@/lib/emq';
@@ -43,12 +44,29 @@ export function TopicCard({
       aria-labelledby={`${topico.id}-titulo`}
       className={cn(styles.topic, CLASSE_HUE[topico.hue])}
     >
-      {/* A capa: a tinta do assunto a 8% num retangulo de 72px. Antes cada
-          topico tinha um desenho proprio (pontos, linhas que corriam sozinhas,
-          trilha, grade, barras, listras), dissolvido no cartao por um fade. O
-          desenho nunca dizia nada que o texto ao lado ja nao dissesse — e uma
-          capa com forma reconhecivel e o que faz o produto parecer template. */}
-      <div className={styles.cover} aria-hidden />
+      {/* A capa: a tinta do assunto a 8% na faixa e, encostado a direita, o
+          objeto do assunto em papel creme. Antes cada topico tinha um desenho
+          gerado (pontos, linhas que corriam sozinhas, trilha, grade, barras,
+          listras) dissolvido no cartao por um fade — forma reconhecivel de
+          template, e nada que o texto ao lado ja nao dissesse.
+
+          A imagem e DECORACAO: `alt=""` + `aria-hidden` a tiram da ordem de
+          leitura, e ela nao recebe clique (o cabecalho inteiro logo abaixo e
+          que abre o topico). `capa` e opcional — sem arquivo, a faixa fica so
+          com a tinta, exatamente como estava. */}
+      <div className={styles.cover} aria-hidden>
+        {topico.capa && (
+          <Image
+            src={topico.capa}
+            alt=""
+            aria-hidden
+            width={256}
+            height={256}
+            sizes="96px"
+            className={styles.coverArt}
+          />
+        )}
+      </div>
 
       <button
         type="button"

@@ -310,16 +310,44 @@
   z-index: 2;
 }
 
-/* A capa do topico: a tinta do assunto a 8% num retangulo, e nada mais.
-   Aqui corriam seis texturas — pontos e grade do Magic UI, linhas tracejadas
-   que se moviam sozinhas, uma trilha com paradas, barras e listras — mais um
-   `.coverFade` que dissolvia a textura no cartao. O assunto se identifica pelo
-   filete de 2px, pelo tile e pelo titulo; o desenho atras nao dizia nada que o
-   texto ja nao dissesse e era ornamento com forma reconhecivel. Sem textura
-   para dissolver, o fade tambem perdeu a funcao. */
+/* A capa do topico: a tinta do assunto a 8% na faixa e, encostado a direita,
+   o objeto do assunto em papel creme (`coverArt`). Aqui corriam seis texturas
+   — pontos e grade do Magic UI, linhas tracejadas que se moviam sozinhas, uma
+   trilha com paradas, barras e listras — mais um `.coverFade` que dissolvia a
+   textura no cartao; era desenho gerado com forma reconhecivel, a assinatura
+   de template que o v4 existe para tirar.
+
+   A tinta continua sendo o FUNDO: o objeto so pousa em cima dela. 72px eram
+   pouco para um objeto respirar, entao a faixa subiu para 84px (108px no
+   sm) — o recuo negativo do `.topicHead` nao muda, logo o tile continua
+   mordendo a faixa na mesma medida de sempre. */
 .cover {
-  height: 72px;
+  position: relative;
+  height: 84px;
+  overflow: hidden;
   background: color-mix(in srgb, var(--hue) 8%, transparent);
+}
+
+/* O objeto da capa. Vai a DIREITA porque a esquerda e do tile e do titulo, que
+   sobem por cima da faixa: nada de imagem atras de texto. Encosta na mesma
+   margem lateral do `.topicHead` (16px aqui, 24px no sm), com folga em cima e
+   embaixo — os seis arquivos sao 256x256 com o objeto quase colado na borda,
+   entao todo o respiro tem de vir daqui. Sem clique: quem abre o topico e o
+   cabecalho inteiro logo abaixo.
+
+   A altura vem escrita (`calc`), e nao de `top` + `bottom`: em elemento
+   substituido posicionado, `height: auto` usa a altura INTRINSECA — os 256px
+   do arquivo — e o `bottom` e simplesmente ignorado. Com a altura fixada, a
+   largura `auto` sai sozinha da proporcao 1:1 do arquivo. */
+.coverArt {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  width: auto;
+  height: calc(100% - 20px);
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
 }
 
 .topicHead {
@@ -620,8 +648,18 @@
     padding: 32px 24px 26px;
   }
 
+  /* Faixa mais alta da largura do tablet para cima — e o objeto da capa cresce
+     junto, porque a altura dele e a da faixa menos a folga. O recuo lateral
+     acompanha o do `.topicHead` logo abaixo (24px), para o objeto ficar na
+     mesma margem direita do resto do cartao. */
   .cover {
-    height: 96px;
+    height: 108px;
+  }
+
+  .coverArt {
+    top: 12px;
+    right: 24px;
+    height: calc(100% - 24px);
   }
 
   .topicHead {

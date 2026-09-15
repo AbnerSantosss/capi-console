@@ -56,20 +56,131 @@
   content: '';
 }
 
-/* Ruido fino. A UNICA camada desenhada que sobrou, e ela e textura, nao
+/* O video de fundo, em laco.
+
+   Entrou por pedido do dono, depois da FASE 3b ter tirado a grade, a teia e as
+   radiais de tinta. Ele contraria aquela regra de frente: placa de circuito e
+   forma reconhecivel, e o material e azul. O que o segura no lugar de fundo,
+   em vez de virar desenho, sao os tres numeros abaixo.
+
+   1. `opacity: 0.18`. Acima disso as trilhas passam a competir com o texto do
+      Painel — que e numero pequeno sobre superficie grande, o caso mais fragil
+      de contraste do produto. Abaixo de 0.12 o video some e a pagina so ficou
+      1,9 MB mais pesada a toa.
+
+   2. O veu do `::after`. Opacidade sozinha clareia a tela inteira por igual,
+      inclusive atras dos blocos de dado. O veu devolve `--surface-0` solido
+      dos 55% para baixo, que e onde ficam as tabelas e as listas; o movimento
+      sobra no alto, atras do cabecalho, que e area de titulo.
+
+   3. `object-fit: cover`. O arquivo tem proporcao fixa e a janela nao —
+      `cover` corta, `fill` deformaria a trilha, e trilha deformada e a unica
+      coisa que denuncia um fundo esticado.
+
+   O laco e vai-e-volta (o ffmpeg concatenou a peca com ela mesma ao contrario)
+   porque o original abre quase preto e fecha cheio: em laco simples dava um
+   pulo a cada 10s. Por isso os arquivos tem 20s e nao 10s.
+
+   Fica ABAIXO do `.noise` na arvore, entao o grao cai por cima do video — e o
+   que tira dele o brilho de renderizacao e o deixa no mesmo material do resto
+   da tela. */
+.fundoVideo {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+}
+
+.fundoVideo::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0, var(--surface-0) 55%);
+  content: '';
+}
+
+.fundoVideo video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A peca deitada e a padrao; a em pe so existe no retrato estreito. O corte e
+   o mesmo 48rem do resto do arquivo. `display: none` nao e so estetica aqui:
+   e o que impede o telefone de baixar a peca de desktop, porque video oculto
+   com `preload="none"` nao abre conexao. */
+.fundoVideoMobile {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .fundoVideoDesktop {
+    display: none;
+  }
+
+  .fundoVideoMobile {
+    display: block;
+  }
+}
+
+/* Quem pediu menos movimento recebe a mesma imagem, parada. Nao e o fundo
+   antigo de volta: seria uma segunda identidade visual para a mesma tela. O
+   quadro e o do meio do laco (o estado cheio), servido como imagem de 45 KB
+   em vez dos 1,9 MB de video, e os videos saem da arvore de renderizacao. */
+@media (prefers-reduced-motion: reduce) {
+  .fundoVideo video {
+    display: none;
+  }
+
+  .fundoVideo {
+    background-image: url('/brand/fundo/console-desktop.jpg');
+    background-position: center;
+    background-size: cover;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 48rem) {
+  .fundoVideo {
+    background-image: url('/brand/fundo/console-mobile.jpg');
+  }
+}
+
+/* Grao fino. A UNICA camada desenhada que sobrou, e ela e textura, nao
    desenho: sem ela as superficies grandes ficam com cara de chapa. Saiu daqui
    a grade de 32px (nas duas versoes, a estatica em CSS e a animada do motion,
    `.grade` / `.gridLayer` / `.gridStatic`) e a rede de eventos em SVG
    (`.network`), que pintava uma teia na tinta da area no canto de cima. Grade
    e teia sao ornamento com forma reconhecivel — exatamente o que o movimento
-   "fundo: quase preto, grao, e nada mais" tira. */
+   "fundo: quase preto, grao, e nada mais" tira.
+
+   O grao agora e fibra de papel fotografada (`/brand/papel.webp`, 1024px,
+   63 KB), no lugar do `feTurbulence` que o ConsoleBackground calculava. Os
+   tres numeros abaixo foram MEDIDOS no arquivo, nao chutados:
+
+   1. `background-size: 320px` — a 1024px a fibra do arquivo vive entre 1 e
+      4px; reduzida 3,2x ela cai para a casa do pixel, que e a escala em que o
+      `feTurbulence` de `baseFrequency: 0.82` trabalhava. Acima disso (512px)
+      o grao vira nuvem; abaixo (256px) o ladrilho se repete a toa.
+
+   2. `mix-blend-mode: soft-light` — e nao `overlay`, que estava aqui. Overlay
+      sobre fundo escuro multiplica a origem por 2xfundo: com o `--surface-0`
+      em 0.05, o papel (media 238/255) chega reduzido a 1/20 e a textura
+      simplesmente NAO aparece — medido, o desvio do grao cai para 0,01/255.
+      Soft-light e o irmao suave do mesmo blend e entrega o dobro de grao por
+      unidade de clareamento do preto.
+
+   3. `opacity: 0.14` — o papel e claro, entao o que ele faz no escuro e, em
+      grande parte, LEVANTAR o preto; o teto e a escada de superficies. A
+      0.14 o `--surface-0` sobe de L 0.151 para 0.166 e ainda sobra degrau ate
+      o `--surface-1` (L 0.211). A 0.25 o degrau comeca a fechar. O 0.025 de
+      antes so fazia sentido para ruido de media cinza. */
 .noise {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.025;
-  mix-blend-mode: overlay;
+  background-image: url('/brand/papel.webp');
+  background-repeat: repeat;
+  background-size: 320px;
+  opacity: 0.14;
+  mix-blend-mode: soft-light;
 }
 
 /* A casca da pagina. A largura e o respiro lateral sao tokens, nao numeros:
@@ -98,12 +209,114 @@
    sozinha para baixo do titulo quando a linha nao cabe (por volta de 40rem),
    sem media query e sem estourar largura. */
 .pageHeader {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem 1.5rem;
   margin-bottom: 1.5rem;
+}
+
+/* Fundo de area (plano de imagens, secoes 4.1, 6.1, 7.1, 8.1 e 9.1).
+   "Imagem aqui e apoio, nunca o centro" — por isso ela entra como camada de
+   fundo do cabecalho e nao como cartao proprio: nenhuma tela ganha um bloco
+   novo, so a faixa que ja existe deixa de ser lisa.
+
+   O `scaleX(-1)` nao e enfeite. As cinco fotos foram feitas com o objeto nos
+   40% da ESQUERDA e o resto vazio, porque o plano supunha texto a direita. O
+   cabecalho do console faz o contrario — titulo e descricao moram a esquerda.
+   Espelhar poe o objeto do lado que esta vago e custa so inverter a direcao da
+   luz, que numa camada a 40% de opacidade ninguem le como erro.
+
+   A mascara e uma ELIPSE e nao um degrade lateral. Um degrade so na horizontal
+   deixava as bordas de cima, de baixo e do fim da caixa cortadas em reta, e o
+   carvao da foto (um fio mais claro que o fundo da pagina) desenhava um
+   retangulo visivel em volta da imagem — exatamente a "assinatura de IA" que o
+   v4 passou a fase 3a apagando. A elipse apaga nos quatro lados.
+
+   Ela e escrita no espaco LOCAL, antes do espelho: fica sobre o objeto, que no
+   arquivo esta a esquerda. Depois do scaleX, o que sobrou aparece a direita e o
+   texto continua sobre fundo limpo — e por isso o portao de contraste continua
+   medindo o que media antes.
+
+   Os raios estao em PIXEL e nao em porcentagem, e a imagem tem largura fixa
+   (340px) em vez de altura relativa. Porcentagem e medida contra a caixa, que
+   muda de largura com a janela e de altura quando o titulo quebra em duas
+   linhas — a elipse acompanhava e em certas larguras encostava na borda da
+   caixa, devolvendo o retangulo. Com raio fixo sobre imagem fixa, o desenho e o
+   mesmo em 390 e em 1440. So o raio VERTICAL fica em 50%: ele precisa morrer
+   exatamente no topo e na base da caixa, seja qual for a altura dela.
+
+   E os 2.5rem de `background-position` sao o respiro que separa o objeto da
+   borda da caixa. Colado nela, o corte reto voltava pelo outro lado.
+
+   `z-index: -1` com `isolation: isolate` no pai: a camada desce para tras do
+   conteudo do cabecalho sem atravessar para tras da pagina. */
+.pageHeader::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block: -1.75rem;
+  inset-inline: -1rem;
+  background-image: var(--fundo-da-area, none);
+  background-repeat: no-repeat;
+  background-position: 2.5rem center;
+  background-size: 340px auto;
+  opacity: 0.34;
+  transform: scaleX(-1);
+  mask-image: radial-gradient(ellipse 125px 50% at 145px 50%, black 0 30%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Cabecalho COM acao: o botao mora exatamente onde a imagem cai. Empurrar o
+   objeto para dentro e mais barato que mover o botao — a barra de acoes e a
+   mesma peca em todo o console e nao vai mudar de lugar por causa de um fundo.
+   Hoje so `/` (Disparo manual) tem acao; o `:has` existe para que a proxima
+   tela que ganhar um botao ja nasca certa, sem ninguem lembrar desta regra. */
+.pageHeader:has(.pageHeaderActions)::before {
+  background-position: 10rem center;
+  mask-image: radial-gradient(ellipse 125px 50% at 265px 50%, black 0 30%, transparent 100%);
+}
+
+/* Abaixo de 48rem a camada SAI, e nao encolhe. A imagem e medida em pixel fixo
+   de proposito (ver o bloco de cima); numa tela de 390 o objeto ocuparia dois
+   tercos da largura e cairia atras do titulo, que e a linha que o operador le
+   para saber se esta na tela certa. Fundo decorativo nao disputa espaco com
+   ela — no estreito a faixa volta a ser lisa e nada se perde. */
+@media (max-width: 48rem) {
+  .pageHeader::before {
+    content: none;
+  }
+}
+
+/* Sem imagem de area, sem camada — `background-image: none` ainda pintaria a
+   caixa transparente, mas o `::before` continuaria criando uma camada a toa em
+   toda tela que nao esta nesta lista (Guia, Integracoes, Empresa...). */
+.page:not([data-area='painel']):not([data-area='pixels']):not([data-area='instalacao']):not([data-area='manual']):not([data-area='automatico'])
+  .pageHeader::before {
+  content: none;
+}
+
+.page[data-area='painel'] {
+  --fundo-da-area: url('/brand/secoes/painel.webp');
+}
+
+.page[data-area='pixels'] {
+  --fundo-da-area: url('/brand/secoes/pixels.webp');
+}
+
+.page[data-area='instalacao'] {
+  --fundo-da-area: url('/brand/secoes/instalacao.webp');
+}
+
+.page[data-area='manual'] {
+  --fundo-da-area: url('/brand/secoes/manual.webp');
+}
+
+.page[data-area='automatico'] {
+  --fundo-da-area: url('/brand/secoes/automatico.webp');
 }
 
 .pageHeaderLead {

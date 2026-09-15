@@ -5,7 +5,9 @@ import Link from 'next/link';
 import {
   ArrowDownRight,
   ArrowRight,
+  Ban,
   CheckCircle2,
+  ChevronDown,
   Clock,
   FlaskConical,
   Gauge,
@@ -14,12 +16,13 @@ import {
   MousePointerClick,
   ShoppingBag,
   Sparkles,
+  Target,
   X,
 } from '@/components/ui/icones';
 
 import { pedir } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import { Callout, Panel, Section } from '@/components/common/primitives';
+import { Callout, Section } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { Esqueleto } from '@/components/common/Esqueleto';
 import { BarraAnimada, NumeroAnimado } from '@/components/common/motion';
@@ -34,15 +37,24 @@ import {
 } from '@/components/common/SeletorDePeriodo';
 import { FILTROS_VAZIOS, type FiltrosInboxValor } from '@/components/integrations/FiltrosInbox';
 import { InboxList } from '@/components/integrations/InboxList';
+import { parMeta, type ParMeta } from '@/components/integrations/eventos-legiveis';
+import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { cn } from '@/lib/utils';
 
 /**
  * Painel de eventos — a primeira tela do console.
  *
- * O que ele responde, nesta ordem: quanto chegou, quanto saiu para a Meta, de
- * onde veio o tráfego e com que qualidade. Nada aqui dispara evento: o painel
- * só LÊ `GET /api/inbox/resumo`, que por sua vez só conta o que já está na
- * caixa de entrada (regra 1 do CLAUDE.md).
+ * A tela de chegada mostra DUAS coisas e para: quanto entrou de dinheiro e
+ * quais eventos chegaram. Nada aqui dispara evento — o painel só LÊ
+ * `GET /api/inbox/resumo`, que por sua vez só conta o que já está na caixa de
+ * entrada (regra 1 do CLAUDE.md).
+ *
+ * 🔴 Por que só isso na primeira dobra: o dono abriu o console e disse que o
+ * painel "tem que apresentar apenas os principais eventos e, quando clicar, a
+ * lista referente àqueles eventos". Dezoito números de uma vez não são um
+ * painel, são um relatório: ninguém sabe por onde começar. Volume, atribuição
+ * e qualidade continuam inteiros, mas atrás de um botão — medem o
+ * FUNCIONAMENTO do console, e essa é a segunda pergunta, não a primeira.
  *
  * Cada card é um botão. O clique não troca de rota nem escreve filtro na URL
  * (IA-R5): ele abre, logo abaixo, a lista dos eventos daquele recorte, com o
@@ -155,6 +167,31 @@ function textoDaPorcentagem(pct: number | null): string {
   return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} % dos eventos reais`;
 }
 
+/* Grade de NÚMEROS, não grade de cartões. O KPI secundário perdeu a caixa
+   (borda em volta + fundo + raio) e ficou com um filete no topo: quando
+   dezoito retângulos iguais dividem a tela, a linha fina deixa de separar
+   e vira textura, e nenhum deles é mais importante que o outro. O filete
+   horizontal alinha a leitura na régua de cima — os números ficam numa
+   mesma pauta — e devolve ao Destaque o papel de único objeto com forma.
+   O estado ativo/hover pinta o próprio filete na tinta da área: é o mesmo
+   sinal de antes, num traço em vez de num contorno.
+
+   Mora fora do `CardPainel` porque o card de evento usa a MESMA forma com
+   outro conteúdo (nome técnico em mono, rótulo em português). Duas receitas
+   de cartão na mesma tela seriam duas famílias, que é o defeito que o v4
+   passou a fase inteira apagando. */
+function classesDoCard(ativo: boolean, clicavel: boolean): string {
+  return cn(
+    'flex min-w-0 flex-col items-start gap-2 border-t pt-3 text-left',
+    ativo ? 'border-tinta-texto' : 'border-line',
+    clicavel &&
+      cn(
+        'cursor-pointer transition-colors hover:border-tinta-texto',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
+      )
+  );
+}
+
 function CardPainel({
   titulo,
   explicacao,
@@ -212,21 +249,8 @@ function CardPainel({
     </>
   );
 
-  /* Grade de NÚMEROS, não grade de cartões. O KPI secundário perdeu a caixa
-     (borda em volta + fundo + raio) e ficou com um filete no topo: quando
-     dezoito retângulos iguais dividem a tela, a linha fina deixa de separar
-     e vira textura, e nenhum deles é mais importante que o outro. O filete
-     horizontal alinha a leitura na régua de cima — os números ficam numa
-     mesma pauta — e devolve ao Destaque o papel de único objeto com forma.
-     O estado ativo/hover pinta o próprio filete na tinta da área: é o mesmo
-     sinal de antes, num traço em vez de num contorno. */
-  const classes = cn(
-    'flex min-w-0 flex-col items-start gap-2 border-t pt-3 text-left',
-    ativo ? 'border-tinta-texto' : 'border-line'
-  );
-
   if (!aoClicar) {
-    return <div className={classes}>{conteudo}</div>;
+    return <div className={classesDoCard(ativo, false)}>{conteudo}</div>;
   }
 
   return (
@@ -234,13 +258,107 @@ function CardPainel({
       type="button"
       onClick={aoClicar}
       aria-label={descricao}
-      className={cn(
-        classes,
-        'cursor-pointer transition-colors hover:border-tinta-texto',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
-      )}
+      className={classesDoCard(ativo, true)}
     >
       {conteudo}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* O card de um evento                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * O par "nome da plataforma → evento da Meta", em português.
+ *
+ * O card mostra o nome que a plataforma mandou (`purchase_approved`), porque é
+ * esse que aparece no backoffice dela e é por ele que se procura. Mas o
+ * catálogo da Meta é indexado pelo nome DELA (`Purchase`), então a tabela do
+ * parser faz a ponte. Quando o nome já chega no vocabulário da Meta — é o caso
+ * da tag do site — ele não está na tabela e vai direto para o catálogo.
+ *
+ * `null` tem significado: este nome não vira conversão nenhuma na Meta
+ * (abandono, estorno, financeiro interno). Não é falha, e o card diz isso.
+ */
+function eventoDaMeta(eventoOrigem: string): ParMeta | null {
+  const equivalente =
+    eventoOrigem in MAPA_EVENTOS_ORIGEM ? MAPA_EVENTOS_ORIGEM[eventoOrigem] : eventoOrigem;
+  return equivalente ? parMeta(equivalente) : null;
+}
+
+/**
+ * Um dos eventos principais: quantos chegaram e, quando dá, quanto em dinheiro.
+ *
+ * Mesma forma do `CardPainel` (filete no topo, sem caixa) com outro conteúdo: o
+ * título é o nome TÉCNICO em mono, e o português vem embaixo, ao lado do nome
+ * que a Meta usa. Traduzir o nome técnico seria esconder justamente a palavra
+ * que o operador vai procurar no Gerenciador de Eventos.
+ */
+function CardDeEvento({
+  evento,
+  total,
+  pct,
+  valor,
+  aoClicar,
+  ativo,
+}: {
+  evento: string;
+  total: number;
+  pct: number | null;
+  /** Já formatado, e só quando o valor é do recorte inteiro deste evento. */
+  valor: string | null;
+  aoClicar: () => void;
+  ativo: boolean;
+}) {
+  const par = eventoDaMeta(evento);
+  const Icone = par?.icon ?? Ban;
+  const matiz: Matiz = par?.tecnico === 'Purchase' ? 'chart-1' : par ? 'chart-2' : 'neutro';
+
+  return (
+    <button
+      type="button"
+      onClick={aoClicar}
+      // O card é um interruptor, e quem ouve a tela precisa saber disso: o
+      // mesmo clique que abriu a lista fecha.
+      aria-pressed={ativo}
+      aria-label={`Evento ${evento}: ${total} ${total === 1 ? 'evento' : 'eventos'}. ${
+        ativo ? 'Fechar a lista destes eventos.' : 'Abrir a lista destes eventos.'
+      }`}
+      className={classesDoCard(ativo, true)}
+    >
+      <span className="flex w-full min-w-0 items-start justify-between gap-2">
+        <span className="wrap-token min-w-0 font-mono text-label text-fg-body">{evento}</span>
+        <span
+          aria-hidden
+          className={cn(
+            'flex size-7 shrink-0 items-center justify-center rounded-control',
+            FUNDO_DO_MATIZ[matiz]
+          )}
+        >
+          <Icone className="size-4" />
+        </span>
+      </span>
+
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+        <NumeroAnimado valor={total} casas={0} className="text-data font-semibold text-fg-strong" />
+        {valor !== null && (
+          <span className="min-w-0 font-mono text-label text-fg-body tabular-nums">{valor}</span>
+        )}
+        <span className="min-w-0 text-caption text-fg-muted">{textoDaPorcentagem(pct)}</span>
+      </span>
+
+      <BarraAnimada percentual={pct ?? 0} corBarra={BARRA_DO_MATIZ[matiz]} className="h-1.5 w-full" />
+
+      <span className="min-w-0 text-caption break-words text-fg-muted">
+        {par ? (
+          <>
+            Vai para a Meta como {par.pt} · <span className="font-mono">{par.tecnico}</span>.
+          </>
+        ) : (
+          'Não vira conversão na Meta: não existe evento padrão equivalente.'
+        )}
+      </span>
     </button>
   );
 }
@@ -255,19 +373,29 @@ function CardPainel({
  * `--text-display` é para NÚMERO — uma frase ali vira o maior objeto da tela e
  * não explica nada (o dono leu "moedas misturadas" e não entendeu; DS-v4-3).
  * Por isso o degrau grande recebe um travessão, e a explicação vai numa linha
- * pequena logo abaixo, em `SemSomaPorMoeda`.
+ * pequena logo abaixo, em `AvisoDeMoedasDiferentes`.
  */
 function dinheiro(valor: number | null, moeda: string | null): string {
   if (valor === null) return '—';
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: moeda ?? 'BRL' });
 }
 
-/** Frase que substitui a soma quando as compras do período têm moedas diferentes. */
-const SEM_SOMA_POR_MOEDA = 'Compras em mais de uma moeda — o total não soma. A lista mostra cada valor.';
+/**
+ * O que aparece no lugar da soma quando as compras do período vieram em moedas
+ * diferentes.
+ *
+ * A frase anterior — "Compras em mais de uma moeda, o total não soma" — era a
+ * segunda tentativa e o dono também não entendeu: ela descreve a REGRA do
+ * programa, não o que aconteceu com o dinheiro dele. Esta diz o fato (vieram em
+ * moedas diferentes), a consequência (um total único ficaria errado) e para
+ * onde ir (o valor de cada compra está na lista). Sem travessão e sem jargão.
+ */
+const AVISO_MOEDAS_DIFERENTES =
+  'Houve compras em moedas diferentes. Um total único ficaria errado, por isso o valor aparece em cada compra na lista.';
 
-function SemSomaPorMoeda({ valor }: { valor: number | null }) {
+function AvisoDeMoedasDiferentes({ valor }: { valor: number | null }) {
   if (valor !== null) return null;
-  return <span className="text-caption text-fg-muted">{SEM_SOMA_POR_MOEDA}</span>;
+  return <span className="text-caption text-fg-muted">{AVISO_MOEDAS_DIFERENTES}</span>;
 }
 
 /**
@@ -308,7 +436,7 @@ function DestaqueDeCompras({
       <Link
         href={href}
         aria-label={`${compras.total} ${plural}, ${
-          compras.valor === null ? SEM_SOMA_POR_MOEDA : dinheiro(compras.valor, compras.moeda)
+          compras.valor === null ? AVISO_MOEDAS_DIFERENTES : dinheiro(compras.valor, compras.moeda)
         } Abrir a lista de quem comprou.`}
         className={cn(
           'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
@@ -339,7 +467,7 @@ function DestaqueDeCompras({
                 <span className="text-label text-fg-muted">{plural}</span>
               </span>
             </span>
-            <SemSomaPorMoeda valor={compras.valor} />
+            <AvisoDeMoedasDiferentes valor={compras.valor} />
           </div>
 
           <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-tinta-texto">
@@ -397,6 +525,13 @@ function DestaqueDeCompras({
 interface Recorte {
   filtros: FiltrosInboxValor;
   rotulo: string;
+  /**
+   * O nome do evento, quando o recorte veio de um card de evento. Serve a duas
+   * coisas: marcar qual card está aberto e oferecer, no cabeçalho da lista, o
+   * atalho para `/painel/eventos` — a tela "quem mandou", que tem URL e pode
+   * ser mandada a alguém.
+   */
+  evento?: string;
   /** Muda a cada clique para a lista nascer de novo, mesmo no mesmo card. */
   chave: number;
 }
@@ -409,6 +544,11 @@ export function PainelDeEventos() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [recorte, setRecorte] = useState<Recorte | null>(null);
+  /**
+   * Volume, atribuição e qualidade começam fechados. São a saúde do console, e
+   * a primeira pergunta de quem abre a tela é o negócio, não o encanamento.
+   */
+  const [detalhes, setDetalhes] = useState(false);
   /** Contador do botão "Tentar de novo": muda, o efeito refaz a chamada. */
   const [tentativa, setTentativa] = useState(0);
 
@@ -461,12 +601,29 @@ export function PainelDeEventos() {
   }, [busca, empresaAtivaId, tentativa]);
 
   /** Abre a lista do recorte e leva o foco até ela. */
-  const abrirRecorte = useCallback((filtros: FiltrosInboxValor, rotulo: string) => {
-    setRecorte((r) => ({ filtros, rotulo, chave: (r?.chave ?? 0) + 1 }));
-    window.requestAnimationFrame(() => {
-      document.getElementById('recorte-do-painel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }, []);
+  const abrirRecorte = useCallback(
+    (filtros: FiltrosInboxValor, rotulo: string, evento?: string) => {
+      setRecorte((r) => ({ filtros, rotulo, evento, chave: (r?.chave ?? 0) + 1 }));
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById('recorte-do-painel')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+    []
+  );
+
+  /** Segundo clique no mesmo card fecha a lista — é a volta sem procurar botão. */
+  const alternarEvento = useCallback(
+    (evento: string) => {
+      if (recorte?.evento === evento) {
+        setRecorte(null);
+        return;
+      }
+      abrirRecorte({ ...SO_REAIS, evento }, evento, evento);
+    },
+    [abrirRecorte, recorte]
+  );
 
   const seletorDePeriodo = (
     <SeletorDePeriodo
@@ -476,6 +633,28 @@ export function PainelDeEventos() {
       className="w-full"
     />
   );
+
+  /**
+   * O dinheiro só aparece no card quando ele é, comprovadamente, o dinheiro
+   * DAQUELE card.
+   *
+   * O resumo devolve o valor das compras num bloco só, sem repartir por nome de
+   * origem — e dois nomes diferentes podem virar `Purchase` (`purchase_approved`
+   * e `checkout.session.completed`, por exemplo). A regra aqui é uma igualdade,
+   * não um palpite: existe UM único nome de compra entre os principais e a
+   * contagem dele bate com a contagem de compras do período. Fora disso nenhum
+   * card mostra dinheiro, e o total continua onde sempre esteve — no destaque de
+   * cima, que é quem tem a contabilidade completa.
+   */
+  const valorDoEventoDeCompra = useMemo(() => {
+    if (!resumo || resumo.compras.valor === null) return null;
+    const deCompra = resumo.porEvento.filter((e) => eventoDaMeta(e.evento)?.tecnico === 'Purchase');
+    if (deCompra.length !== 1 || deCompra[0].total !== resumo.compras.total) return null;
+    return {
+      evento: deCompra[0].evento,
+      texto: dinheiro(resumo.compras.valor, resumo.compras.moeda),
+    };
+  }, [resumo]);
 
   const cardsDeAtribuicao = useMemo(() => {
     if (!resumo) return [];
@@ -542,15 +721,12 @@ export function PainelDeEventos() {
   if (carregando && !resumo) {
     return (
       <div className="flex min-w-0 flex-col gap-4" aria-busy="true" aria-label="Montando o painel">
-        {/* O esqueleto imita a forma que vai chegar: sem caixa e sem raio de
-            painel, senão a tela pisca de "grade de cartões" para "grade de
-            números" no instante em que o dado entra. */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          {Array.from({ length: 5 }, (_, i) => (
-            <Esqueleto key={i} className="h-24 rounded-control" />
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {/* O esqueleto imita a forma que vai chegar: o destaque de compras em
+            cima, com caixa, e embaixo a grade dos eventos principais sem caixa
+            e sem raio de painel — senão a tela pisca de "grade de cartões" para
+            "grade de números" no instante em que o dado entra. */}
+        <Esqueleto className="h-44 rounded-panel" />
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Esqueleto key={i} className="h-28 rounded-control" />
           ))}
@@ -643,197 +819,212 @@ export function PainelDeEventos() {
             href={`/painel/compras?${busca}`}
           />
 
-          {/* ---------------- volume ---------------- */}
-          <Section
-            title="O que chegou e o que saiu"
-            description="Cada card abre, aqui embaixo, a lista dos eventos que ele conta."
-            icon={Inbox}
-          >
-            <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-              <CardPainel
-                titulo="Recebidos no período"
-                explicacao="Tudo o que entrou na caixa, incluindo teste da equipe."
-                total={volume.recebidos}
-                icone={Inbox}
-                matiz="chart-1"
-                aoClicar={() => abrirRecorte({ ...FILTROS_VAZIOS }, 'tudo o que foi recebido')}
-                ativo={recorte?.rotulo === 'tudo o que foi recebido'}
-              />
-              <CardPainel
-                titulo="Enviados à Meta"
-                explicacao="A API de Conversões aceitou o evento."
-                total={volume.enviados.total}
-                pct={volume.enviados.pct}
-                icone={CheckCircle2}
-                matiz="chart-2"
-                comBarra
-                aoClicar={() =>
-                  abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
-                }
-                ativo={recorte?.rotulo === 'enviados à Meta'}
-              />
-              <CardPainel
-                titulo="Na fila"
-                explicacao="Esperando um clique seu ou uma regra automática."
-                total={volume.naFila.total}
-                pct={volume.naFila.pct}
-                icone={Clock}
-                matiz="chart-3"
-                comBarra
-                aoClicar={() => abrirRecorte({ ...SO_REAIS, status: 'novo' }, 'na fila')}
-                ativo={recorte?.rotulo === 'na fila'}
-              />
-              <CardPainel
-                titulo="Ignorados"
-                explicacao="Uma regra ou um motivo mandou não enviar."
-                total={volume.ignorados.total}
-                pct={volume.ignorados.pct}
-                icone={ArrowDownRight}
-                matiz="neutro"
-                comBarra
-                aoClicar={() => abrirRecorte({ ...SO_REAIS, status: 'ignorado' }, 'ignorados')}
-                ativo={recorte?.rotulo === 'ignorados'}
-              />
-              <CardPainel
-                titulo="Testes da equipe"
-                explicacao="Ficam fora de toda porcentagem, de propósito."
-                total={volume.testesEquipe}
-                icone={FlaskConical}
-                matiz="chart-4"
-                aoClicar={() =>
-                  abrirRecorte({ ...FILTROS_VAZIOS, equipe: 'so-testes' }, 'testes da equipe')
-                }
-                ativo={recorte?.rotulo === 'testes da equipe'}
-              />
-            </div>
-          </Section>
-
-          {/* ---------------- atribuição ---------------- */}
-          <Section
-            title="De onde veio o tráfego"
-            description="A porcentagem é sobre os eventos reais do período, sem os testes da equipe."
-            icon={MousePointerClick}
-          >
-            <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-              {cardsDeAtribuicao.map((c) => (
-                <CardPainel
-                  key={c.chave}
-                  titulo={c.titulo}
-                  explicacao={c.explicacao}
-                  total={c.dado.total}
-                  pct={c.dado.pct}
-                  icone={c.icone}
-                  matiz={c.matiz}
-                  comBarra
-                  aoClicar={() => abrirRecorte({ ...SO_REAIS, atribuicao: c.filtro }, c.titulo)}
-                  ativo={recorte?.rotulo === c.titulo}
-                />
-              ))}
-            </div>
-            <p className="text-caption text-fg-muted">
-              Um mesmo evento pode carregar mais de um sinal — quem clicou no anúncio da Meta e já
-              tinha o cookie conta nos dois cards. Por isso estas porcentagens não somam 100 %.
-            </p>
-          </Section>
-
-          {/* ---------------- por evento ---------------- */}
+          {/* ---------------- os eventos principais ---------------- */}
+          {/* A segunda e última coisa da primeira dobra. Os nomes vêm do
+              resumo já ordenados do maior para o menor e cortados nos oito
+              primeiros — "principais" é isso, e o corte é do servidor, não
+              daqui, para o card e a lista contarem a mesma coisa. */}
           {porEvento.length > 0 && (
             <Section
-              title="Quais eventos chegaram"
-              description="Os oito nomes mais frequentes, do maior para o menor. Clique num nome para ver quem mandou."
-              icon={ShoppingBag}
+              title="Os eventos que mais chegaram"
+              description="Clique num evento para ver, logo abaixo, a lista só dele."
+              icon={Target}
             >
-              <Panel className="flex min-w-0 flex-col gap-2">
-                {/* Estas linhas viraram LINK, e não mais um recorte aberto
-                    embaixo: a pergunta "quem mandou este evento" tem tela
-                    própria, com URL, para poder ser mandada a alguém. O período
-                    vai junto na query — é o que faz a lista de lá ter o tamanho
-                    do número daqui. */}
+              <div className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
                 {porEvento.map((e) => (
-                  <Link
+                  <CardDeEvento
                     key={e.evento}
-                    href={`/painel/eventos?evento=${encodeURIComponent(e.evento)}&${busca}`}
-                    aria-label={`Evento ${e.evento}: ${e.total} eventos. Ver quem mandou.`}
-                    className={cn(
-                      'group flex min-w-0 flex-col gap-1.5 rounded-control border border-transparent p-2 text-left transition-colors',
-                      'hover:border-tinta-texto hover:bg-surface-2',
-                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
-                    )}
-                  >
-                    <span className="flex min-w-0 items-baseline justify-between gap-3">
-                      <span className="wrap-token min-w-0 font-mono text-label text-fg-body">
-                        {e.evento}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        <span className="text-label font-semibold text-fg-strong">{e.total}</span>
-                        <ArrowRight
-                          className="size-3.5 text-fg-muted transition-transform group-hover:translate-x-0.5 group-hover:text-tinta-texto"
-                          aria-hidden
-                        />
-                      </span>
-                    </span>
-                    <BarraAnimada percentual={e.pct ?? 0} corBarra="bg-chart-2" className="h-1.5" />
-                  </Link>
+                    evento={e.evento}
+                    total={e.total}
+                    pct={e.pct}
+                    valor={
+                      valorDoEventoDeCompra?.evento === e.evento
+                        ? valorDoEventoDeCompra.texto
+                        : null
+                    }
+                    aoClicar={() => alternarEvento(e.evento)}
+                    ativo={recorte?.evento === e.evento}
+                  />
                 ))}
-              </Panel>
+              </div>
+              <p className="text-caption text-fg-muted">
+                A contagem é dos eventos reais do período — teste da equipe fica de fora.
+              </p>
             </Section>
           )}
 
-          {/* ---------------- qualidade ---------------- */}
-          <Section
-            title="Qualidade do que saiu"
-            description="O EMQ é a nota que a Meta dá ao pareamento de cada evento enviado."
-            icon={Gauge}
-          >
-            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <CardPainel
-                titulo="EMQ médio dos enviados"
-                explicacao={
-                  qualidade.emqMedio === null
-                    ? 'Nenhum evento enviado no período trouxe nota.'
-                    : `Média de ${qualidade.enviadosComEmq} ${
-                        qualidade.enviadosComEmq === 1 ? 'evento com nota' : 'eventos com nota'
-                      }.`
-                }
-                total={qualidade.emqMedio ?? 0}
-                icone={Gauge}
-                matiz="chart-2"
-                aoClicar={() =>
-                  abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
-                }
+          {/* ---------------- o funcionamento, fechado ---------------- */}
+          {/* Não é "menos informação": é a mesma informação na segunda
+              pergunta. Um clique abre, e o que abre é exatamente o que
+              existia antes, na mesma ordem. */}
+          <div className="flex min-w-0 flex-col gap-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDetalhes((v) => !v)}
+              aria-expanded={detalhes}
+              className="self-start"
+            >
+              <ChevronDown
+                className={cn('size-3.5 transition-transform', detalhes && 'rotate-180')}
+                aria-hidden
               />
-              {/* Mesma forma do CardPainel ao lado — filete no topo, sem
-                  caixa. Ele não usa o componente porque o valor aqui é
-                  dinheiro formatado, não contagem animada. */}
-              {receitaEnviada && (
-                <div className="flex min-w-0 flex-col items-start gap-2 border-t border-line pt-3">
-                  <span className="flex w-full min-w-0 items-start justify-between gap-2">
-                    <span className="min-w-0 text-label font-medium text-fg-muted">
-                      Valor enviado à Meta
-                    </span>
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'flex size-7 shrink-0 items-center justify-center rounded-control',
-                        FUNDO_DO_MATIZ['chart-2']
-                      )}
-                    >
-                      <ShoppingBag className="size-4" />
-                    </span>
-                  </span>
-                  <span className="text-data font-semibold text-fg-strong tabular-nums">
-                    {receitaEnviada.total.toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: receitaEnviada.moeda,
-                    })}
-                  </span>
-                  <span className="text-caption text-fg-muted">
-                    Soma do valor dos eventos que a Meta aceitou no período.
-                  </span>
-                </div>
-              )}
-            </div>
-          </Section>
+              {detalhes ? 'Esconder' : 'Ver'} como o console está funcionando
+            </Button>
+
+            {detalhes && (
+              <>
+                {/* ---------------- volume ---------------- */}
+                <Section
+                  title="O que chegou e o que saiu"
+                  description="Cada card abre, aqui embaixo, a lista dos eventos que ele conta."
+                  icon={Inbox}
+                >
+                  <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                    <CardPainel
+                      titulo="Recebidos no período"
+                      explicacao="Tudo o que entrou na caixa, incluindo teste da equipe."
+                      total={volume.recebidos}
+                      icone={Inbox}
+                      matiz="chart-1"
+                      aoClicar={() => abrirRecorte({ ...FILTROS_VAZIOS }, 'tudo o que foi recebido')}
+                      ativo={recorte?.rotulo === 'tudo o que foi recebido'}
+                    />
+                    <CardPainel
+                      titulo="Enviados à Meta"
+                      explicacao="A API de Conversões aceitou o evento."
+                      total={volume.enviados.total}
+                      pct={volume.enviados.pct}
+                      icone={CheckCircle2}
+                      matiz="chart-2"
+                      comBarra
+                      aoClicar={() =>
+                        abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
+                      }
+                      ativo={recorte?.rotulo === 'enviados à Meta'}
+                    />
+                    <CardPainel
+                      titulo="Na fila"
+                      explicacao="Esperando um clique seu ou uma regra automática."
+                      total={volume.naFila.total}
+                      pct={volume.naFila.pct}
+                      icone={Clock}
+                      matiz="chart-3"
+                      comBarra
+                      aoClicar={() => abrirRecorte({ ...SO_REAIS, status: 'novo' }, 'na fila')}
+                      ativo={recorte?.rotulo === 'na fila'}
+                    />
+                    <CardPainel
+                      titulo="Ignorados"
+                      explicacao="Uma regra ou um motivo mandou não enviar."
+                      total={volume.ignorados.total}
+                      pct={volume.ignorados.pct}
+                      icone={ArrowDownRight}
+                      matiz="neutro"
+                      comBarra
+                      aoClicar={() => abrirRecorte({ ...SO_REAIS, status: 'ignorado' }, 'ignorados')}
+                      ativo={recorte?.rotulo === 'ignorados'}
+                    />
+                    <CardPainel
+                      titulo="Testes da equipe"
+                      explicacao="Ficam fora de toda porcentagem, de propósito."
+                      total={volume.testesEquipe}
+                      icone={FlaskConical}
+                      matiz="chart-4"
+                      aoClicar={() =>
+                        abrirRecorte({ ...FILTROS_VAZIOS, equipe: 'so-testes' }, 'testes da equipe')
+                      }
+                      ativo={recorte?.rotulo === 'testes da equipe'}
+                    />
+                  </div>
+                </Section>
+
+                {/* ---------------- atribuição ---------------- */}
+                <Section
+                  title="De onde veio o tráfego"
+                  description="A porcentagem é sobre os eventos reais do período, sem os testes da equipe."
+                  icon={MousePointerClick}
+                >
+                  <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                    {cardsDeAtribuicao.map((c) => (
+                      <CardPainel
+                        key={c.chave}
+                        titulo={c.titulo}
+                        explicacao={c.explicacao}
+                        total={c.dado.total}
+                        pct={c.dado.pct}
+                        icone={c.icone}
+                        matiz={c.matiz}
+                        comBarra
+                        aoClicar={() => abrirRecorte({ ...SO_REAIS, atribuicao: c.filtro }, c.titulo)}
+                        ativo={recorte?.rotulo === c.titulo}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-caption text-fg-muted">
+                    Um mesmo evento pode carregar mais de um sinal — quem clicou no anúncio da Meta e já
+                    tinha o cookie conta nos dois cards. Por isso estas porcentagens não somam 100 %.
+                  </p>
+                </Section>
+
+                {/* ---------------- qualidade ---------------- */}
+                <Section
+                  title="Qualidade do que saiu"
+                  description="O EMQ é a nota que a Meta dá ao pareamento de cada evento enviado."
+                  icon={Gauge}
+                >
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <CardPainel
+                      titulo="EMQ médio dos enviados"
+                      explicacao={
+                        qualidade.emqMedio === null
+                          ? 'Nenhum evento enviado no período trouxe nota.'
+                          : `Média de ${qualidade.enviadosComEmq} ${
+                              qualidade.enviadosComEmq === 1 ? 'evento com nota' : 'eventos com nota'
+                            }.`
+                      }
+                      total={qualidade.emqMedio ?? 0}
+                      icone={Gauge}
+                      matiz="chart-2"
+                      aoClicar={() =>
+                        abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
+                      }
+                    />
+                    {/* Mesma forma do CardPainel ao lado — filete no topo, sem
+                        caixa. Ele não usa o componente porque o valor aqui é
+                        dinheiro formatado, não contagem animada. */}
+                    {receitaEnviada && (
+                      <div className="flex min-w-0 flex-col items-start gap-2 border-t border-line pt-3">
+                        <span className="flex w-full min-w-0 items-start justify-between gap-2">
+                          <span className="min-w-0 text-label font-medium text-fg-muted">
+                            Valor enviado à Meta
+                          </span>
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'flex size-7 shrink-0 items-center justify-center rounded-control',
+                              FUNDO_DO_MATIZ['chart-2']
+                            )}
+                          >
+                            <ShoppingBag className="size-4" />
+                          </span>
+                        </span>
+                        <span className="text-data font-semibold text-fg-strong tabular-nums">
+                          {receitaEnviada.total.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: receitaEnviada.moeda,
+                          })}
+                        </span>
+                        <span className="text-caption text-fg-muted">
+                          Soma do valor dos eventos que a Meta aceitou no período.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </Section>
+              </>
+            )}
+          </div>
         </>
       )}
 
@@ -845,10 +1036,32 @@ export function PainelDeEventos() {
           description={`A mesma caixa de entrada, no período "${rotuloDoPeriodo(periodo)}", já filtrada pelo card que você clicou.`}
           icon={Inbox}
           action={
-            <Button variant="ghost" size="sm" onClick={() => setRecorte(null)}>
-              <X className="size-4" aria-hidden />
-              Fechar o recorte
-            </Button>
+            /* Os dois botões empilham no celular em vez de empurrar o
+               cabeçalho para fora da tela. */
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              {/* "Quem mandou este evento" continua tendo tela própria, com
+                  URL, para poder ser mandada a alguém — o que uma lista aberta
+                  por clique não consegue ser. O período vai junto na query, que
+                  é o que faz a lista de lá ter o tamanho do número daqui. */}
+              {recorte.evento && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={
+                    <Link
+                      href={`/painel/eventos?evento=${encodeURIComponent(recorte.evento)}&${busca}`}
+                    />
+                  }
+                >
+                  Ver quem mandou
+                  <ArrowRight className="size-4" aria-hidden />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setRecorte(null)}>
+                <X className="size-4" aria-hidden />
+                Fechar a lista
+              </Button>
+            </div>
           }
         >
           {/* A MESMA janela que contou o card. Sem isto o card dizia "3 no

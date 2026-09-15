@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Image from 'next/image';
 import { Eye, EyeOff, FlaskConical, LoaderCircle } from '@/components/ui/icones';
 import { toast } from 'sonner';
 
@@ -87,34 +88,42 @@ export function LoginForm({
   }
 
   return (
-    <main className="flex min-h-[100dvh] w-full flex-col lg:flex-row bg-[#060a14] text-white">
-      {/* Coluna Esquerda — Vídeo Animado Hero (Abner Traker Beyond the Limits) */}
-      <div className="relative hidden lg:flex lg:w-[58%] xl:w-[62%] items-center justify-center overflow-hidden bg-[#050811] border-r border-[#151f32]">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          poster="/brand/login-hero.jpg"
-          className="h-full w-full object-cover select-none pointer-events-none"
-        >
-          <source src="/brand/login-hero.mp4" type="video/mp4" />
-        </video>
-        {/* Vinheta suave para fusão com a coluna lateral */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-[#060a14] to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#060a14]/60 to-transparent" />
+    <main className="flex min-h-[100dvh] w-full flex-col lg:flex-row bg-surface-0 text-fg-body">
+      {/* Coluna Esquerda — imagem fixa do papel sobre a madeira (v4).
+          Era um <video> em laço; virou uma foto parada porque o hero da entrada
+          não tem nada a animar — a mesa de trabalho é o assunto, não o efeito.
+          O .mp4 continua em public/brand/, apenas não é mais consumido aqui. */}
+      <div className="relative hidden lg:flex lg:w-[58%] xl:w-[62%] items-center justify-center overflow-hidden bg-surface-0 border-r border-line">
+        <Image
+          src="/brand/login-hero.jpg"
+          alt=""
+          aria-hidden
+          fill
+          /* `preload` é o `priority` do Next 16 (a prop antiga está obsoleta):
+             a imagem é o elemento acima da dobra desta tela, então ela entra
+             por <link rel="preload"> no <head> em vez de esperar o <body>. */
+          preload
+          sizes="(min-width: 1280px) 62vw, 58vw"
+          className="object-cover select-none pointer-events-none"
+        />
+        {/* Vinheta suave para fusão com a coluna lateral — na cor da superfície
+            do fundo (`--surface-0`), que é para onde a imagem tem de morrer. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-surface-0 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-surface-0/60 to-transparent" />
       </div>
 
       {/* Coluna Direita — Formulário de Login */}
-      <div className="flex w-full lg:w-[42%] xl:w-[38%] flex-col justify-between items-center px-6 py-10 sm:px-12 md:px-14 min-h-[100dvh] bg-[#060a14]">
+      <div className="flex w-full lg:w-[42%] xl:w-[38%] flex-col justify-between items-center px-6 py-10 sm:px-12 md:px-14 min-h-[100dvh] bg-surface-0">
         <div className="w-full max-w-[390px] my-auto flex flex-col items-center">
           {/* Logo oficial da mira (AppMark) e Título */}
           <div className="flex flex-col items-center text-center">
-            <AppMark size={48} decorative={false} className="text-white drop-shadow-md" />
-            <h1 className="mt-5 text-2xl font-bold tracking-tight text-white sm:text-[26px]">
+            <AppMark size={48} decorative={false} className="text-fg-strong drop-shadow-md" />
+            {/* Mesmo degrau do título de página do console: `text-pagina`
+                (24 → 30px), peso 700 e tracking -0.03em. */}
+            <h1 className="mt-5 text-pagina font-bold tracking-[-0.03em] text-fg-strong">
               Entre na sua conta
             </h1>
-            <p className="mt-1.5 text-sm text-[#8899ac]">
+            <p className="mt-1.5 text-body text-fg-muted">
               Bem-vindo de volta ao Abner Traker
             </p>
           </div>
@@ -128,7 +137,7 @@ export function LoginForm({
                 size="lg"
                 disabled={ocupado || consoleFechado}
                 onClick={() => void entrarComoAdmin()}
-                className="w-full h-11 border-warning/40 bg-warning/5 text-warning hover:bg-warning/10 hover:border-warning/60 text-sm font-medium transition-all"
+                className="w-full h-control-lg border-warning/40 bg-warning/5 text-warning hover:bg-warning/10 hover:border-warning/60 font-medium transition-all"
               >
                 {entrandoRapido ? (
                   <LoaderCircle className="size-4 animate-spin" aria-hidden />
@@ -154,7 +163,7 @@ export function LoginForm({
             className={`${atalhoDev ? 'mt-4' : 'mt-6'} flex w-full flex-col gap-4`}
           >
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="usuario" className="text-xs font-medium text-[#c5d1e0]">
+              <label htmlFor="usuario" className="text-caption font-medium text-fg-body">
                 E-mail
               </label>
               <Input
@@ -167,12 +176,14 @@ export function LoginForm({
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
                 placeholder="mail@abc.com"
-                className="h-11 rounded-lg border-[#1b263b] bg-[#0b1324] text-sm text-white placeholder:text-[#45556c] focus:border-[#0066ff] focus:ring-1 focus:ring-[#0066ff]"
+                /* Sem className: altura, superfície, borda de controle,
+                   placeholder e anel de foco são os do próprio `Input` — a
+                   tela de entrada não tem campo diferente do resto do console. */
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="senha" className="text-xs font-medium text-[#c5d1e0]">
+              <label htmlFor="senha" className="text-caption font-medium text-fg-body">
                 Senha
               </label>
               <div className="relative">
@@ -188,13 +199,15 @@ export function LoginForm({
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
                   placeholder="••••••••••"
-                  className="h-11 rounded-lg border-[#1b263b] bg-[#0b1324] pr-11 text-sm text-white placeholder:text-[#45556c] focus:border-[#0066ff] focus:ring-1 focus:ring-[#0066ff]"
+                  /* Só o respiro à direita, para o texto não passar por baixo
+                     do botão do olho; o resto é o `Input` do console. */
+                  className="pr-11"
                 />
                 <button
                   type="button"
                   onClick={() => setVerSenha((v) => !v)}
                   aria-label={verSenha ? 'Ocultar a senha' : 'Mostrar a senha'}
-                  className="absolute inset-y-0 right-0 flex size-11 items-center justify-center text-[#6b7c96] transition-colors hover:text-white"
+                  className="absolute inset-y-0 right-0 flex size-11 items-center justify-center rounded-control text-fg-muted transition-colors hover:text-fg-strong"
                 >
                   {verSenha ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -203,12 +216,13 @@ export function LoginForm({
 
             {/* Lembrar de mim e Esqueci minha senha */}
             <div className="mt-1 flex items-center justify-between">
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-[#8899ac] select-none hover:text-slate-300">
+              <label className="group/field-label flex cursor-pointer items-center gap-2 text-caption text-fg-muted select-none hover:text-fg-body">
                 <Checkbox
                   checked={lembrar}
                   disabled={ocupado || consoleFechado}
                   onCheckedChange={(v) => setLembrar(v === true)}
-                  className="border-[#2a3a55] data-[state=checked]:bg-[#0066ff] data-[state=checked]:border-[#0066ff]"
+                  /* Sem className: marcado, o `Checkbox` já é fill na tinta da
+                     área + borda em `tinta-texto` + glifo. Nunca azul. */
                 />
                 <span>Lembrar de mim</span>
               </label>
@@ -219,7 +233,7 @@ export function LoginForm({
                     'A senha está configurada na variável CONSOLE_PASSWORD nas variáveis de ambiente do servidor.'
                   )
                 }
-                className="text-xs font-medium text-[#0066ff] hover:text-[#3385ff] hover:underline transition-colors"
+                className="rounded-control text-caption font-medium text-tinta-texto underline-offset-4 transition-colors hover:underline"
               >
                 Esqueci minha senha
               </button>
@@ -235,7 +249,10 @@ export function LoginForm({
               type="submit"
               size="lg"
               disabled={ocupado || consoleFechado}
-              className="mt-3 h-11 w-full rounded-lg bg-[#0066ff] text-sm font-semibold text-white shadow-md hover:bg-[#0055d6] active:bg-[#0047b3] transition-all"
+              /* A ação primária é o PAPEL: fundo claro, texto quase preto — o
+                 objeto de maior luminosidade da tela. É o `variant` default do
+                 `Button`, então aqui só ficam medida e respiro. */
+              className="mt-3 h-control-lg w-full"
             >
               {enviando && <LoaderCircle className="size-4 animate-spin" aria-hidden />}
               {enviando ? 'Entrando…' : 'Entrar'}
@@ -243,14 +260,14 @@ export function LoginForm({
           </form>
 
           {/* Rodapé do card */}
-          <p className="mt-8 text-center text-xs text-[#8899ac]">
+          <p className="mt-8 text-center text-caption text-fg-muted">
             Ainda não tem conta?{' '}
             <button
               type="button"
               onClick={() =>
                 toast.info('O console é de uso interno. Credenciais são definidas nas variáveis de ambiente.')
               }
-              className="font-medium text-[#0066ff] hover:text-[#3385ff] hover:underline"
+              className="rounded-control font-medium text-tinta-texto underline-offset-4 hover:underline"
             >
               Criar conta
             </button>
@@ -258,7 +275,7 @@ export function LoginForm({
         </div>
 
         {/* Rodapé da coluna */}
-        <p className="text-center text-caption text-[#45556c]">
+        <p className="text-center text-caption text-fg-muted">
           Abner Traker · Meta Conversions API &amp; Server-Side Tracking
         </p>
       </div>

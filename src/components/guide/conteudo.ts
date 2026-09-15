@@ -44,10 +44,14 @@ export type Hue =
 
 /* Aqui morava o type `Textura`: seis desenhos de capa (pontos, fluxo, trilha,
    grade-marcada, barras, listras) implementados em TopicBackdrop.tsx. Os seis
-   sairam na FASE 3b e o arquivo junto. A capa do topico virou a tinta do
-   assunto a 8% num retangulo (`.cover`, guide.module.css): o assunto ja se
-   identifica pelo filete de 2px, pelo tile e pelo titulo, e desenho atras de
-   texto e ornamento, nao informacao. */
+   sairam na FASE 3b e o arquivo junto, porque eram desenho gerado atras de
+   texto — ornamento, nao informacao.
+
+   O que entrou no lugar nao e desenho: e um objeto fotografado de cima em
+   papel creme, um por assunto, encostado a direita da faixa (`capa`, logo
+   abaixo). A tinta do assunto a 8% continua sendo o FUNDO da faixa; o objeto
+   so pousa em cima dela, longe do tile e do titulo, que e quem continua
+   dizendo de que assunto o cartao trata. */
 
 export interface ItemGuia {
   id: string;
@@ -68,6 +72,18 @@ export interface Topico {
   id: string;
   hue: Hue;
   icone: Icon;
+  /**
+   * Capa da faixa: o objeto do assunto em papel creme, fotografado de cima,
+   * em `public/brand/guia/<id>.webp`. Fica ENCOSTADO A DIREITA da faixa; a
+   * tinta do assunto continua sendo o fundo. E decoracao: entra com `alt=""`
+   * e `aria-hidden` e nao repete nada que o titulo ao lado ja nao diga.
+   *
+   * O caminho vem escrito, e nao deduzido do `id`, porque o campo e
+   * OPCIONAL: topico sem arquivo fica so com a tinta, e uma regra
+   * `/brand/guia/${id}.webp` esconderia essa saida e quebraria calada no dia
+   * em que um `id` mudar sem o arquivo mudar junto.
+   */
+  capa?: string;
   titulo: string;
   /** Uma linha, visivel com o card fechado. */
   frase: string;
@@ -201,6 +217,7 @@ export const TOPICOS: Topico[] = [
     id: 'conferir-envio',
     hue: 'conferencia',
     icone: SealCheckIcon,
+    capa: '/brand/guia/conferir-envio.webp',
     titulo: 'A venda foi para a Meta?',
     frase: 'Onde fica a prova, o que cada situação quer dizer e qual tela não responde isso.',
     contador: '4 conferências',
@@ -260,6 +277,7 @@ export const TOPICOS: Topico[] = [
     id: 'como-usar',
     hue: 'manual',
     icone: CursorClickIcon,
+    capa: '/brand/guia/como-usar.webp',
     titulo: 'Disparo manual em 5 passos',
     frase: 'Sempre na mesma ordem. Você confere tudo antes de enviar.',
     contador: '5 passos',
@@ -333,6 +351,7 @@ export const TOPICOS: Topico[] = [
     id: 'webhook-automatico',
     hue: 'auto',
     icone: LightningIcon,
+    capa: '/brand/guia/webhook-automatico.webp',
     titulo: 'Disparo automático em 6 passos',
     frase: 'Ligar o recebimento direto da plataforma, sem copiar e colar.',
     contador: '6 passos',
@@ -410,6 +429,7 @@ export const TOPICOS: Topico[] = [
     id: 'onde-achar',
     hue: 'dados',
     icone: MapTrifoldIcon,
+    capa: '/brand/guia/onde-achar.webp',
     titulo: 'Onde achar cada dado',
     frase: 'O caminho exato dentro do Gerenciador de Eventos.',
     contador: '6 dados',
@@ -475,6 +495,7 @@ export const TOPICOS: Topico[] = [
     id: 'emq',
     hue: 'qualidade',
     icone: GaugeIcon,
+    capa: '/brand/guia/emq.webp',
     titulo: 'Qualidade do evento',
     frase:
       'A soma ponderada dos 9 parâmetros vai de 0 a 10. Acima de 8 a atribuição ao anúncio é direta.',
@@ -492,6 +513,7 @@ export const TOPICOS: Topico[] = [
     id: 'regras',
     hue: 'regras',
     icone: ShieldCheckIcon,
+    capa: '/brand/guia/regras.webp',
     titulo: 'Regras da Meta',
     frase: 'O que a API aceita e o que ela recusa.',
     contador: '5 regras',
