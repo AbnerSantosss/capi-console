@@ -156,7 +156,9 @@ export function SeletorDePeriodo({
     });
   }
 
-  const classeDoCampo = 'w-full min-w-0 sm:w-40 md:w-36';
+  // No estreito o campo divide a linha com o rotulo dentro da sua coluna; de
+  // `sm` para cima volta a ser a largura fixa de sempre.
+  const classeDoCampo = 'w-full min-w-0 flex-1 sm:w-40 sm:flex-none md:w-36';
 
   return (
     <div
@@ -175,7 +177,7 @@ export function SeletorDePeriodo({
               aria-label={f.longo}
               onClick={() => escolherFixo(f.valor)}
               className={cn(
-                'h-control-lg rounded-control border px-3 text-label font-medium whitespace-nowrap transition-colors md:h-control-md',
+                'h-control-lg rounded-control border px-1.5 text-label font-medium whitespace-nowrap transition-colors md:h-control-md md:px-3',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
                 ativo
                   ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
@@ -188,35 +190,45 @@ export function SeletorDePeriodo({
         })}
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <CalendarRange className="size-4 shrink-0 text-fg-muted" aria-hidden />
-        <label htmlFor={idDe} className="text-caption text-fg-muted">
-          De
-        </label>
-        <Input
-          id={idDe}
-          type="date"
-          value={valor.de ?? ''}
-          max={valor.ate ?? hoje ?? undefined}
-          onChange={(e) => trocarData('de', e.target.value)}
-          className={classeDoCampo}
-          aria-invalid={umSo && valor.de === null ? true : undefined}
-        />
-        <label htmlFor={idAte} className="text-caption text-fg-muted">
-          até
-        </label>
-        <Input
-          id={idAte}
-          type="date"
-          value={valor.ate ?? ''}
-          min={valor.de ?? undefined}
-          max={hoje ?? undefined}
-          onChange={(e) => trocarData('ate', e.target.value)}
-          className={classeDoCampo}
-          aria-invalid={umSo && valor.ate === null ? true : undefined}
-        />
+      {/* Grade de duas colunas no estreito, fila no resto. Antes era uma fila
+          unica com `flex-wrap`, e num telefone ela quebrava em QUATRO linhas —
+          icone+"De", campo inteiro, "até", campo inteiro — ~150px de formulario
+          vazio empurrando o primeiro numero para fora da tela. O `sm:contents`
+          dissolve os invólucros de `sm` para cima: o layout largo e o mesmo de
+          antes, elemento por elemento. */}
+      <div className="grid min-w-0 grid-cols-2 items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-2">
+        <CalendarRange className="hidden size-4 shrink-0 text-fg-muted sm:block" aria-hidden />
+        <div className="flex min-w-0 items-center gap-1.5 sm:contents">
+          <label htmlFor={idDe} className="text-caption text-fg-muted">
+            De
+          </label>
+          <Input
+            id={idDe}
+            type="date"
+            value={valor.de ?? ''}
+            max={valor.ate ?? hoje ?? undefined}
+            onChange={(e) => trocarData('de', e.target.value)}
+            className={classeDoCampo}
+            aria-invalid={umSo && valor.de === null ? true : undefined}
+          />
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 sm:contents">
+          <label htmlFor={idAte} className="text-caption text-fg-muted">
+            até
+          </label>
+          <Input
+            id={idAte}
+            type="date"
+            value={valor.ate ?? ''}
+            min={valor.de ?? undefined}
+            max={hoje ?? undefined}
+            onChange={(e) => trocarData('ate', e.target.value)}
+            className={classeDoCampo}
+            aria-invalid={umSo && valor.ate === null ? true : undefined}
+          />
+        </div>
         {umSo && (
-          <span role="status" className="text-caption text-fg-body">
+          <span role="status" className="col-span-2 text-caption text-fg-body sm:col-auto">
             Falta a outra data para o intervalo valer.
           </span>
         )}
