@@ -994,7 +994,7 @@ export function InboxList({
                 <span>{e.motivo}</span>
                 <button
                   type="button"
-                  className="text-accent-text underline underline-offset-2"
+                  className="text-tinta-texto underline underline-offset-2"
                   onClick={() => {
                     const achado = itens.find((i) => i.id === e.id);
                     if (achado) setPayloadAberto(achado);
@@ -1097,7 +1097,7 @@ export function InboxList({
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
-              <Send className="size-5 text-accent-text" aria-hidden />
+              <Send className="size-5 text-tinta-texto" aria-hidden />
               Enviar como {parDoAlvo?.pt ?? 'evento'}
             </DialogTitle>
             <DialogDescription className="text-caption text-fg-muted">

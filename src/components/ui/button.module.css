@@ -1,107 +1,64 @@
 /* =========================================================================
    Botão — as partes que só existem em CSS de verdade (V-06)
 
-   Por que um módulo e não classes utilitárias: o brilho de uma passada precisa
-   de um pseudo-elemento com z-index negativo dentro de um contexto isolado, e
-   o estado ocupado precisa de `@keyframes` próprios. Nenhum dos dois cabe numa
-   classe do Tailwind. O plano v3 (§3.6) previa `.botao-ocupado` em
-   `globals.css`; nesta fase o `globals.css` tem outro dono, então as regras
-   moram junto do componente que é o único a usá-las.
+   Por que um módulo e não classes utilitárias: o estado ocupado precisa de
+   `@keyframes` próprios — as listras andando no fundo e o disco girando antes
+   do rótulo — e isso não cabe numa classe do Tailwind. O plano v3 (§3.6)
+   previa `.botao-ocupado` em `globals.css`; nesta fase o `globals.css` tem
+   outro dono, então as regras moram junto do componente que é o único a usá-las.
 
    Nada de hexadecimal e nada de `font-size` aqui: toda cor vem dos tokens do
    `:root` (G7) e todo tamanho de letra vem da escala nomeada (G6).
    ========================================================================= */
 
-/* --- Primário: rampa vertical de dois pontos (DS-2.4′) ------------------ */
+/* --- Primário: papel chapado ------------------------------------------- */
 
+/* Sem rampa vertical, sem halo colorido e sem brilho de passada: o primário é
+   a superfície de maior luminosidade da tela, e é isso — não um matiz — que
+   faz o olho achá-lo primeiro. O relevo interno do projeto
+   (`--realce-interno`, um branco a 7%) foi pensado para superfície escura;
+   por cima do papel ele não aparece, então o botão fica chapado de verdade.
+
+   `background-color` e não o atalho `background`: o estado ocupado pinta as
+   listras em `background-image`, e o atalho no `:hover` apagaria as listras
+   no meio do trabalho. */
 .primario {
-  background-image: linear-gradient(
-    180deg,
-    var(--accent-fill),
-    var(--accent-fill-active)
-  );
-  /* Realce interno forte (a aresta de cima pegando luz) + sombra curta de
-     assentamento + um halo azul baixo, que é o que faz o botão primário ser
-     o único objeto da tela que parece ter peso. */
-  box-shadow:
-    var(--realce-interno-forte),
-    0 1px 2px rgb(0 0 0 / 30%),
-    0 4px 12px -4px color-mix(in srgb, var(--accent-fill) 50%, transparent);
+  background-color: var(--papel);
+  color: var(--papel-texto);
 }
 
 .primario:hover {
-  background-image: linear-gradient(
-    180deg,
-    var(--accent-fill-hover),
-    var(--accent-fill)
-  );
+  background-color: var(--papel-hover);
 }
 
 .primario:active {
-  background-image: linear-gradient(
-    180deg,
-    var(--accent-fill-active),
-    var(--accent-fill-active)
-  );
-}
-
-/* --- Brilho de UMA passada --------------------------------------------- */
-
-/* Parado, o botão não pulsa (E-12 / DS-5.8): a faixa fica estacionada fora da
-   borda esquerda e só atravessa quando o ponteiro chega ou o foco cai nele.
-   `z-index: -1` dentro de `isolation: isolate` põe a faixa acima do fundo e
-   abaixo do texto — é por isso que o rótulo não clareia junto. */
-.brilho::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  transform: translateX(-110%);
-  background-image: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgb(255 255 255 / 18%),
-    transparent 80%
-  );
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .brilho::before {
-    transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .brilho:hover::before,
-  .brilho:focus-visible::before {
-    transform: translateX(110%);
-  }
+  background-color: var(--papel-active);
 }
 
 /* --- Ocupado: as listras andando -------------------------------------- */
 
 /* Vale para "Disparar N", "Salvar regras", "Enviar para a Meta". O seletor
-   repete `:hover`/`:active` porque as regras de `.primario` acima são mais
-   específicas — sem isso, passar o mouse traria a rampa lisa de volta no meio
-   do trabalho. `opacity`/`pointer-events` voltam ao normal para o botão poder
-   continuar `disabled` (nada de clique duplo) sem apagar as listras. */
+   repete `:hover`/`:active` para o fundo não voltar ao liso no meio do
+   trabalho. `opacity`/`pointer-events` voltam ao normal para o botão poder
+   continuar `disabled` (nada de clique duplo) sem apagar as listras.
+
+   As listras agora são claras (papel), então o rótulo e o disco recebem
+   `--papel-texto` aqui: o primário já vinha escrito assim, mas um `ocupado`
+   pedido em `outline`/`secondary`/`ghost` traria texto claro e sumiria. */
 .ocupado,
 .ocupado:hover,
 .ocupado:active,
 .ocupado:disabled {
   background-image: repeating-linear-gradient(
     -45deg,
-    var(--accent-fill-active) 0 0.75rem,
-    var(--accent-fill-hover) 0.75rem 1.5rem
+    var(--papel-active) 0 0.75rem,
+    var(--papel-hover) 0.75rem 1.5rem
   );
   background-size: 2.12rem 2.12rem;
+  color: var(--papel-texto);
   cursor: progress;
   opacity: 1;
   pointer-events: auto;
-}
-
-/* O brilho não roda por cima do trabalho em andamento. */
-.ocupado::before {
-  display: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -119,10 +76,13 @@
 
 /* --- O disco que gira antes do rótulo ---------------------------------- */
 
+/* `currentColor` porque o disco aparece em qualquer variante: em cima do
+   papel ele herda o quase-preto, em cima das superfícies escuras herda o
+   texto claro. Branco fixo era invisível no botão primário novo. */
 .girando {
   border-radius: 50%;
-  border: 2px solid rgb(255 255 255 / 30%);
-  border-top-color: white;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
 }
 
 @media (prefers-reduced-motion: no-preference) {

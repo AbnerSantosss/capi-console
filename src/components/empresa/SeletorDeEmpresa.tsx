@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
  * `useEmpresaStore`. Este componente so pede e mostra.
  *
  * 🔴 Nenhuma cor nova: as classes sao as do DS (`surface-*`, `fg-*`, `line*`,
- * `accent-text`). A UNICA cor arbitraria da tela e a `cor` que o operador
+ * `tinta-texto`). A UNICA cor arbitraria da tela e a `cor` que o operador
  * escolheu para a empresa, e ela entra por `style` — e dado, nao classe.
  */
 
@@ -190,7 +190,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
                  divide a linha com o seletor. No celular não há menu nenhum
                  aqui em cima e o `shrink` continua sendo o que faz o nome
                  caber em 375px. */
-              className="flex h-control-sm min-w-0 shrink cursor-pointer items-center gap-2 rounded-control border border-line bg-surface-1 py-0 pr-2 pl-1.5 text-left shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text aria-expanded:bg-surface-2 xl:shrink-0"
+              className="flex h-control-sm min-w-0 shrink cursor-pointer items-center gap-2 rounded-control border border-line bg-surface-1 py-0 pr-2 pl-1.5 text-left shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto aria-expanded:bg-surface-2 xl:shrink-0"
             />
           }
         >
@@ -236,7 +236,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
                     <Menu.Item
                       key={empresa.id}
                       onClick={() => void trocar(empresa)}
-                      className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong"
+                      className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
                     >
                       <Insignia empresa={empresa} className="size-5" />
                       <span className="min-w-0 flex-1 truncate">{empresa.nome}</span>
@@ -244,7 +244,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
                           rotulo, e um leitor de tela nao ve realce nenhum. */}
                       {estaAtiva && (
                         <>
-                          <Check className="size-4 shrink-0 text-accent-text" aria-hidden />
+                          <Check className="size-4 shrink-0 text-tinta-texto" aria-hidden />
                           <span className="sr-only">(empresa ativa)</span>
                         </>
                       )}
@@ -257,7 +257,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
 
               <Menu.Item
                 onClick={() => setDialogo('criar')}
-                className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong"
+                className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
               >
                 <Plus className="size-4 shrink-0" aria-hidden />
                 Adicionar empresa
@@ -266,7 +266,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
               {ativa && (
                 <Menu.Item
                   onClick={() => setDialogo('editar')}
-                  className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong"
+                  className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
                 >
                   <Pencil className="size-4 shrink-0" aria-hidden />
                   Editar empresa atual

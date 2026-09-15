@@ -135,7 +135,7 @@ export function ResultPanel({
                     href={atribuicao.links.anuncio}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-accent-text underline-offset-2 hover:underline"
+                    className="inline-flex items-center gap-1 text-tinta-texto underline-offset-2 hover:underline"
                   >
                     Abrir no Gerenciador
                     <ExternalLink className="size-3" aria-hidden />
@@ -146,7 +146,7 @@ export function ResultPanel({
                     href={atribuicao.links.biblioteca}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-accent-text underline-offset-2 hover:underline"
+                    className="inline-flex items-center gap-1 text-tinta-texto underline-offset-2 hover:underline"
                   >
                     Biblioteca de Anúncios
                     <ExternalLink className="size-3" aria-hidden />

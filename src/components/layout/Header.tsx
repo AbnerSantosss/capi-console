@@ -73,7 +73,7 @@ function iniciaisDoOperador(nome: string): string | null {
 
 /** Uma linha só de item de menu — as cinco do operador são idênticas. */
 const ITEM_MENU =
-  'flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong';
+  'flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong';
 
 export function Header() {
   const pathname = usePathname();
@@ -166,15 +166,19 @@ export function Header() {
           estreitas desceu para a barra de abas do rodapé, que é onde o polegar
           alcança, e o estado do automático entrou na pílula de ambiente. */}
       <div className="mx-auto flex h-[var(--altura-cabecalho)] w-full max-w-cabecalho items-center gap-2.5 px-4 sm:px-6 lg:px-8">
-        {/* Marca do produto. O vetor é o oficial (`ui/app-mark.tsx`) — o
-            quadrado com gradiente é a moldura, não um desenho novo. */}
+        {/* Marca do produto. O vetor é o oficial (`ui/app-mark.tsx`) — a
+            moldura é só um quadrado de superfície, não um desenho novo.
+            O gradiente azul que estava aqui saiu por dois motivos somados:
+            a cor não existe mais (o acento virou papel) e "ícone claro dentro
+            de quadradinho com gradiente" é a assinatura de template que este
+            redesenho existe para tirar. A moldura inteira sai na FASE 3. */}
         <Link
           href="/painel"
           aria-label={`${NOME_PRODUTO} — ir para o Painel`}
-          className="flex shrink-0 items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+          className="flex shrink-0 items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
         >
-          <span className="grid size-[1.625rem] shrink-0 place-items-center rounded-control bg-linear-to-br from-accent-fill to-accent-fill-active text-white shadow-realce-forte">
-            <AppMark size={16} className="text-white" />
+          <span className="grid size-[1.625rem] shrink-0 place-items-center rounded-control bg-surface-2 text-fg-strong shadow-realce-forte">
+            <AppMark size={16} className="text-fg-strong" />
           </span>
           {/* Some só na faixa de 80rem a 92rem: é onde o menu já está na linha
               e o espaço acaba. O quadrado com a marca fica, e o `aria-label`
@@ -235,9 +239,9 @@ export function Header() {
               aria-label={ambienteFalado}
               title={ambienteFalado}
               className={cn(
-                'flex h-control-sm shrink-0 items-center gap-2 rounded-full border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
+                'flex h-control-sm shrink-0 items-center gap-2 rounded-full border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
                 emTeste
-                  ? 'border-accent-text/40 bg-accent-text/10 text-accent-text hover:bg-accent-text/15'
+                  ? 'border-tinta-texto/40 bg-tinta/10 text-tinta-texto hover:bg-tinta/15'
                   : 'border-warning/40 bg-warning/10 text-warning hover:bg-warning/15'
               )}
             >
@@ -248,7 +252,7 @@ export function Header() {
                 className={cn(
                   'size-[0.4375rem] shrink-0 rounded-full ring-3',
                   emTeste
-                    ? 'bg-accent-text ring-accent-text/20'
+                    ? 'bg-tinta-texto ring-tinta-texto/20'
                     : 'bg-warning ring-warning/20'
                 )}
               />
@@ -277,7 +281,7 @@ export function Header() {
               window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))
             }
             aria-label="Buscar pedido, e-mail ou regra"
-            className="hidden h-control-sm w-60 shrink items-center gap-2 rounded-control border border-line bg-surface-1 px-2.5 text-label text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text lg:flex xl:hidden"
+            className="hidden h-control-sm w-60 shrink items-center gap-2 rounded-control border border-line bg-surface-1 px-2.5 text-label text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:flex xl:hidden"
           >
             <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
             <span className="truncate">Buscar pedido, e-mail, regra</span>
@@ -295,7 +299,7 @@ export function Header() {
             }
             aria-label="Buscar pedido, e-mail ou regra"
             title="Buscar pedido, e-mail ou regra (⌘K)"
-            className="grid size-control-sm shrink-0 place-items-center gap-1.5 rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text lg:hidden xl:flex xl:h-control-sm xl:w-auto xl:items-center xl:px-2"
+            className="grid size-control-sm shrink-0 place-items-center gap-1.5 rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:hidden xl:flex xl:h-control-sm xl:w-auto xl:items-center xl:px-2"
           >
             <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
             {/* O atalho fica à vista de propósito: sem o campo por extenso, é
@@ -315,7 +319,7 @@ export function Header() {
             href="/automatico#retornos"
             aria-label="Avisos: retornos e erros do disparo automático"
             title="Avisos: retornos e erros do disparo automático"
-            className="grid size-control-sm shrink-0 place-items-center rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+            className="grid size-control-sm shrink-0 place-items-center rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
           >
             <Bell className="size-4" strokeWidth={1.75} aria-hidden />
           </Link>
@@ -334,7 +338,7 @@ export function Header() {
                       ? `Menu do operador: ${nomeOperador}`
                       : 'Menu do operador'
                   }
-                  className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-linear-to-br from-accent-fill to-accent-fill-active text-caption font-semibold text-white ring-2 ring-surface-3 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+                  className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full border border-line-control bg-surface-3 text-caption font-semibold text-fg-strong transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
                 />
               }
             >

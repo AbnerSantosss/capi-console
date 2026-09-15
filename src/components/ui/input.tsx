@@ -23,7 +23,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "h-control-lg w-full min-w-0 rounded-control border border-line-control bg-surface-2 px-3 py-1 text-input-mobile text-fg-body transition-colors outline-none",
         "placeholder:text-fg-muted",
         "hover:border-fg-disabled",
-        "focus-visible:border-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text",
+        "focus-visible:border-tinta-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto",
         "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
         "aria-invalid:border-danger aria-invalid:focus-visible:outline-danger",
         "md:h-control-md md:text-body",

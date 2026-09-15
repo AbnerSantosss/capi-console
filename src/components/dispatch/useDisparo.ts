@@ -16,12 +16,18 @@ import type { DispatchResult } from './tipos';
  * `canvas-confetti` pinta num <canvas> e nao entende `var()`, entao a leitura
  * do :root ja resolvido pelo navegador e feita no clique — uma vez, e so
  * quando ha confete para pintar. Antes daqui viviam tres hex soltos que eram
- * copias de --accent-fill, --accent-text e --success: um retoque na paleta
- * deixava o confete para tras em silencio (DS-0.2, G7).
+ * copias dos tokens de cor: um retoque na paleta deixava o confete para tras
+ * em silencio (DS-0.2, G7).
+ *
+ * v4: le `--tinta` e `--tinta-texto` — os dois degraus da tinta DA AREA, nao
+ * um azul de acao fixo. Como a leitura e do `:root` ja resolvido no momento do
+ * clique, o confete sai na cor da tela em que o disparo aconteceu: no painel
+ * ele e ciano, em pixels e ambar. A vitoria e pintada com a tinta de quem a
+ * conquistou.
  */
 function coresDoConfete(): string[] {
   const raiz = getComputedStyle(document.documentElement);
-  return ['--accent-fill', '--accent-text', '--success']
+  return ['--tinta', '--tinta-texto', '--success']
     .map((t) => raiz.getPropertyValue(t).trim())
     .filter(Boolean);
 }

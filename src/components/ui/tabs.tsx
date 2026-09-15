@@ -76,13 +76,13 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         // h-control-sm (36px) e o piso de alvo de DS-5.2; o `h-8` anterior
         // rendia 28px na densidade compacta. A altura fica em px e nao escala;
         // quem responde a densidade e o espaco (gap, px, p-1 da lista) — DS-4.10.
-        "relative inline-flex h-control-sm flex-1 items-center justify-center gap-1.5 rounded-control border border-transparent px-3 text-label font-medium whitespace-nowrap text-fg-muted transition-colors duration-150 outline-none group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative inline-flex h-control-sm flex-1 items-center justify-center gap-1.5 rounded-control border border-transparent px-3 text-label font-medium whitespace-nowrap text-fg-muted transition-colors duration-150 outline-none group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:border-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         // A correcao de §13.4.2: sobe de superficie e ganha limite visivel.
         // Sem sombra — DS-2.4 reserva sombra para camada flutuante.
         "data-active:border-line-control data-active:bg-surface-2 data-active:text-fg-strong",
         // Variante `line`: a aba ativa e marcada pelo risco de acento.
-        "after:absolute after:bg-accent-text after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        "after:absolute after:bg-tinta-texto after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
         className
       )}
       {...props}

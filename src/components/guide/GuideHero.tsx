@@ -51,7 +51,7 @@ export function GuideHero({ animar }: { animar: boolean }) {
         className={styles.heroPattern}
       />
       <div className={styles.heroInner}>
-        <p className="flex items-center gap-2 text-caption font-bold tracking-[0.14em] text-accent-text uppercase">
+        <p className="flex items-center gap-2 text-caption font-bold tracking-[0.14em] text-tinta-texto uppercase">
           <BookOpenIcon size={15} weight="duotone" aria-hidden />
           Referência operacional
         </p>

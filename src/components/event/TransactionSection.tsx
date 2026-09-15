@@ -54,7 +54,7 @@ export function TransactionSection() {
             >
               <SelectTrigger id="campo-evento" className="w-full">
                 <span className="flex items-center gap-2">
-                  <evento.icon className="size-4 text-accent-text" aria-hidden />
+                  <evento.icon className="size-4 text-tinta-texto" aria-hidden />
                   <span className="font-medium text-fg-strong">{evento.label}</span>
                 </span>
               </SelectTrigger>

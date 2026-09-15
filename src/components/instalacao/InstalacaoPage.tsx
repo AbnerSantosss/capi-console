@@ -248,14 +248,14 @@ export function InstalacaoPage({
         <nav aria-label="Blocos desta página" className="ml-auto flex items-center gap-3">
           <a
             href={`#${ANCORA_WEBHOOK}`}
-            className="inline-flex items-center gap-1.5 text-caption font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+            className="inline-flex items-center gap-1.5 text-caption font-medium text-tinta-texto underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
           >
             <Link2 className="size-3.5" aria-hidden />
             Webhook
           </a>
           <a
             href={`#${ANCORA_TAG}`}
-            className="inline-flex items-center gap-1.5 text-caption font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+            className="inline-flex items-center gap-1.5 text-caption font-medium text-tinta-texto underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
           >
             <Link2 className="size-3.5" aria-hidden />
             Tag do site

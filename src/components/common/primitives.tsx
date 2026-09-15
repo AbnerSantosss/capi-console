@@ -148,7 +148,7 @@ export function HelpTip({
       <TooltipTrigger
         type="button"
         aria-label={label}
-        className="relative inline-flex size-5 cursor-help items-center justify-center rounded text-fg-muted transition-colors hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text after:absolute after:top-1/2 after:left-1/2 after:size-[36px] after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
+        className="relative inline-flex size-5 cursor-help items-center justify-center rounded text-fg-muted transition-colors hover:text-tinta-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto after:absolute after:top-1/2 after:left-1/2 after:size-[36px] after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
       >
         <Info className="size-3.5" aria-hidden />
       </TooltipTrigger>
@@ -349,7 +349,7 @@ const TONE: Record<Tone, { dot: string; text: string }> = {
   success: { dot: 'bg-success', text: 'text-success' },
   warning: { dot: 'bg-warning', text: 'text-warning' },
   danger: { dot: 'bg-danger', text: 'text-danger' },
-  accent: { dot: 'bg-accent-text', text: 'text-accent-text' },
+  accent: { dot: 'bg-tinta-texto', text: 'text-tinta-texto' },
   neutral: { dot: 'bg-fg-disabled', text: 'text-fg-muted' },
 };
 
@@ -442,7 +442,7 @@ export function Callout({
     warning: 'border-warning/40 bg-warning/8 text-warning',
     danger: 'border-danger/40 bg-danger/8 text-danger',
     success: 'border-success/40 bg-success/8 text-success',
-    info: 'border-accent-text/40 bg-accent-text/8 text-accent-text',
+    info: 'border-tinta-texto/40 bg-tinta/8 text-tinta-texto',
   }[tone];
 
   return (
@@ -481,7 +481,7 @@ export function GuiaLink({
   return (
     <Link
       href={`/guia#${anchor}`}
-      className="text-accent-text underline-offset-2 hover:underline"
+      className="text-tinta-texto underline-offset-2 hover:underline"
     >
       {children}
     </Link>

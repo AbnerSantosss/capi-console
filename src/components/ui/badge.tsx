@@ -50,7 +50,7 @@ const badgeVariants = cva(
         sucesso: "border-success/80 bg-success/10 text-success",
         aviso: "border-warning/80 bg-warning/10 text-warning",
         perigo: "border-danger/80 bg-danger/10 text-danger",
-        info: "border-accent-text/80 bg-accent-text/10 text-accent-text",
+        info: "border-tinta-texto/80 bg-tinta/10 text-tinta-texto",
       },
     },
     defaultVariants: {

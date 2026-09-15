@@ -47,7 +47,7 @@ export function BarraDeAbas() {
             className={cn(
               // A linha de 2px na tinta da área fica em CIMA, encostada na
               // borda da barra — é o espelho da régua do cabeçalho.
-              'relative flex min-h-[var(--altura-barra-abas)] flex-col items-center justify-center gap-1 px-1 text-caption font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-text',
+              'relative flex min-h-[var(--altura-barra-abas)] flex-col items-center justify-center gap-1 px-1 text-caption font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-tinta-texto',
               ativo
                 ? 'text-fg-strong before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-tinta'
                 : 'text-fg-muted hover:text-fg-body'

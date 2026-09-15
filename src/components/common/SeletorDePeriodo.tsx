@@ -176,9 +176,9 @@ export function SeletorDePeriodo({
               onClick={() => escolherFixo(f.valor)}
               className={cn(
                 'h-control-lg rounded-control border px-3 text-label font-medium whitespace-nowrap transition-colors md:h-control-md',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
                 ativo
-                  ? 'border-accent-text/50 bg-accent-text/10 text-accent-text'
+                  ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
                   : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
               )}
             >

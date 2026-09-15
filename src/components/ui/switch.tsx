@@ -90,7 +90,7 @@ export function Switch({
               salvando
                 ? 'text-fg-muted'
                 : checked
-                  ? 'text-accent-text'
+                  ? 'text-tinta-texto'
                   : 'text-fg-muted'
             )}
           >
@@ -105,8 +105,17 @@ export function Switch({
             className={cn(
               'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 shadow-realce transition-colors duration-150 outline-none',
               // C-1 — borda nos DOIS estados. Desligado: `line-control`
-              // (3.91 sobre o painel). Ligado: `accent-text` (7.09). O
-              // preenchimento e o terceiro sinal, nunca o unico.
+              // (4.15 sobre o painel). Ligado: `tinta-texto` (11.68 no pior
+              // caso das cinco areas). O preenchimento e o terceiro sinal,
+              // nunca o unico.
+              //
+              // v4: ligado deixou de ser o azul de acao e passou a ser a TINTA
+              // da area (`bg-tinta`). Nao e `bg-papel` porque papel e a acao
+              // primaria, e ha tela com seis switches — seis primarios nao e
+              // hierarquia, e ruido. Como a tinta cheia e CLARA (L 0.80), o
+              // botao tambem inverte: ligado ele vira `surface-0`, escuro
+              // sobre a tinta. Manter o botao branco sobre a tinta deixaria os
+              // dois em 1.7:1 — o estado sumiria dentro do proprio controle.
               //
               // v3: o trilho desligado subiu de `surface-2` para `surface-3`.
               // Sobre o cartao (que agora tem rampa a partir de `surface-1`),
@@ -114,17 +123,17 @@ export function Switch({
               // sumia — um controle que so aparece quando esta ligado esconde
               // metade do estado que ele existe para mostrar.
               'border-line-control bg-surface-3',
-              'data-checked:border-accent-text data-checked:bg-accent-fill',
+              'data-checked:border-tinta-texto data-checked:bg-tinta',
               // C-2 — o alvo de toque de verdade: 44px, 48px em ponteiro
               // grosso. Invisivel, em volta do trilho de 44x24.
               'after:absolute after:-inset-y-2.5 after:-inset-x-0 after:content-[""]',
               '[@media(pointer:coarse)]:after:-inset-y-3',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
               'disabled:cursor-not-allowed disabled:opacity-60'
             )}
             {...props}
           >
-            <SwitchPrimitive.Thumb className="block size-4 rounded-full bg-fg-strong shadow-sm transition-[translate] duration-150 data-checked:translate-x-5 data-checked:bg-white" />
+            <SwitchPrimitive.Thumb className="block size-4 rounded-full bg-fg-strong shadow-sm transition-[translate] duration-150 data-checked:translate-x-5 data-checked:bg-surface-0" />
           </SwitchPrimitive.Root>
         </div>
       </div>

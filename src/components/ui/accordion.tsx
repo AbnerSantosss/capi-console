@@ -39,7 +39,7 @@ function AccordionTrigger({
         // generica do Tailwind, que estavam nos dois, nao escalavam com a
         // densidade e nao existem mais no produto fora de `auth/`.
         className={cn(
-          "group/accordion-trigger relative flex flex-1 items-start justify-between rounded-control border border-transparent py-2.5 text-left text-label font-medium text-fg-body transition-colors duration-150 outline-none hover:text-fg-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-fg-muted",
+          "group/accordion-trigger relative flex flex-1 items-start justify-between rounded-control border border-transparent py-2.5 text-left text-label font-medium text-fg-body transition-colors duration-150 outline-none hover:text-fg-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-fg-muted",
           className
         )}
         {...props}

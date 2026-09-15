@@ -36,8 +36,10 @@ export function AppMark({ size = 40, decorative = true, className = '' }: Props)
         <path d="M4 24h11" />
         <path d="M33 24h11" />
       </g>
-      {/* Pontos orbitando, no azul da marca. */}
-      <g fill="var(--accent-text, #4da6ff)">
+      {/* Pontos orbitando, na tinta de texto da area. O hex e so o fallback de
+          quando o SVG e servido fora do documento (favicon, e-mail); dentro do
+          app quem manda e a variavel, que muda com `[data-area]`. */}
+      <g fill="var(--tinta-texto, #7dece5)">
         <circle cx="10" cy="10" r="2.5" />
         <circle cx="38" cy="10" r="2.5" />
         <circle cx="10" cy="38" r="2.5" />

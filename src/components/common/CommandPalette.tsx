@@ -225,7 +225,7 @@ function Item({
       // A linha ativa era `bg-surface-2`: 1.13:1 e MAIS escura que o fundo da
       // paleta — descendo com as setas não dava para ver onde se estava. Quem
       // cumpre os 3:1 de §1.4.11 é a barra azul; o fill translúcido só ajuda.
-      className="flex cursor-pointer items-center gap-2.5 rounded-control border-l-2 border-transparent px-3 py-2.5 text-body text-fg-body data-[selected=true]:border-accent-text data-[selected=true]:bg-accent-text/15 data-[selected=true]:text-fg-strong"
+      className="flex cursor-pointer items-center gap-2.5 rounded-control border-l-2 border-transparent px-3 py-2.5 text-body text-fg-body data-[selected=true]:border-tinta-texto data-[selected=true]:bg-tinta/15 data-[selected=true]:text-fg-strong"
     >
       <Icone className="size-4 text-fg-muted" aria-hidden />
       {children}

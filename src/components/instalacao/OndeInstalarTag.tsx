@@ -135,7 +135,7 @@ export function OndeInstalarTag() {
                 id={`instalar-${caminho.id}`}
                 className="flex items-center gap-2 text-label font-semibold text-fg-strong"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-control border border-accent-text/20 bg-accent-text/8 text-accent-text">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-control border border-tinta-texto/20 bg-tinta/8 text-tinta-texto">
                   <Icone className="size-4" strokeWidth={1.75} aria-hidden />
                 </span>
                 {caminho.titulo}

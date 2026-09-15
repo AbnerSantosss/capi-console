@@ -94,7 +94,7 @@ export function ExplicacaoDoDisparo({
           Quem faz o evento <strong className="font-semibold">chegar</strong> é a{' '}
           <Link
             href="/instalacao"
-            className="text-accent-text underline-offset-2 hover:underline"
+            className="text-tinta-texto underline-offset-2 hover:underline"
           >
             tela de Instalação
           </Link>
@@ -140,7 +140,7 @@ function CartaoDeTela({ dados, aqui }: { dados: Descricao; aqui: boolean }) {
             Você está aqui
           </span>
         ) : (
-          <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-accent-text">
+          <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-tinta-texto">
             Abrir
             <ArrowUpRight className="size-3.5" aria-hidden />
           </span>

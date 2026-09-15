@@ -198,7 +198,7 @@ export function CardDePixel({
         className={cn(
           'rounded-panel border p-4 transition-colors',
           ativo
-            ? 'border-accent-text bg-accent-text/10'
+            ? 'border-tinta-texto bg-tinta/10'
             : 'border-line-strong bg-surface-1'
         )}
       >
@@ -219,7 +219,7 @@ export function CardDePixel({
                 onClick={() => void copiarPixelId()}
                 // PX-2 — um clique copia. O alvo e o proprio numero: e ele que
                 // o operador compara com o Gerenciador de Eventos da Meta.
-                className="mt-1 flex max-w-full items-center gap-1.5 rounded-control text-left text-fg-muted transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+                className="mt-1 flex max-w-full items-center gap-1.5 rounded-control text-left text-fg-muted transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
                 aria-label={`Copiar o ID do Pixel ${marca.pixelId}`}
               >
                 <span className="wrap-token font-mono text-caption tabular">
@@ -262,7 +262,7 @@ export function CardDePixel({
                 <Menu.Popup className="min-w-44 origin-(--transform-origin) rounded-panel border border-line-control bg-surface-3 p-1 shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
                   <Menu.Item
                     onClick={onEditar}
-                    className="flex cursor-default items-center gap-2 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-accent-text data-highlighted:bg-accent-text/15 data-highlighted:text-fg-strong"
+                    className="flex cursor-default items-center gap-2 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
                   >
                     <Pencil className="size-4" aria-hidden />
                     Editar

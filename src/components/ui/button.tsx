@@ -10,23 +10,21 @@ import s from "./button.module.css"
  * Raio 8px, um só, para toda a família. Os valores são os da página de
  * referência visual aprovada (wiki/assets/ux-v3/referencia-visual.html).
  *
- * O primário é o único com rampa vertical e brilho — DS-2.4′ libera gradiente
- * exatamente aqui e em nenhum outro lugar. O destrutivo não ganha nem rampa
- * nem brilho: destrutivo não convida.
+ * O primário é papel chapado: fundo quase branco, texto quase preto. É o
+ * elemento de maior luminosidade da tela, então é o que o olho acha primeiro,
+ * sem precisar de matiz — nada de rampa vertical e nada de brilho varrendo.
  *
- * As três coisas que o CSS utilitário não escreve (a rampa, a faixa de brilho
- * com z-index negativo e as listras do estado ocupado) moram em
- * `button.module.css`, ao lado.
+ * O que o CSS utilitário não escreve (as listras do estado ocupado e o disco
+ * que gira) mora em `button.module.css`, ao lado.
  */
 const buttonVariants = cva(
-  "group/button relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text active:translate-y-px disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto active:translate-y-px disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: cn(
-          "isolate overflow-hidden border-accent-fill-active text-white",
-          s.primario,
-          s.brilho
+          "isolate overflow-hidden border-papel-active text-papel-texto",
+          s.primario
         ),
         outline:
           "border-line-control bg-surface-2 text-fg-body shadow-realce hover:border-line-control hover:bg-surface-3 hover:text-fg-strong aria-expanded:bg-surface-3",
@@ -36,7 +34,7 @@ const buttonVariants = cva(
           "text-fg-muted hover:bg-surface-2 hover:text-fg-strong aria-expanded:bg-surface-2",
         destructive:
           "border-danger/40 bg-danger/10 text-danger hover:bg-danger/20 focus-visible:outline-danger",
-        link: "text-accent-text underline-offset-4 hover:underline",
+        link: "text-tinta-texto underline-offset-4 hover:underline",
       },
       size: {
         sm: "h-[30px] gap-1.5 px-2.5 text-caption",
@@ -59,8 +57,8 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   /**
    * Trabalho em andamento: listras andando no fundo, disco girando antes do
-   * rótulo e `aria-busy` para quem ouve a tela. O brilho de hover não roda
-   * enquanto isto é verdade, e com `prefers-reduced-motion` tudo fica parado.
+   * rótulo e `aria-busy` para quem ouve a tela. Com `prefers-reduced-motion`
+   * tudo fica parado, e só as listras continuam ali.
    *
    * Quem chama continua responsável por `disabled` — o ocupado descreve o
    * estado, não bloqueia o clique sozinho.

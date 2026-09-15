@@ -29,27 +29,38 @@
   --ui-scale-text: 1;
 
   /* --- Superfícies (elevação vem da BORDA, não do fill) ------------------
-     FONTE ÚNICA DE COR (DS-0.1). Nenhum --surface-*, --border-*, --fg-* ou
-     --accent-* pode ser redefinido fora deste bloco: `scripts/contrast-check.mjs`
-     (G4) reprova o build se encontrar. Os valores abaixo são os que estavam em
+     FONTE ÚNICA DE COR (DS-0.1). Nenhum --surface-*, --border-*, --fg-*,
+     --papel* ou --tinta-texto-* pode ser redefinido fora deste bloco:
+     `scripts/contrast-check.mjs` (G4) reprova o build se encontrar. A única
+     exceção, e ela é o coração do v4, são os apelidos `--tinta` e
+     `--tinta-texto`: os blocos `[data-area]` lá embaixo existem PARA
+     reapontá-los. Os valores abaixo são os que estavam em
      produção dentro de `.shell` — subiram para cá em vez de serem trocados
      pelos do :root antigo, que ninguém nunca viu renderizado (DS-1.1).
 
-     v3: a escada saiu do cinza-neutro quase preto para NAVY em camadas (os
-     mesmos quatro degraus da página de referência aprovada). Preto chapado
-     achata tudo; o navy dá profundidade sem acender nada.                    */
-  --surface-0: #0b0f17; /* fundo do app                                    */
-  --surface-1: #151b28; /* painel / card                                   */
-  --surface-2: #1c2333; /* input, cabeçalho de accordion, elemento elevado */
+     v4: a escada saiu do NAVY para GRAFITE QUENTE (H 75, croma 0.007 — uma
+     gota de marrom, não um matiz). O navy do v3 era azul, e azul era
+     exatamente o problema: com o acento azul por cima, a tela inteira
+     acontecia num quadrante só do círculo. O fundo agora é o cinza de uma
+     mesa de trabalho, e o único azul que sobrou é o teal do Painel.
+
+     Os quatro degraus são L do OKLab em passos medidos, NÃO hex escolhidos a
+     olho: 0.150 → 0.211 → 0.264 → 0.317. Degrau perceptual de 0.061 / 0.047 /
+     0.053 — acima do piso de 0.04 do G3′. É o que permite uma superfície se
+     separar da que a contém SEM desenhar borda em volta (era isso que fazia
+     todo painel deste console virar uma caixa).                              */
+  --surface-0: #0d0b08; /* fundo do app                       L 0.150      */
+  --surface-1: #1b1815; /* painel / card                      L 0.211      */
+  --surface-2: #262320; /* input, cabeçalho de accordion      L 0.264      */
 
   /* Superfície ÚNICA de tudo que flutua por cima da página: dialog, popover,
-     select, tooltip, paleta de comandos, toast. É mais clara que o painel de
-     propósito, mas o fill sozinho quase não separa — 1.23 s/ surface-1 e
-     1.37 s/ surface-0. Quem separa é a borda: `border-line-control` dá
-     3.10 s/ esta superfície e 4.51 contra a página escurecida pelo overlay
-     preto a 60% (#040609). Por isso NÃO existe e não deve voltar a existir
-     paleta local de modal: quem flutua usa --surface-3 + --border-control.   */
-  --surface-3: #242c3d; /* popover / dialog / tooltip / paleta             */
+     select, tooltip, paleta de comandos, toast. Continua sendo a mais clara,
+     e agora o fill sozinho JÁ separa: 0.053 de L acima do surface-2 e 0.106
+     acima do painel. A borda deixou de ser a única prova de que existe uma
+     camada nova. `--border-control` segue dando 3.33 contra ela para quem
+     precisa do limite explícito de componente (SC 1.4.11). Por isso NÃO
+     existe e não deve voltar a existir paleta local de modal.                */
+  --surface-3: #33302c; /* popover / dialog / tooltip / paleta  L 0.317    */
 
   /* --- Bordas (DS-3.1 — o nome diz o USO, não a ênfase) ------------------
      --border-subtle   divisória INTERNA: linha de tabela, separador dentro de
@@ -59,43 +70,71 @@
                        secundário, checkbox, cartão clicável, régua de rodapé
                        de modal — e a borda externa de tudo que flutua.
 
-     As três cruzam 3:1 contra a superfície que delimitam (DS-2.1 / SC 1.4.11);
-     é essa a diferença para a paleta anterior, em que subtle (1.29 s0) e
-     default (2.58 s1) eram ornamento invisível. Elevação vem da borda, e uma
-     borda que não se enxerga não eleva nada.
+     v4 corrige um erro de régua que custou caro. O v3 exigia 3:1 das TRÊS,
+     inclusive da divisória interna — e 3:1 num fundo quase preto obriga a
+     linha a ser clara. O resultado era o "traço minimalista" do diagnóstico:
+     todo cartão, toda tabela e todo painel contornados por um fio cinza
+     berrante, porque o gate tratava uma divisória decorativa como se fosse o
+     limite de um controle.
 
-     v3: a página de referência desenha as bordas como branco translúcido
-     (7–18%). Translúcido sobre navy dá ~1.4:1 — bonito na captura, reprovado
-     em G2/G3 e invisível para quem enxerga pouco. Aqui as três são SÓLIDAS,
-     no mesmo matiz navy da referência (r < g < b), no degrau mais escuro que
-     ainda cruza 3:1 contra a superfície que delimitam.                       */
-  --border-subtle: #606775; /* divisória interna  3.37 s0 · 3.03 s1 ✅     */
-  --border-default: #676e7e; /* contorno de superfície
-                                3.75 s0 · 3.37 s1 · 3.07 s2 ✅             */
-  --border-control: #6f7787; /* limite de componente
-                                4.26 s0 · 3.83 s1 · 3.49 s2 · 3.10 s3 ✅    */
-  --border-focus: #3b82f6; /* anel de foco       4.68 s1 · 3.80 s3 ✅      */
+     Agora cada uma responde à régua da própria função:
+
+     --border-subtle   divisória INTERNA (linha de tabela, separador dentro de
+                       um painel já delimitado). Piso: 1.5:1 — "dá para ver o
+                       fio". NÃO é requisito WCAG e não se finge que é: as
+                       linhas de uma tabela já estão separadas por conteúdo,
+                       espaçamento e alinhamento; o fio é reforço.
+     --border-default  contorno de SUPERFÍCIE. Piso: G3′ — ou 3:1 de borda, ou
+                       0.04 de degrau de L. Como as superfícies agora têm o
+                       degrau, esta borda passou a ser OPCIONAL no desenho.
+     --border-control  limite de CONTROLE interativo (input, select, botão
+                       secundário, checkbox, o que flutua). Piso: 3:1 contra
+                       as quatro superfícies, sem exceção — é SC 1.4.11 e não
+                       se negocia.                                            */
+  --border-subtle: #3e3b38; /* divisória interna  1.77 s0 · 1.59 s1 — fio  */
+  --border-default: #565350; /* contorno de superfície
+                                2.57 s0 · 2.31 s1 (quem separa é o degrau) */
+  --border-control: #7e7a76; /* limite de componente
+                                4.62 s0 · 4.15 s1 · 3.67 s2 · 3.08 s3 ✅    */
+
+  /* Anel de foco NEUTRO, para a casca que fica fora de qualquer `data-area`
+     (cabeçalho, login). Dentro de uma área o anel vira a tinta da área — ver
+     a regra `[data-area] :focus-visible` lá embaixo. Este token continua em
+     hex literal aqui porque o gate lê o valor dele para medir o anel; não o
+     troque por um `var()`.                                                   */
+  --border-focus: #c8c3bd; /* anel de foco     10.10 s1 · 7.50 s3 ✅      */
 
   /* --- Texto (razões medidas sobre painel s1 e sobre a camada flutuante s3) */
-  --fg-strong: #f4f6fa; /* títulos, valores      15.92 s1 · 12.92 s3      */
-  --fg-body: #c7cfdc; /* corpo, rótulos        10.98 s1 ·  8.91 s3      */
-  --fg-muted: #8a95a8; /* helper, legendas, placeholder
-                               5.70 s1 ·  4.62 s3 ✅                      */
-  --fg-disabled: #5b6577; /* SÓ desabilitado/ornamento   2.93 s1 · 2.38 s3
+  --fg-strong: #f2f0ed; /* títulos, valores      15.54 s1 · 11.54 s3      */
+  --fg-body: #ceccc8; /* corpo, rótulos        11.02 s1 ·  8.19 s3      */
+  --fg-muted: #a09c97; /* helper, legendas, placeholder
+                               6.48 s1 ·  4.81 s3 ✅                      */
+  --fg-disabled: #74716d; /* SÓ desabilitado/ornamento   3.64 s1 · 2.70 s3
                               — reprova como conteúdo em QUALQUER
                               superfície; placeholder usa --fg-muted       */
 
-  /* --- Acento (azul de AÇÃO: botão, link, foco — nunca decoração) --------
-     A referência pinta o botão com a rampa #3b82f6 → #2563eb → #1d4ed8. O
-     degrau mais claro, com texto branco em cima, dá 3.68:1 e reprova em G1,
-     então o fundo do botão começa um degrau abaixo: a rampa é a mesma, só
-     não parte do topo. O #3b82f6 continua no produto onde não carrega texto
-     — anel de foco e chart-1 —, e o azul que o olho lê como "link" é
-     --accent-text.                                                          */
-  --accent-fill: #2563eb; /* fundo do botão primário — branco = 5.17 ✅   */
-  --accent-fill-hover: #2d70e0; /*                        branco = 4.66 ✅ */
-  --accent-fill-active: #1d4ed8; /*                       branco = 6.70 ✅ */
-  --accent-text: #7fb3ff; /* link, aba ativa, ícone ativo    8.03 ✅      */
+  /* --- Papel (a ação primária) ------------------------------------------
+     Aqui morreu o azul de ação, e essa é a mudança de doutrina do v4.
+
+     O v3 tinha DOIS sistemas de cor disputando a mesma tela: um azul de ação
+     (botão, link, foco, aba ativa, chart-1) e uma tinta por área. Como o azul
+     estava em tudo que o operador toca, ele ganhava sempre — a tinta virava
+     enfeite de fundo a 6% e o console inteiro lia como "azul genérico".
+
+     A ação primária agora é a inversão: fundo CLARO, texto quase preto. É o
+     elemento de maior luminosidade da tela inteira (L 0.925 contra um fundo
+     em 0.150), então ele é o que o olho acha primeiro — sem precisar de
+     matiz nenhum para gritar. Como não tem matiz, não briga com a tinta da
+     área: uma tela do Painel é teal, uma tela de Pixels é ouro, e o botão
+     principal é o mesmo objeto branco nas duas.
+
+     Chapado de propósito: sem gradiente e sem o brilho que varria o botão.
+     Gradiente vertical em botão é a assinatura visual de template — foi o
+     primeiro item da lista vermelha do plano.                                */
+  --papel: #f0ece7; /* fundo da ação primária — papel-texto = 15.74 ✅ */
+  --papel-hover: #fbfaf7; /*                                      17.74 ✅ */
+  --papel-active: #ddd8d2; /*                                     13.07 ✅ */
+  --papel-texto: #16130f; /* o que se escreve em cima do papel            */
 
   /* --- Status (sempre acompanhados de ícone + texto) -------------------- */
   --success: #22c55e; /*  7.56 */
@@ -113,8 +152,8 @@
   --card-foreground: var(--fg-strong);
   --popover: var(--surface-3);
   --popover-foreground: var(--fg-strong);
-  --primary: var(--accent-fill);
-  --primary-foreground: #ffffff;
+  --primary: var(--papel);
+  --primary-foreground: var(--papel-texto);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--fg-strong);
   --muted: var(--surface-2);
@@ -125,38 +164,72 @@
   --destructive-foreground: #ffffff;
   --border: var(--border-subtle);
   --input: var(--border-control);
-  --ring: var(--border-focus);
+  --ring: var(--tinta-texto);
 
-  --chart-1: #3b82f6;
+  /* Série de gráfico: começa na tinta do Painel (é lá que gráfico aparece),
+     não num azul que não existe mais em lugar nenhum do produto. */
+  --chart-1: #3dd7cf;
   --chart-2: #22c55e;
   --chart-3: #f59e0b;
-  --chart-4: #a78bfa;
+  --chart-4: #c3afff;
   --chart-5: #fb7f93;
 
   --sidebar: var(--surface-1);
   --sidebar-foreground: var(--fg-body);
-  --sidebar-primary: var(--accent-fill);
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: var(--papel);
+  --sidebar-primary-foreground: var(--papel-texto);
   --sidebar-accent: var(--surface-2);
   --sidebar-accent-foreground: var(--fg-strong);
   --sidebar-border: var(--border-subtle);
-  --sidebar-ring: var(--border-focus);
+  --sidebar-ring: var(--tinta-texto);
 
   /* =======================================================================
-     TINTA POR ÁREA (§2.3 do plano v3) — segunda exceção a DS-0.1; a primeira
-     é o --hue do Guia. Cada seção do console tem um matiz que o operador
-     reconhece antes de ler o título. A tinta entra em FUNDO (6–16%), em chip
-     de ícone e em linha de destaque. NUNCA em texto: azul de ação e tinta de
-     área são coisas diferentes, e texto colorido some do lado do dado.
-     Os nomes ficam de fora dos quatro namespaces vigiados pelo G4 de
-     propósito — é --tinta que troca por rota, e trocar é o ponto.
+     TINTA POR ÁREA — segunda exceção a DS-0.1; a primeira é o --hue do Guia.
+     Cada seção do console tem um matiz que o operador reconhece antes de ler
+     o título. Os nomes ficam de fora dos quatro namespaces vigiados pelo G4
+     de propósito: é --tinta que troca por rota, e trocar é o ponto.
+
+     v4 promoveu a tinta. No v3 ela era proibida em texto — "azul de ação e
+     tinta de área são coisas diferentes". Verdade, mas o azul de ação foi
+     embora: agora a tinta É a cor de ação (link, aba ativa, anel de foco,
+     ícone ativo), e a ação primária é o papel claro, sem matiz. Um sistema
+     de cor em vez de dois.
+
+     São DOIS degraus, e a diferença importa:
+
+     --tinta-*        L 0.80 — para FUNDO (6–16%), filete, régua, ícone
+                      grande. Não carrega texto pequeno.
+     --tinta-texto-*  L 0.875 — para TEXTO e para o anel de foco. Todos os
+                      cinco cruzam 4.5:1 nas três superfícies com folga
+                      (11.68 no pior caso) e 3:1 como anel.
+
+     Os cinco matizes estão TODOS na mesma luminosidade de propósito: em
+     OKLab, L constante significa peso constante. Trocar de área muda o
+     matiz e não muda nem o contraste nem a hierarquia — nenhuma área fica
+     mais "pesada" que outra por acidente de cor. O croma é o que cede
+     quando o sRGB não alcança (ver `scripts/gerar-paleta.mjs`); o L nunca.
      ======================================================================= */
-  --tinta-painel: #2dd4bf; /* teal    — dados que chegaram        */
-  --tinta-instalacao: #38bdf8; /* céu     — as duas portas de entrada */
-  --tinta-pixels: #f59e0b; /* âmbar   — para onde o evento vai    */
-  --tinta-manual: #fb7185; /* coral   — ação humana               */
-  --tinta-automatico: #a78bfa; /* violeta — regras rodando sozinhas   */
+  --tinta-painel: #3dd7cf; /* teal    — o dado que chegou         */
+  --tinta-instalacao: #b1ca70; /* musgo   — as portas de entrada      */
+  --tinta-pixels: #f0b13f; /* ouro    — para onde o evento vai    */
+  --tinta-manual: #f79ad9; /* rosa    — ação humana               */
+  --tinta-automatico: #c3afff; /* violeta — regras rodando sozinhas   */
   --tinta: var(--tinta-painel); /* padrão; cada <main data-area> troca */
+
+  /* O degrau de texto. `--tinta-manual` ficou em H 340 (rosa-magenta), e não
+     no coral do v3, porque o coral estava a 7° de --danger — literalmente a
+     mesma cor, na única tela que faz confirmação destrutiva. Agora são 31°.
+     `--tinta-pixels` continua a 8° de --warning: é a situação que já existia
+     (o token era o próprio #f59e0b), o círculo não tem um quinto lugar livre
+     depois que verde/âmbar/rosa viraram status, e a separação passou a ser
+     MEDIDA — tinta-texto-pixels está 0.107 de L acima do aviso, o fundo de
+     área nunca passa de 16%, e aviso sempre traz ícone + palavra (SC 1.4.1). */
+  --tinta-texto-painel: #7dece5;
+  --tinta-texto-instalacao: #cbe197;
+  --tinta-texto-pixels: #ffcd7d;
+  --tinta-texto-manual: #ffbfe9;
+  --tinta-texto-automatico: #d8ceff;
+  --tinta-texto: var(--tinta-texto-painel);
 
   /* --- Relevo de superfície (DS-2.4′) ------------------------------------
      Não é sombra projetada: é a aresta de cima da superfície pegando luz,
@@ -196,18 +269,23 @@
    por rota é exatamente a função dela. */
 [data-area='painel'] {
   --tinta: var(--tinta-painel);
+  --tinta-texto: var(--tinta-texto-painel);
 }
 [data-area='instalacao'] {
   --tinta: var(--tinta-instalacao);
+  --tinta-texto: var(--tinta-texto-instalacao);
 }
 [data-area='pixels'] {
   --tinta: var(--tinta-pixels);
+  --tinta-texto: var(--tinta-texto-pixels);
 }
 [data-area='manual'] {
   --tinta: var(--tinta-manual);
+  --tinta-texto: var(--tinta-texto-manual);
 }
 [data-area='automatico'] {
   --tinta: var(--tinta-automatico);
+  --tinta-texto: var(--tinta-texto-automatico);
 }
 
 /* O app é dark-only. `.dark` existe só para os seletores dos primitivos. */
@@ -231,10 +309,13 @@
   --color-fg-muted: var(--fg-muted);
   --color-fg-disabled: var(--fg-disabled);
 
-  --color-accent-fill: var(--accent-fill);
-  --color-accent-fill-hover: var(--accent-fill-hover);
-  --color-accent-fill-active: var(--accent-fill-active);
-  --color-accent-text: var(--accent-text);
+  /* A ação primária. Substituiu a família do acento azul no v4; o G9 do gate
+     varre src/ e reprova o build se qualquer um daqueles nomes voltar a
+     aparecer — por isso eles não estão escritos por extenso aqui. */
+  --color-papel: var(--papel);
+  --color-papel-hover: var(--papel-hover);
+  --color-papel-active: var(--papel-active);
+  --color-papel-texto: var(--papel-texto);
 
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -273,12 +354,19 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Tinta da área como cor de utilitário: `bg-tinta/10`, `border-tinta/40`,
-     `from-tinta/15`. `text-tinta` é proibido (DS-1.5′) — o gate não pega, a
-     revisão pega. Fica no @theme INLINE porque o valor precisa continuar
-     sendo a variável viva: emitido em :root, `--tinta` congelaria no valor
-     do painel e nenhum data-area trocaria mais nada. */
+  /* Tinta da área como cor de utilitário. Ficam no @theme INLINE porque o
+     valor precisa continuar sendo a variável viva: emitido em :root, `--tinta`
+     congelaria no valor do painel e nenhum data-area trocaria mais nada.
+
+     `bg-tinta/10`, `border-tinta/40`, `from-tinta/15` — o degrau de FUNDO.
+     `text-tinta-texto`, `outline-tinta-texto` — o degrau de TEXTO.
+
+     DS-1.5′ caiu no v4: `text-tinta-texto` agora é o link e a aba ativa, no
+     lugar do azul de acento que havia antes. O que continua proibido é
+     `text-tinta` (o degrau de fundo em texto pequeno) — o gate não pega
+     isso, a revisão pega. */
   --color-tinta: var(--tinta);
+  --color-tinta-texto: var(--tinta-texto);
 
   /* Relevo e casca — mesma razão: o valor mora no :root e é lido de lá. */
   --shadow-realce: var(--realce-interno);
@@ -344,6 +432,21 @@
   --text-data: 1.75rem; /* 28px */
   --text-data--line-height: 2rem; /* 32px */
 
+  /* O SÉTIMO degrau, e o único fluido desta escala: 40 → 56px.
+     É a volta deliberada do degrau grande que o v3 matou. O v3 escreveu, logo
+     acima de --text-pagina, que "nenhum número deste console precisa de corpo
+     maior que o título da própria página" — e o resultado medido foi que a
+     tela inteira passou a acontecer entre 12 e 28px: título de página, título
+     de cartão e o valor de compras liam como a mesma coisa. Sem um objeto
+     dominante não existe hierarquia, e foi isso que o dono chamou de "sem
+     contraste" (não é razão WCAG: os textos passam com 11:1 e 15:1).
+     Destino, e só ele: o valor do `Destaque` e o total de compras. Um por
+     tela. Quem o aplica é a FASE 2 — aqui ele só passa a existir.
+     Fluido porque em 390px um corpo fixo de 56px quebra o número em duas
+     linhas; o clamp o traz para 40px antes disso acontecer. */
+  --text-display: clamp(2.5rem, 1.8rem + 2.4vw, 3.5rem);
+  --text-display--line-height: 1;
+
   /* A única exceção nomeada ao piso e à escala (§6.4.4): o Safari iOS dá zoom
      automático em campo com texto abaixo de 16px, e bloquear o zoom por
      `maximumScale` quebraria a acessibilidade. Existe como token para ser
@@ -392,9 +495,9 @@
   /* A última classe-ponte do repositório, e a que o gate não alcançava: G5
      varre `src/components/**`, e isto aqui é CSS. `border-border` e
      `outline-ring` resolvem para os mesmos valores de `border-line` e
-     `accent-text` — a troca não muda pixel nenhum, muda quem é a fonte. */
+     `tinta-texto` — a troca não muda pixel nenhum, muda quem é a fonte. */
   * {
-    @apply border-line outline-accent-text/50;
+    @apply border-line outline-tinta-texto/50;
   }
 
   html {
@@ -424,10 +527,22 @@
     word-break: normal;
   }
 
-  /* Foco visível e consistente em tudo que é interativo. */
+  /* Foco visível e consistente em tudo que é interativo.
+
+     Fora de qualquer área — cabeçalho, login — o anel é o neutro claro. Dentro
+     de uma área ele assume a tinta: o foco passa a dizer ONDE você está, além
+     de dizer o que está focado. Note que o segundo seletor só troca a COR, e
+     por `var()`: `--border-focus` continua sendo um hex literal declarado uma
+     única vez no :root, então o G4 (nenhum --border-* fora do :root) segue
+     valendo. Os cinco tinta-texto cruzam 3:1 nas três superfícies — o gate
+     mede os quinze pares. */
   :focus-visible {
     outline: 2px solid var(--border-focus);
     outline-offset: 2px;
+  }
+
+  [data-area] :focus-visible {
+    outline-color: var(--tinta-texto);
   }
 
   /* Autofill do WebKit não pode forçar fundo branco no dark mode. */
@@ -495,7 +610,7 @@
     ),
     radial-gradient(
       ellipse 70% 60% at 50% 105%,
-      color-mix(in srgb, var(--accent-fill) 5%, transparent),
+      color-mix(in srgb, var(--tinta) 5%, transparent),
       transparent 65%
     );
   background-attachment: fixed;
@@ -584,5 +699,5 @@ a:not([class]):hover,
 /* Controles nativos (checkbox, radio, range, progress) herdam a cor de ação
    em vez do azul do sistema operacional. */
 :root {
-  accent-color: var(--accent-fill);
+  accent-color: var(--tinta);
 }

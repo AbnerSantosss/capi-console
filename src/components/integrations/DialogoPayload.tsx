@@ -86,7 +86,7 @@ export function DialogoPayload({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
-            <FileJson className="size-5 text-accent-text" aria-hidden />
+            <FileJson className="size-5 text-tinta-texto" aria-hidden />
             Payload recebido
           </DialogTitle>
           <DialogDescription className="text-caption text-fg-muted">

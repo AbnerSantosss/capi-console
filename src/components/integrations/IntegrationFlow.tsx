@@ -101,7 +101,7 @@ function plural(valor: number | undefined, um: string, muitos: string): string {
 type Estado = 'ok' | 'atencao' | 'desconhecido';
 
 const ESTACAO =
-  'group relative grid min-h-12 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text';
+  'group relative grid min-h-12 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto';
 
 const ATIVA =
   'bg-surface-2 before:absolute before:top-2.5 before:bottom-2.5 before:left-0 before:w-[3px] before:rounded-full before:bg-tinta before:content-[""]';

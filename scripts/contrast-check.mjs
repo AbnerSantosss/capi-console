@@ -2,25 +2,61 @@
 /**
  * O portao de qualidade visual do console. Roda em `npm run check`.
  *
- * Sao SETE verificacoes (§6.6.1 do blueprint):
+ * Sao OITO reguas:
  *
  *   G1  Contraste de texto            WCAG 2.2 SC 1.4.3   >= 4.5:1
  *   G2  Borda de controle e de foco   WCAG 2.2 SC 1.4.11  >= 3:1
- *   G3  Borda de SUPERFICIE           DS-2.1 / DS-0.3     >= 3:1
+ *   G3' Separacao de SUPERFICIE       DS-2.1              borda 3:1 OU dL 0.04
  *   G4  Token de cor fora do :root    DS-0.1              zero
  *   G5  Classe da ponte shadcn em componente vigiado       zero
  *   G6  font-size fora do @theme      DS-0.4              zero
  *   G7  Hexadecimal literal fora da lista de excecoes     zero
+ *   G9  Token morto do v3 vivo em src/                    zero
  *
- * G3 e uma extensao deliberada do SC 1.4.11: a norma exige 3:1 do limite de
- * COMPONENTE e nada diz do contorno de superficie. Aqui a elevacao vem da
- * borda (globals.css), entao uma borda de cartao invisivel nao e ornamento
- * mal resolvido — e a elevacao inteira deixando de existir.
+ * A numeracao pula o G8 de proposito: ela e a do `plano-redesign-visual-v4.md`,
+ * e renumerar aqui quebraria a conversa entre o gate e o documento que o
+ * autoriza. Quem le "G9 falhou" tem de achar G9 no plano.
  *
- * G4 fecha o furo que anulava tudo o mais: ate a FASE 1 a classe `.shell`
+ * Por que cada regua existe:
+ *
+ * G1 e G2 sao a norma, e norma nao se afrouxa. Quando um token nao alcanca a
+ * razao, quem sobe e o TOKEN — nunca o piso. A unica inversao deliberada esta
+ * no fim do G1: `--fg-disabled` tem de REPROVAR como conteudo. Ele existe para
+ * dizer "isto nao esta disponivel"; no dia em que ele cruzar 4.5 sobre o modal
+ * deixou de ser desabilitado e virou mais um cinza de texto, e a interface
+ * passa a ter um estado que mente.
+ *
+ * G3' e a regua que mudou de PROPOSITO no v4, e a mudanca esta justificada no
+ * plano. Ate o v3 a elevacao vinha obrigatoriamente da borda, entao o gate
+ * exigia 3:1 de contorno em toda superficie — e o efeito colateral foi que
+ * todo painel deste console virou uma caixa desenhada. A escada do v4 e feita
+ * de degraus de luminosidade PERCEPTUAL medidos (0.150 -> 0.211 -> 0.264 ->
+ * 0.317), e um degrau de 0.04 no OKLab e visivel sem esforco mesmo quando a
+ * razao WCAG entre os dois quase-pretos fica em 1.4 — a luminancia relativa do
+ * WCAG e quase cega nessa faixa (ver o cabecalho de `lib/cor.mjs`). Entao a
+ * pergunta certa deixou de ser "a borda contrasta?" e passou a ser "da para
+ * VER que sao duas superficies?", que se responde por borda >= 3:1 OU por
+ * degrau >= 0.04. Nenhuma das duas provas foi afrouxada: o que mudou e que
+ * agora sao duas, e a superficie so precisa de uma.
+ *
+ * G3' tambem mede `--border-subtle` com piso de 1.5:1, e esse numero NAO e um
+ * 3:1 negociado para baixo: `--border-subtle` nao e contorno de coisa nenhuma,
+ * e filete interno (linha de tabela, separador dentro de um painel que ja esta
+ * delimitado). As linhas de uma tabela ja estao separadas por conteudo,
+ * espacamento e alinhamento; o fio e reforco, e SC 1.4.11 nao se aplica a ele.
+ * A justificativa esta escrita tambem em globals.css, junto do token.
+ *
+ * G4 fecha o furo que anulava tudo o mais: ate a FASE 1 do v3 a classe `.shell`
  * redefinia onze tokens, este script media os do `:root`, e o build passava
- * verde descrevendo cores que ninguem via. Os hex NAO sao duplicados aqui:
- * sao lidos do :root de src/app/globals.css, que agora e a fonte unica.
+ * verde descrevendo cores que ninguem via. Os hex NAO sao duplicados aqui: sao
+ * lidos do :root de src/app/globals.css, que e a fonte unica.
+ *
+ * G9 e novo e e a unica regua com data de validade. O v4 matou o azul de acao
+ * (`--accent-fill`, `--accent-text`) e a ponte shadcn que o servia
+ * (`bg-primary`, `text-primary`). Token morto nao da erro de build: ele
+ * simplesmente nao pinta, e o elemento fica transparente ou preto sem que
+ * ninguem perceba ate ver a tela. G9 existe para que a morte seja verificada e
+ * nao prometida.
  *
  * Uso: node scripts/contrast-check.mjs   (sai 1 se qualquer verificacao falhar)
  */
@@ -28,6 +64,8 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { razao, sobrepor, degrauL } from './lib/cor.mjs';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ler = (rel) => readFileSync(join(RAIZ, rel), 'utf8');
@@ -39,14 +77,14 @@ const ler = (rel) => readFileSync(join(RAIZ, rel), 'utf8');
 const GLOBALS = 'src/app/globals.css';
 const cssGlobal = ler(GLOBALS);
 
-/** Recorta o corpo do primeiro bloco `:root {...}` de globals.css. */
-function corpoRoot(css) {
-  const abre = css.indexOf(':root {');
+/** Recorta o corpo do primeiro bloco `<abertura> {...}` de globals.css. */
+function corpoDoBloco(css, abertura) {
+  const abre = css.indexOf(abertura);
   if (abre === -1) {
-    console.error('\n  ERRO: globals.css nao tem um bloco `:root {`.\n');
+    console.error(`\n  ERRO: globals.css nao tem um bloco \`${abertura}\`.\n`);
     process.exit(1);
   }
-  let i = css.indexOf('{', abre);
+  const i = css.indexOf('{', abre);
   let nivel = 0;
   for (let j = i; j < css.length; j++) {
     if (css[j] === '{') nivel++;
@@ -55,11 +93,12 @@ function corpoRoot(css) {
       if (nivel === 0) return { texto: css.slice(i + 1, j), inicio: i + 1, fim: j };
     }
   }
-  console.error('\n  ERRO: bloco `:root` de globals.css nao fecha.\n');
+  console.error(`\n  ERRO: bloco \`${abertura}\` de globals.css nao fecha.\n`);
   process.exit(1);
 }
 
-const ROOT = corpoRoot(cssGlobal);
+const ROOT = corpoDoBloco(cssGlobal, ':root {');
+const TEMA_ESTATICO = corpoDoBloco(cssGlobal, '@theme static {');
 
 const tok = (nome) => {
   const achado = ROOT.texto.match(new RegExp(`--${nome}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
@@ -90,69 +129,55 @@ const FG_CORPO = tok('fg-body');
 const FG_APAGADO = tok('fg-muted');
 const FG_DESABILITADO = tok('fg-disabled');
 
-const ACENTO_FUNDO = tok('accent-fill');
-const ACENTO_FUNDO_HOVER = tok('accent-fill-hover');
-const ACENTO_FUNDO_ATIVO = tok('accent-fill-active');
-const ACENTO_TEXTO = tok('accent-text');
+/* O papel: a acao primaria do v4. Fundo claro, texto quase preto — o elemento
+   de maior luminosidade da tela, que e o que o olho acha primeiro sem precisar
+   de matiz nenhum. Os tres estados sao medidos porque hover e active tambem
+   carregam texto, e um `active` que escurece demais quebra a leitura no exato
+   instante em que o dedo esta em cima do botao que gasta dinheiro. */
+const PAPEL = tok('papel');
+const PAPEL_HOVER = tok('papel-hover');
+const PAPEL_ATIVO = tok('papel-active');
+const PAPEL_TEXTO = tok('papel-texto');
+
+/* As cinco areas. `--tinta-*` (L 0.80) e o degrau de FUNDO — pintura a 6–16%,
+   filete, regua, icone grande, controle marcado. `--tinta-texto-*` (L 0.875) e
+   o degrau de TEXTO e do anel de foco. Sao dois degraus e nao um porque o que
+   serve de fundo a 16% nao serve de letra a 13px, e vice-versa.
+
+   As cinco sao medidas uma a uma, e nao so a do painel: o gate mede o PIOR
+   caso das cinco, porque `[data-area]` troca a tinta por rota e o operador nao
+   escolhe em qual area ele precisa enxergar. */
+const AREAS = ['painel', 'instalacao', 'pixels', 'manual', 'automatico'].map((nome) => ({
+  nome,
+  tinta: tok(`tinta-${nome}`),
+  texto: tok(`tinta-texto-${nome}`),
+}));
 
 const SUCESSO = tok('success');
 const AVISO = tok('warning');
 const ERRO = tok('danger');
 
-const BRANCO = '#FFFFFF';
-
 /* -------------------------------------------------------------------------
-   Calculo
+   Compostos que a interface realmente pinta
+   -------------------------------------------------------------------------
+   Cor com alfa nao tem contraste proprio: o que chega ao olho e a mistura com
+   o que esta atras. Medir `--danger` contra `--surface-3` e responder uma
+   pergunta que a tela nunca faz — o que a tela pinta e a caixa de erro a 10%.
    ------------------------------------------------------------------------- */
 
-const canais = (hex) =>
-  hex
-    .replace('#', '')
-    .match(/../g)
-    .map((x) => parseInt(x, 16));
-
-const luminancia = (hex) => {
-  const c = canais(hex)
-    .map((x) => x / 255)
-    .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-};
-
-const razao = (a, b) => {
-  const [claro, escuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x);
-  return (claro + 0.05) / (escuro + 0.05);
-};
-
-/**
- * Cor com alfa nao tem contraste proprio: o que chega ao olho e a mistura com
- * o que esta atras. `bg-muted/50` e `ring-foreground/10` passavam despercebidos
- * justamente porque ninguem compunha antes de medir.
- */
-const sobrepor = (frente, alfa, fundo) => {
-  const f = canais(frente);
-  const t = canais(fundo);
-  return (
-    '#' +
-    f
-      .map((v, i) =>
-        Math.round(v * alfa + t[i] * (1 - alfa))
-          .toString(16)
-          .padStart(2, '0')
-      )
-      .join('')
-      .toUpperCase()
-  );
-};
-
-/* Compostos que a interface realmente pinta. */
 const PAGINA_ESCURECIDA = sobrepor('#000000', 0.6, S0); // overlay bg-black/60
-const SELECAO = sobrepor(ACENTO_TEXTO, 0.15, S3); // linha ativa do select/paleta
-const CARTAO_ATIVO = sobrepor(ACENTO_TEXTO, 0.1, S3); // cartao selecionado
 const CAIXA_ERRO = sobrepor(ERRO, 0.1, S3); // callout/selo de erro
 const CAIXA_AVISO = sobrepor(AVISO, 0.1, S3);
 
+/** Linha ativa de select / paleta de comandos: tinta a 15% sobre o flutuante. */
+const selecaoDe = (area) => sobrepor(area.tinta, 0.15, S3);
+/** Caixa da area dentro de um painel: tinta a 16% sobre o painel. */
+const caixaDe = (area) => sobrepor(area.tinta, 0.16, S1);
+
 const TEXTO = 4.5; // SC 1.4.3 texto normal
 const LIMITE = 3.0; // SC 1.4.11 limite de componente / texto grande
+const FILETE = 1.5; // divisoria interna — "da para ver o fio", nao e WCAG
+const DEGRAU = 0.04; // G3' — degrau perceptual de L no OKLab
 
 /* -------------------------------------------------------------------------
    Varredura de arquivos
@@ -184,14 +209,14 @@ const linhasDe = (rel) => ler(rel).split('\n');
    por heranca. Dentro de um componente eles ignoram a superficie em que estao
    e reintroduzem exatamente os pares que este script mede.
 
-   A lista e uma EXCLUSAO, nao uma enumeracao. Ate a FASE 2 ela se chamava
-   ARQUIVOS_FLUTUANTES e nomeava oito arquivos "que flutuam": o efeito pratico
-   era que todo componente NOVO nascia fora da guarda, e foi por esse furo que
-   passaram os quatro primitivos stock (tabs, checkbox, accordion, label) e as
-   classes que button, input, textarea e separator ainda carregavam apesar de
-   §13.7 os dar por curados. A FASE 3 inverteu: todo `src/components/**` e
-   vigiado, e sair da guarda exige entrar na lista de excecoes abaixo — o que
-   e uma decisao visivel, e nao um esquecimento (DS-6.1).
+   A lista e uma EXCLUSAO, nao uma enumeracao. Antes ela nomeava oito arquivos
+   "que flutuam": o efeito pratico era que todo componente NOVO nascia fora da
+   guarda, e foi por esse furo que passaram os quatro primitivos stock (tabs,
+   checkbox, accordion, label) e as classes que button, input, textarea e
+   separator ainda carregavam apesar de §13.7 os dar por curados. Hoje todo
+   `src/components/**` e vigiado, e sair da guarda exige entrar na lista de
+   excecoes abaixo — o que e uma decisao visivel, e nao um esquecimento
+   (DS-6.1).
 
    Sao duas excecoes, e so duas.                                            */
 
@@ -243,25 +268,39 @@ const CLASSES_PROIBIDAS = [
   ['text-foreground', /\btext-foreground\b/, 'text-fg-body / text-fg-strong'],
   ['ring-foreground', /\bring-foreground\b/, 'border border-line-control'],
   ['bg-background', /\bbg-background\b/, 'bg-surface-0'],
-  ['bg-accent', /\bbg-accent(?![-\w])/, 'bg-surface-2 ou bg-accent-text/15'],
+  ['bg-accent', /\bbg-accent(?![-\w])/, 'bg-surface-2 ou bg-tinta/15'],
   ['text-accent-foreground', /\btext-accent-foreground\b/, 'text-fg-strong'],
   ['bg-border', /\bbg-border\b/, 'bg-line-strong'],
   ['border-input', /\bborder-input\b/, 'border-line-control'],
-  ['-ring (ponte)', /\b(?:border|outline|ring)-ring\b/, 'accent-text'],
+  ['-ring (ponte)', /\b(?:border|outline|ring)-ring\b/, 'ring-tinta-texto'],
   ['destructive', /\b(?:bg|text|border|ring)-destructive\b/, 'danger'],
   ['fg-disabled em texto', /\btext-fg-disabled\b/, 'text-fg-muted'],
 ];
 
 /* -------------------------------------------------------------------------
    G4 — token de cor fora do :root
+   -------------------------------------------------------------------------
+   Os namespaces que so podem NASCER no :root de globals.css. Repare no que
+   NAO esta aqui, porque e a decisao de desenho do v4 inteira: os apelidos
+   `--tinta` e `--tinta-texto`, sem sufixo de area. Eles existem para ser
+   reapontados fora do :root — e isso que os blocos `[data-area='...']` fazem,
+   e e assim que uma tela do Painel fica teal e uma de Pixels fica ouro sem que
+   nenhum componente saiba em que area esta.
+
+   O que continua trancado e a DEFINICAO das cinco tintas (`--tinta-painel`,
+   `--tinta-texto-pixels`, ...): essas sao valor, e valor mora num lugar so.
    ------------------------------------------------------------------------- */
 
-// Os quatro namespaces que so podem nascer no :root de globals.css.
-const TOKEN_DE_COR = /--(surface|border|fg|accent)-[a-z0-9-]+\s*:/;
+const TOKENS_DE_COR = [
+  /--(surface|border|fg)-[a-z0-9-]+\s*:/,
+  /--papel(-[a-z0-9-]+)?\s*:/,
+  /--tinta-texto-[a-z0-9-]+\s*:/,
+  /--tinta-(painel|instalacao|pixels|manual|automatico)\s*:/,
+];
 
 // Excecao unica, nomeada e auditada (DS-1.5): o Guia identifica topico por
-// matiz, e matiz ali E a funcao. `--hue` nao pertence a nenhum dos quatro
-// namespaces, entao nao casa com a regex acima — esta nota existe para que
+// matiz, e matiz ali E a funcao. `--hue` nao pertence a nenhum namespace
+// acima, entao nao casa com nenhuma das regex — esta nota existe para que
 // ninguem "conserte" isso achando que e esquecimento.
 
 function verificarTokensForaDoRoot() {
@@ -272,7 +311,7 @@ function verificarTokensForaDoRoot() {
     linhas.forEach((linha, i) => {
       const inicioDaLinha = deslocamento;
       deslocamento += linha.length + 1;
-      if (!TOKEN_DE_COR.test(linha)) return;
+      if (!TOKENS_DE_COR.some((re) => re.test(linha))) return;
       const dentroDoRoot =
         rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim;
       if (dentroDoRoot) return;
@@ -306,12 +345,28 @@ const CSS_COM_TIPOGRAFIA_PENDENTE = [
 const FONT_SIZE_CSS = /(^|[;{\s])font-size\s*:/;
 // text-[13px], text-[0.8rem] — e tambem text-sm/text-xs/text-2xl da escala
 // generica do Tailwind, que convive com a escala nomeada e nao deveria.
+// `text-display` NAO casa: ele e o setimo degrau da escala NOMEADA, nao um
+// tamanho avulso. Ver a checagem do bloco @theme static logo abaixo.
 const FONT_SIZE_CLASSE =
   /\btext-\[[^\]]*(px|rem|em|pt|%|vw)[^\]]*\]|\btext-(xs|sm|base|lg|xl|[2-9]xl)\b/;
 const FONT_SIZE_INLINE = /\bfontSize\b/;
 
 function verificarFontSize() {
   const problemas = [];
+
+  /* O setimo degrau tem de EXISTIR, e existir no lugar certo. `--text-display`
+     e o unico tamanho fluido da escala (clamp de 40 a 56px) e a volta
+     deliberada do degrau grande que o v3 tinha matado. Se alguem o apagar ou
+     o mover para fora do @theme static, a classe `text-display` some sem
+     aviso: Tailwind simplesmente nao gera o utilitario, e o numero do
+     `Destaque` volta silenciosamente ao tamanho de titulo comum. */
+  if (!/--text-display\s*:/.test(TEMA_ESTATICO.texto)) {
+    problemas.push([
+      GLOBALS,
+      '--text-display ausente do @theme static',
+      'devolva o setimo degrau da escala',
+    ]);
+  }
 
   for (const rel of CSS_DO_PRODUTO) {
     if (CSS_COM_TIPOGRAFIA_PENDENTE.includes(rel)) continue;
@@ -340,7 +395,7 @@ function verificarFontSize() {
         problemas.push([
           `${rel}:${i + 1}`,
           (linha.match(FONT_SIZE_CLASSE) || [''])[0],
-          'use text-caption/label/body/title/heading/data',
+          'use text-caption/label/body/title/heading/data/display',
         ]);
       }
       if (FONT_SIZE_INLINE.test(linha)) {
@@ -451,27 +506,130 @@ function verificarClasses() {
 }
 
 /* -------------------------------------------------------------------------
-   Pares medidos — G1, G2, G3
+   G9 — token morto do v3 vivo em src/
+   -------------------------------------------------------------------------
+   Quatro nomes que o v4 enterrou, e o que os substituiu:
+
+     accent-text   -> tinta-texto   (link, aba ativa, icone ativo, valor em
+                                     destaque, anel de foco, barra de selecao)
+     accent-fill   -> tinta         (fundo a 6–16%, filete, regua, preenchimento
+                                     de controle marcado, barra de progresso)
+     bg-primary    -> bg-papel      (a acao primaria e o papel claro)
+     text-primary  -> text-papel-texto, ou text-fg-strong quando era so enfase
+
+   A busca e feita aqui dentro, lendo os arquivos, e nao por `grep` externo: o
+   repositorio roda em Windows e um gate que depende de um binario que pode nao
+   existir e um gate que as vezes nao roda — o que e pior do que nao ter gate,
+   porque da a impressao de que rodou.
+
+   Esta regua tem data de validade. Quando `accent-*` nao existir mais em
+   nenhum branch nem na memoria de ninguem, ela pode sair — e nao antes.
    ------------------------------------------------------------------------- */
+
+const TOKENS_MORTOS = ['accent-fill', 'accent-text', 'bg-primary', 'text-primary'];
+
+const SUBSTITUTO = {
+  'accent-fill': 'bg-tinta (ou bg-tinta/16 quando era pintura)',
+  'accent-text': 'tinta-texto',
+  'bg-primary': 'bg-papel',
+  'text-primary': 'text-papel-texto ou text-fg-strong',
+};
+
+/** Todo arquivo de `src/` que pode carregar uma classe ou um nome de token. */
+function arquivosDeFonte(dir = 'src') {
+  const achados = [];
+  const anda = (d) => {
+    for (const nome of readdirSync(join(RAIZ, d))) {
+      const rel = `${d}/${nome}`;
+      if (statSync(join(RAIZ, rel)).isDirectory()) anda(rel);
+      else if (/\.(tsx?|css|mjs|js|jsx)$/.test(nome)) achados.push(rel);
+    }
+  };
+  anda(dir);
+  return achados.sort();
+}
+
+const ARQUIVOS_DE_FONTE = arquivosDeFonte();
+
+function verificarTokensMortos() {
+  const problemas = [];
+  for (const rel of ARQUIVOS_DE_FONTE) {
+    linhasDe(rel).forEach((linha, i) => {
+      for (const morto of TOKENS_MORTOS) {
+        if (linha.includes(morto)) {
+          problemas.push([`${rel}:${i + 1}`, morto, SUBSTITUTO[morto]]);
+        }
+      }
+    });
+  }
+  return problemas;
+}
+
+/* -------------------------------------------------------------------------
+   Pares medidos — G1 e G2
+   ------------------------------------------------------------------------- */
+
+/** Uma linha por area, com o nome da area na frente. */
+const porArea = (rotulo, frente, fundo, alvo) =>
+  AREAS.map((a) => [`${rotulo} · ${a.nome}`, frente(a), fundo(a), alvo]);
 
 const G1 = [
   [
     'Base — texto sobre as superficies da pagina',
     [
+      ['texto forte sobre app', FG_FORTE, S0, TEXTO],
       ['texto forte sobre painel', FG_FORTE, S1, TEXTO],
+      ['texto forte sobre input', FG_FORTE, S2, TEXTO],
       ['texto corpo sobre app', FG_CORPO, S0, TEXTO],
       ['texto corpo sobre painel', FG_CORPO, S1, TEXTO],
       ['texto corpo sobre input', FG_CORPO, S2, TEXTO],
+      ['helper sobre app', FG_APAGADO, S0, TEXTO],
       ['helper sobre painel', FG_APAGADO, S1, TEXTO],
       ['helper sobre input', FG_APAGADO, S2, TEXTO],
-      ['acento texto sobre painel', ACENTO_TEXTO, S1, TEXTO],
       ['sucesso sobre painel', SUCESSO, S1, TEXTO],
       ['aviso sobre painel', AVISO, S1, TEXTO],
       ['erro sobre painel', ERRO, S1, TEXTO],
       ['erro sobre input', ERRO, S2, TEXTO],
-      ['branco sobre botao primario', BRANCO, ACENTO_FUNDO, TEXTO],
-      ['branco sobre primario hover', BRANCO, ACENTO_FUNDO_HOVER, TEXTO],
-      ['branco sobre primario active', BRANCO, ACENTO_FUNDO_ATIVO, TEXTO],
+    ],
+  ],
+  [
+    // O que o operador le em cada area. Cinco linhas por superficie porque a
+    // tinta troca por rota e ninguem escolhe em que area precisa enxergar.
+    'Tinta da area — texto sobre painel',
+    porArea(
+      'tinta-texto sobre painel',
+      (a) => a.texto,
+      () => S1,
+      TEXTO
+    ),
+  ],
+  [
+    'Tinta da area — texto sobre input',
+    porArea(
+      'tinta-texto sobre input',
+      (a) => a.texto,
+      () => S2,
+      TEXTO
+    ),
+  ],
+  [
+    'Tinta da area — texto sobre a camada flutuante',
+    porArea(
+      'tinta-texto sobre modal',
+      (a) => a.texto,
+      () => S3,
+      TEXTO
+    ),
+  ],
+  [
+    // A acao primaria do v4 e uma inversao: papel claro, letra quase preta.
+    // Os tres estados carregam texto, entao os tres sao medidos — um `active`
+    // que escurece demais quebra a leitura no instante do clique.
+    'Papel — a acao primaria (fundo claro, texto escuro)',
+    [
+      ['texto sobre o papel', PAPEL_TEXTO, PAPEL, TEXTO],
+      ['texto sobre o papel em hover', PAPEL_TEXTO, PAPEL_HOVER, TEXTO],
+      ['texto sobre o papel pressionado', PAPEL_TEXTO, PAPEL_ATIVO, TEXTO],
     ],
   ],
   [
@@ -480,34 +638,53 @@ const G1 = [
       ['titulo sobre modal', FG_FORTE, S3, TEXTO],
       ['texto corpo sobre modal', FG_CORPO, S3, TEXTO],
       ['descricao/helper sobre modal', FG_APAGADO, S3, TEXTO],
-      ['placeholder sobre modal', FG_APAGADO, S3, TEXTO],
-      ['link/acento sobre modal', ACENTO_TEXTO, S3, TEXTO],
       ['sucesso sobre modal', SUCESSO, S3, TEXTO],
       ['aviso sobre modal', AVISO, S3, TEXTO],
       ['erro sobre modal', ERRO, S3, TEXTO],
-      ['texto de item de select/tooltip', FG_CORPO, S3, TEXTO],
     ],
   ],
   [
+    // Caixas empilhadas: cartao, input e rodape de acoes sao mais escuros que
+    // o modal. O fill nao delimita (1.13); quem delimita e a borda de controle
+    // medida no G2.
     'Dentro do modal — caixas empilhadas sobre a superficie flutuante',
     [
-      // Cartao, input, rodape de acoes: fill mais escuro que o modal. O fill
-      // nao delimita (1.13); quem delimita e a borda de controle logo abaixo.
       ['texto forte sobre cartao no modal', FG_FORTE, S2, TEXTO],
       ['texto corpo sobre cartao no modal', FG_CORPO, S2, TEXTO],
       ['helper sobre rodape do modal', FG_APAGADO, S2, TEXTO],
-      ['texto forte sobre linha selecionada', FG_FORTE, SELECAO, TEXTO],
-      ['texto corpo sobre linha selecionada', FG_CORPO, SELECAO, TEXTO],
-      ['acento sobre cartao ativo', ACENTO_TEXTO, CARTAO_ATIVO, TEXTO],
       ['erro sobre caixa de erro no modal', ERRO, CAIXA_ERRO, TEXTO],
       ['aviso sobre caixa de aviso no modal', AVISO, CAIXA_AVISO, TEXTO],
     ],
+  ],
+  [
+    // A pintura da area. `bg-tinta/15` na linha ativa do select e da paleta,
+    // `bg-tinta/16` na caixa de destaque dentro de um painel. Nao se mede a
+    // tinta contra o fundo: mede-se o que sobra depois da mistura.
+    'Pintura da area — texto sobre a tinta diluida',
+    [
+      ...porArea('forte sobre linha ativa', () => FG_FORTE, selecaoDe, TEXTO),
+      ...porArea('tinta-texto sobre linha ativa', (a) => a.texto, selecaoDe, TEXTO),
+      ...porArea('tinta-texto sobre caixa da area', (a) => a.texto, caixaDe, TEXTO),
+    ],
+  ],
+  [
+    // A tinta CHEIA so aparece em controle marcado (checkbox, switch, pastilha
+    // de etapa) — e ela e clara, L 0.80. Por isso o glifo inverte para
+    // `surface-0` em vez de continuar branco: branco sobre a tinta daria ~1.7
+    // e o estado sumiria dentro do proprio controle.
+    'Tinta cheia — o glifo do controle marcado inverte',
+    porArea(
+      'surface-0 sobre a tinta',
+      () => S0,
+      (a) => a.tinta,
+      TEXTO
+    ),
   ],
 ];
 
 const G2 = [
   [
-    'Limites de componente (SC 1.4.11) — controle e foco',
+    'Limites de componente (SC 1.4.11) — a borda de controle',
     [
       ['borda de controle sobre app', LINHA_CONTROLE, S0, LIMITE],
       ['borda de controle sobre painel', LINHA_CONTROLE, S1, LIMITE],
@@ -516,27 +693,73 @@ const G2 = [
       // Borda externa do modal contra a pagina ja escurecida pelo overlay.
       ['borda do modal sobre pagina escurecida', LINHA_CONTROLE, PAGINA_ESCURECIDA, LIMITE],
       ['regua do rodape sobre rodape do modal', LINHA_CONTROLE, S2, LIMITE],
-      ['barra da linha selecionada', ACENTO_TEXTO, S3, LIMITE],
-      ['barra selecionada sobre o proprio fill', ACENTO_TEXTO, SELECAO, LIMITE],
-      ['borda do cartao ativo sobre modal', ACENTO_TEXTO, S3, LIMITE],
-      ['anel de foco sobre painel', FOCO, S1, LIMITE],
-      ['anel de foco sobre modal', FOCO, S3, LIMITE],
-      ['anel de foco sobre input', FOCO, S2, LIMITE],
+    ],
+  ],
+  [
+    // O anel NEUTRO serve a casca que fica fora de qualquer `data-area`:
+    // cabecalho e login. Dentro de uma area o anel vira a tinta — o grupo
+    // seguinte.
+    'Anel de foco neutro — casca fora de qualquer area',
+    [
+      ['anel neutro sobre painel', FOCO, S1, LIMITE],
+      ['anel neutro sobre input', FOCO, S2, LIMITE],
+      ['anel neutro sobre modal', FOCO, S3, LIMITE],
+    ],
+  ],
+  [
+    // A regra `[data-area] :focus-visible` troca a cor do anel por rota. Se
+    // uma das cinco tintas nao alcancar 3:1 sobre uma das superficies, existe
+    // uma tela em que o foco do teclado fica invisivel — e foi exatamente esse
+    // o risco 7.5 do plano. As quinze combinacoes sao medidas por isso.
+    'Anel de foco por area — as cinco tintas sobre as tres superficies',
+    [
+      ...porArea(
+        'anel sobre painel',
+        (a) => a.texto,
+        () => S1,
+        LIMITE
+      ),
+      ...porArea(
+        'anel sobre input',
+        (a) => a.texto,
+        () => S2,
+        LIMITE
+      ),
+      ...porArea(
+        'anel sobre modal',
+        (a) => a.texto,
+        () => S3,
+        LIMITE
+      ),
+    ],
+  ],
+  [
+    // A barra de 2px da linha ativa e o que cumpre 1.4.11 no select e na
+    // paleta: nenhum preenchimento escuro chega a 3:1 sobre o flutuante, entao
+    // quem delimita e a barra — inclusive contra o proprio fill que ela
+    // acompanha.
+    'Barra da linha ativa — o que delimita quando o fill nao delimita',
+    [
+      ...porArea(
+        'barra sobre modal',
+        (a) => a.texto,
+        () => S3,
+        LIMITE
+      ),
+      ...porArea('barra sobre o proprio fill', (a) => a.texto, selecaoDe, LIMITE),
     ],
   ],
 ];
 
-const G3 = [
-  [
-    'Contorno de superficie (DS-2.1) — a elevacao vem da borda',
-    [
-      ['contorno de cartao sobre o app', LINHA_FORTE, S0, LIMITE],
-      ['contorno de cartao sobre painel', LINHA_FORTE, S1, LIMITE],
-      ['contorno de cartao sobre input', LINHA_FORTE, S2, LIMITE],
-      ['divisoria interna sobre o app', LINHA_SUTIL, S0, LIMITE],
-      ['divisoria interna sobre painel', LINHA_SUTIL, S1, LIMITE],
-    ],
-  ],
+/* -------------------------------------------------------------------------
+   G3' — separacao de superficie: borda OU degrau
+   ------------------------------------------------------------------------- */
+
+const SEPARACOES = [
+  ['painel dentro do app', S1, S0],
+  ['input dentro do painel', S2, S1],
+  ['flutuante dentro do input', S3, S2],
+  ['input/cartao dentro do app', S2, S0],
 ];
 
 /* -------------------------------------------------------------------------
@@ -545,7 +768,8 @@ const G3 = [
 
 const veredito = {};
 const largura = Math.max(
-  ...[...G1, ...G2, ...G3].flatMap(([, casos]) => casos.map(([n]) => n.length))
+  ...[...G1, ...G2].flatMap(([, casos]) => casos.map(([n]) => n.length)),
+  ...SEPARACOES.map(([n]) => n.length)
 );
 
 function rodarPares(id, titulo, blocos) {
@@ -564,7 +788,7 @@ function rodarPares(id, titulo, blocos) {
       );
     }
   }
-  veredito[id] = ok;
+  veredito[id] = veredito[id] !== false && ok;
   return ok;
 }
 
@@ -585,13 +809,15 @@ function rodarLista(id, titulo, problemas, resumoOk) {
 console.log('\n  Portao visual — Meta CAPI Console');
 console.log(`  superficies  app ${S0}  painel ${S1}  elevado ${S2}  flutuante ${S3}`);
 console.log(`  bordas       sutil ${LINHA_SUTIL}  padrao ${LINHA_FORTE}  controle ${LINHA_CONTROLE}`);
-console.log(`  compostos    pagina escurecida ${PAGINA_ESCURECIDA}  selecao ${SELECAO}`);
+console.log(`  papel        ${PAPEL} com texto ${PAPEL_TEXTO}  (a acao primaria)`);
+console.log(`  tintas       ${AREAS.map((a) => `${a.nome} ${a.tinta}`).join('  ')}`);
 console.log(`  fonte unica  ${GLOBALS} :root  —  ${CSS_DO_PRODUTO.length} arquivos CSS auditados`);
 
 rodarPares('G1', 'Contraste de texto (SC 1.4.3)', G1);
 
 // --fg-disabled so pode existir enquanto ornamento. Se um dia ele cruzar 4.5
 // sobre o modal, deixou de ser "desabilitado" e virou mais um cinza de texto.
+// Esta e a UNICA linha do gate em que passar e falhar.
 const disabledOk = razao(FG_DESABILITADO, S3) < TEXTO;
 if (!disabledOk) veredito.G1 = false;
 console.log(
@@ -602,7 +828,42 @@ console.log(
 );
 
 rodarPares('G2', 'Contraste de borda de controle e de foco (SC 1.4.11)', G2);
-rodarPares('G3', 'Contraste de borda de superficie (DS-2.1, extensao do SC 1.4.11)', G3);
+
+/* G3' — cada superficie precisa de UMA das duas provas. */
+console.log("\n  G3' — Separacao de superficie (borda >= 3:1 OU degrau de L >= 0.04)");
+console.log('    A escada do v4 e feita de degraus medidos, e nao de bordas desenhadas');
+let g3Ok = true;
+for (const [nome, dentro, fora] of SEPARACOES) {
+  const dL = degrauL(dentro, fora);
+  const borda = razao(LINHA_FORTE, fora);
+  const porDegrau = dL >= DEGRAU;
+  const porBorda = borda >= LIMITE;
+  const passou = porDegrau || porBorda;
+  if (!passou) g3Ok = false;
+  const prova = porDegrau ? 'degrau' : porBorda ? 'borda' : 'NENHUMA';
+  console.log(
+    `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  dL ${dL.toFixed(
+      3
+    )}  borda ${borda.toFixed(2)}:1  — passa por ${prova}`
+  );
+}
+
+/* O filete interno. Piso proprio (1.5), e o comentario acima explica por que
+   isso nao e um 3:1 negociado para baixo. */
+console.log('    Filete interno — divisoria dentro de superficie ja delimitada');
+for (const [nome, fundo] of [
+  ['filete sobre o app', S0],
+  ['filete sobre painel', S1],
+]) {
+  const r = razao(LINHA_SUTIL, fundo);
+  const passou = r >= FILETE;
+  if (!passou) g3Ok = false;
+  console.log(
+    `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  ${r
+      .toFixed(2)
+      .padStart(5)}:1  (min ${FILETE.toFixed(1)})`
+  );
+}
 
 // Ordem: sutil < forte < controle. Se alguem inverter a escala, os comentarios
 // de globals.css passam a mentir e a regra "limite usa --border-control" perde
@@ -610,18 +871,21 @@ rodarPares('G3', 'Contraste de borda de superficie (DS-2.1, extensao do SC 1.4.1
 const escalaOk =
   razao(LINHA_CONTROLE, S3) > razao(LINHA_FORTE, S3) &&
   razao(LINHA_FORTE, S3) > razao(LINHA_SUTIL, S3);
-if (!escalaOk) veredito.G3 = false;
+if (!escalaOk) g3Ok = false;
 console.log(
   `    ${escalaOk ? 'OK   ' : 'FALHA'} escala sutil ${razao(LINHA_SUTIL, S3).toFixed(2)}` +
     ` < padrao ${razao(LINHA_FORTE, S3).toFixed(2)}` +
     ` < controle ${razao(LINHA_CONTROLE, S3).toFixed(2)} (sobre o modal)`
 );
+veredito["G3'"] = g3Ok;
 
 rodarLista(
   'G4',
   'Token de cor definido fora do :root (DS-0.1)',
   verificarTokensForaDoRoot(),
-  `nenhuma redefinicao de --surface-*/--border-*/--fg-*/--accent-* nos ${CSS_DO_PRODUTO.length} arquivos CSS`
+  'nenhuma redefinicao de --surface-*/--border-*/--fg-*/--papel*/--tinta-texto-* ' +
+    `nos ${CSS_DO_PRODUTO.length} arquivos CSS (os apelidos --tinta/--tinta-texto ` +
+    'trocam por area, de proposito)'
 );
 
 rodarLista(
@@ -636,7 +900,8 @@ rodarLista(
   'G6',
   'font-size fora do @theme (DS-0.4)',
   verificarFontSize(),
-  `escala nomeada respeitada — ${CSS_COM_TIPOGRAFIA_PENDENTE.length} arquivos ainda isentos (divida de FASE 2)`
+  `escala nomeada respeitada, --text-display no @theme static — ` +
+    `${CSS_COM_TIPOGRAFIA_PENDENTE.length} arquivos ainda isentos (divida de FASE 2)`
 );
 
 rodarLista(
@@ -644,6 +909,13 @@ rodarLista(
   'Hexadecimal literal fora do :root',
   verificarHexLiteral(),
   `nenhum hex solto; themeColor == --surface-0 (${S0})`
+);
+
+rodarLista(
+  'G9',
+  'Token morto do v3 (accent-fill, accent-text, bg-primary, text-primary)',
+  verificarTokensMortos(),
+  `o azul de acao nao existe mais em nenhum dos ${ARQUIVOS_DE_FONTE.length} arquivos de src/`
 );
 
 const tudoOk = Object.values(veredito).every(Boolean);
@@ -655,7 +927,7 @@ for (const [id, ok] of Object.entries(veredito)) {
 console.log(
   `\n  ${
     tudoOk
-      ? 'As sete verificacoes passam.'
+      ? 'As oito verificacoes passam.'
       : 'Ha verificacao reprovada acima — nao prossiga sem corrigir.'
   }\n`
 );

@@ -489,7 +489,7 @@ export function FiltrosInbox({
               aria-label="Progresso do disparo em lote"
             >
               <div
-                className="h-full bg-accent-fill transition-[width] duration-200"
+                className="h-full bg-tinta transition-[width] duration-200"
                 style={{ width: `${pct}%` }}
               />
             </div>

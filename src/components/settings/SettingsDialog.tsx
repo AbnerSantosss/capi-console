@@ -91,14 +91,14 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                   className={
                     'flex cursor-pointer flex-col items-start gap-0.5 rounded-control border p-2.5 text-left transition-colors ' +
                     (densidade === d.valor
-                      ? 'border-accent-text bg-accent-text/10'
+                      ? 'border-tinta-texto bg-tinta/10'
                       : 'border-line-control bg-surface-2 hover:border-fg-muted')
                   }
                 >
                   <span
                     className={
                       'text-body font-semibold ' +
-                      (densidade === d.valor ? 'text-accent-text' : 'text-fg-body')
+                      (densidade === d.valor ? 'text-tinta-texto' : 'text-fg-body')
                     }
                   >
                     {d.rotulo}
@@ -141,7 +141,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               />
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-label font-medium text-fg-body">
-                  <Sparkles className="size-3.5 text-accent-text" aria-hidden />
+                  <Sparkles className="size-3.5 text-tinta-texto" aria-hidden />
                   Confete apenas em modo teste
                 </span>
                 <span className="mt-0.5 block text-caption text-fg-muted">

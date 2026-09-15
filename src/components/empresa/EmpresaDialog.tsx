@@ -65,11 +65,15 @@ export interface EmpresaDialogProps {
 const LOGO_MAX_BYTES = 150 * 1024;
 
 /**
- * Cor inicial do seletor = `--accent-fill` do tema, LIDO do tema.
+ * Cor inicial do seletor = `--tinta` do tema, LIDA do tema.
  *
  * O `<input type="color">` nao tem estado "nenhuma cor": ele sempre devolve um
- * hex. Comecar no acento do console faz a empresa nova nascer parecida com o
- * resto da interface em vez de com o preto que o navegador usa por padrao.
+ * hex. Comecar na tinta da area faz a empresa nova nascer parecida com o resto
+ * da interface em vez de com o preto que o navegador usa por padrao.
+ *
+ * v4: e `--tinta` (o degrau de FUNDO, L 0.80) e nao `--tinta-texto`, porque a
+ * cor da empresa e usada como preenchimento — pastilha, barra, fundo de selo —
+ * e nao como texto.
  *
  * 🔴 O valor NAO e copiado para ca. Um hex literal aqui viraria a segunda fonte
  * da cor de acento — e `check:contrast` (G7) reprova o build justamente para
@@ -81,7 +85,7 @@ const LOGO_MAX_BYTES = 150 * 1024;
  */
 function corInicial(): string {
   if (typeof document === 'undefined') return '';
-  const v = getComputedStyle(document.documentElement).getPropertyValue('--accent-fill').trim();
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--tinta').trim();
   return /^#[0-9a-f]{6}$/i.test(v) ? v : '';
 }
 
@@ -372,7 +376,11 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
                   aria-hidden
                   className={
                     etapa === e.n
-                      ? 'flex size-6 shrink-0 items-center justify-center rounded-full border border-accent-text bg-accent-fill font-mono font-bold text-white'
+                      // Etapa atual: tinta cheia com o numero em `surface-0`.
+                      // A tinta do v4 e CLARA (L 0.80), entao o numero inverte
+                      // — branco sobre ela daria ~1.7:1 e o degrau atual
+                      // sumiria dentro da propria pastilha.
+                      ? 'flex size-6 shrink-0 items-center justify-center rounded-full border border-tinta-texto bg-tinta font-mono font-bold text-surface-0'
                       : 'flex size-6 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-mono font-bold text-fg-muted'
                   }
                 >

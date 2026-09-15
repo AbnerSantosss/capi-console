@@ -187,7 +187,7 @@ export function RulesSection({
                 className={cn(
                   'min-h-10 rounded-control border px-3 text-caption font-medium transition-colors',
                   filtro === item.value
-                    ? 'border-accent-text/50 bg-accent-text/10 text-accent-text'
+                    ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
                     : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
                 )}
               >

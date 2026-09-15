@@ -16,7 +16,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
         "flex min-h-24 w-full rounded-control border border-line-control bg-surface-2 px-3 py-2 text-input-mobile text-fg-body transition-colors outline-none",
         "placeholder:text-fg-muted",
         "hover:border-fg-disabled",
-        "focus-visible:border-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text",
+        "focus-visible:border-tinta-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "aria-invalid:border-danger aria-invalid:focus-visible:outline-danger",
         "md:text-body",

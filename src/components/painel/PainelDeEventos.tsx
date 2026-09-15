@@ -214,7 +214,7 @@ function CardPainel({
 
   const classes = cn(
     'flex min-w-0 flex-col items-start gap-2 rounded-panel border bg-surface-2 p-4 text-left',
-    ativo ? 'border-accent-text' : 'border-line-strong'
+    ativo ? 'border-tinta-texto' : 'border-line-strong'
   );
 
   if (!aoClicar) {
@@ -228,8 +228,8 @@ function CardPainel({
       aria-label={descricao}
       className={cn(
         classes,
-        'cursor-pointer transition-colors hover:border-accent-text hover:bg-surface-3',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
+        'cursor-pointer transition-colors hover:border-tinta-texto hover:bg-surface-3',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
       )}
     >
       {conteudo}
@@ -286,8 +286,8 @@ function DestaqueDeCompras({
         aria-label={`${compras.total} ${plural}, ${dinheiro(compras.valor, compras.moeda)}. Abrir a lista de quem comprou.`}
         className={cn(
           'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
-          'hover:border-accent-text hover:bg-surface-3',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
+          'hover:border-tinta-texto hover:bg-surface-3',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
         )}
       >
         <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -310,7 +310,7 @@ function DestaqueDeCompras({
             </span>
           </div>
 
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-accent-text">
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-tinta-texto">
             Ver quem comprou
             <ArrowRight
               className="size-4 transition-transform group-hover:translate-x-0.5"
@@ -718,8 +718,8 @@ export function PainelDeEventos() {
                     aria-label={`Evento ${e.evento}: ${e.total} eventos. Ver quem mandou.`}
                     className={cn(
                       'group flex min-w-0 flex-col gap-1.5 rounded-control border border-transparent p-2 text-left transition-colors',
-                      'hover:border-accent-text hover:bg-surface-2',
-                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text'
+                      'hover:border-tinta-texto hover:bg-surface-2',
+                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
                     )}
                   >
                     <span className="flex min-w-0 items-baseline justify-between gap-3">
@@ -729,7 +729,7 @@ export function PainelDeEventos() {
                       <span className="flex shrink-0 items-center gap-1.5">
                         <span className="text-label font-semibold text-fg-strong">{e.total}</span>
                         <ArrowRight
-                          className="size-3.5 text-fg-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent-text"
+                          className="size-3.5 text-fg-muted transition-transform group-hover:translate-x-0.5 group-hover:text-tinta-texto"
                           strokeWidth={1.75}
                           aria-hidden
                         />
