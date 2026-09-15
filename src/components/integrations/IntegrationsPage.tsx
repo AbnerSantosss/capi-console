@@ -633,7 +633,10 @@ export function IntegrationsPage({
             {cfg.saida.map((d, i) => (
               <li
                 key={d.id}
-                className="rounded-panel border border-line-strong bg-surface-1 p-4"
+                // FASE 3a: a lista de destinos vive dentro de uma `Section`
+                // variante cartão (`surface-1`). Sobe para `surface-2` para
+                // ter o degrau de 0.04 que o G3′ cobra, e larga a borda.
+                className="rounded-panel bg-surface-2 p-4"
               >
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

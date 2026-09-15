@@ -874,7 +874,9 @@ export function InboxList({
         className="flex flex-col gap-3"
       >
         {fase === 'spinner' && (
-          <div className="flex items-center justify-center gap-2 rounded-panel border border-line bg-surface-1 p-8 text-caption text-fg-muted">
+          // A espera aparece dentro do cartão da caixa de entrada: em
+          // `surface-2` ela se separa dele por luz (G3′), sem desenhar caixa.
+          <div className="flex items-center justify-center gap-2 rounded-panel bg-surface-2 p-8 text-caption text-fg-muted">
             <Spinner />
             Carregando…
           </div>

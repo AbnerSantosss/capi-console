@@ -25,6 +25,21 @@ import { cn } from '@/lib/utils';
 /** Os três cenários de RD-18. Fechados de propósito. */
 export type CenarioVazio = 'vazio' | 'filtrado' | 'erro';
 
+/*
+ * FASE 3a — por que `surface-2` e não `surface-1`.
+ *
+ * Dos 14 pontos de uso, 11 estão DENTRO de um cartão (`Section variant="card"`
+ * ou `Panel`), que é `surface-1`. Depois que o cartão perdeu a borda, um vazio
+ * em `surface-1` dentro dele não separa por nada: mesmo fill, sem linha —
+ * exatamente o que o G3′ reprova (degrau de L = 0). Em `surface-2` ele fica
+ * 0.053 acima do cartão e 0.114 acima do fundo, então separa nos dois lugares,
+ * que é a condição para um componente que pode estar aninhado ou não.
+ *
+ * A borda TRACEJADA fica, e não é contradição com "linha só em controle": ela
+ * não contorna uma superfície, ela diz o estado — "a moldura existe, o
+ * conteúdo ainda não" —, e é o que C-13 usa para separar vazio de erro antes
+ * de qualquer palavra ser lida.
+ */
 const CENARIO: Record<
   CenarioVazio,
   { icone: React.ElementType; caixa: string; cor: string }
@@ -32,12 +47,12 @@ const CENARIO: Record<
   // Tracejado = "a lista existe e ainda não tem nada".
   vazio: {
     icone: Inbox,
-    caixa: 'border-dashed border-line-strong bg-surface-1',
+    caixa: 'border-dashed border-line-strong bg-surface-2',
     cor: 'text-fg-muted',
   },
   filtrado: {
     icone: SearchX,
-    caixa: 'border-dashed border-line-strong bg-surface-1',
+    caixa: 'border-dashed border-line-strong bg-surface-2',
     cor: 'text-fg-muted',
   },
   // Sólido e em perigo: o olho tem de separar isto de uma lista vazia antes

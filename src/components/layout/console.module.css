@@ -156,7 +156,12 @@
 /* O icone da area vive DENTRO do h1, alinhado pela linha de base do texto —
    glifo na tinta do assunto, sem caixa, sem borda, sem fundo. Sem `flex` no
    proprio h1: o titulo precisa continuar quebrando linha como texto, com o
-   icone correndo junto, e nao virar duas colunas rigidas. */
+   icone correndo junto, e nao virar duas colunas rigidas.
+
+   FASE 3a: o tamanho passou de 28px fixos para 1em. O titulo e fluido
+   (--text-pagina, 24 -> 30px); um glifo travado em px ficava grande demais em
+   390 e pequeno demais em 1440. Em `em` ele e sempre a altura da letra ao
+   lado, que e a definicao de icone inline. */
 .pageTitleMark {
   display: inline-flex;
   translate: 0 0.12em;

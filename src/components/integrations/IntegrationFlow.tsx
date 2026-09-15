@@ -35,8 +35,9 @@ type PassoDoFluxo = {
   id: string;
   title: string;
   icon: typeof Webhook;
-  /** Nome da variavel de tinta da area a que a estacao pertence. Entra em
-   *  fundo, borda e icone do chip — nunca no texto (DS-1.5′). */
+  /** Nome da variavel de tinta da area a que a estacao pertence. Depois da
+   *  FASE 3a ela entra so no TRACO do icone, e so quando a estacao esta
+   *  ativa — nunca em fundo de chip (nao ha mais chip) e nunca no texto. */
   tinta: string;
 } & (
   | { tipo: 'aba'; tab: IntegrationTab }
@@ -138,26 +139,31 @@ function ConteudoDaEstacao({
   passo,
   linha,
   direita,
+  ativa,
 }: {
   passo: PassoDoFluxo;
   linha: string;
   direita: ReactNode;
+  /** A estacao aberta agora. So ela mostra o icone na tinta da propria area. */
+  ativa: boolean;
 }) {
   const Icon = passo.icon;
   return (
     <>
+      {/* FASE 3a: o chip de 32px saiu. Cinco quadradinhos empilhados, cada um
+          com fundo e borda da sua tinta, eram cinco caixas contando um caminho
+          que ja e contado pelo texto ao lado — e "icone em quadrado
+          arredondado" e assinatura de template.
+
+          A COR tambem deixou de ser decoracao permanente: o glifo fica em
+          `--fg-muted` e so a estacao ATIVA acende na tinta da area dela. Cor
+          em tudo nao aponta nada; cor num lugar so diz "voce esta aqui". */}
       <span
         aria-hidden
-        className="flex size-8 items-center justify-center rounded-control border"
-        style={
-          {
-            color: passo.tinta,
-            backgroundColor: `color-mix(in srgb, ${passo.tinta} 12%, transparent)`,
-            borderColor: `color-mix(in srgb, ${passo.tinta} 28%, transparent)`,
-          } as CSSProperties
-        }
+        className={`flex size-8 items-center justify-center ${ativa ? '' : 'text-fg-muted'}`}
+        style={ativa ? ({ color: passo.tinta } as CSSProperties) : undefined}
       >
-        <Icon className="size-4" strokeWidth={1.75} />
+        <Icon className="size-5" strokeWidth={1.75} />
       </span>
       <span className="min-w-0">
         <span className="flex items-center gap-1 text-label font-semibold text-fg-strong">
@@ -269,16 +275,14 @@ export function IntegrationFlow({
   return (
     <section
       aria-labelledby="trilho-de-estado"
-      className="w-full rounded-panel border border-line-strong bg-surface-1 p-4 shadow-realce sm:p-5"
+      className="w-full rounded-panel bg-surface-1 p-4 shadow-realce sm:p-5"
     >
       <div className="flex items-center gap-2.5">
-        <span
+        <ListTree
           aria-hidden
-          className="flex size-8 items-center justify-center rounded-control border border-tinta/28 bg-tinta/12"
-          style={{ color: 'var(--tinta)' }}
-        >
-          <ListTree className="size-4" strokeWidth={1.75} />
-        </span>
+          className="size-5 shrink-0 text-tinta"
+          strokeWidth={1.75}
+        />
         <h2
           id="trilho-de-estado"
           className="text-label font-semibold text-fg-body"
@@ -297,7 +301,12 @@ export function IntegrationFlow({
           const classe = `${ESTACAO}${ativa ? ` ${ATIVA}` : ''}`;
           return passo.tipo === 'rota' ? (
             <Link key={passo.id} href={passo.href} className={classe}>
-              <ConteudoDaEstacao passo={passo} linha={linha} direita={direita} />
+              <ConteudoDaEstacao
+                passo={passo}
+                linha={linha}
+                direita={direita}
+                ativa={ativa}
+              />
             </Link>
           ) : (
             <button
@@ -307,7 +316,12 @@ export function IntegrationFlow({
               aria-current={ativa ? 'page' : undefined}
               className={classe}
             >
-              <ConteudoDaEstacao passo={passo} linha={linha} direita={direita} />
+              <ConteudoDaEstacao
+                passo={passo}
+                linha={linha}
+                direita={direita}
+                ativa={ativa}
+              />
             </button>
           );
         })}

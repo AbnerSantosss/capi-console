@@ -15,6 +15,26 @@
  * elemento proprio. O que nao pode voltar: cartao dentro de cartao, opacidade
  * em cor de superficie (`bg-surface-1/95`), sombra projetada em cartao parado
  * alem da `--sombra-cartao`, e mais de um raio por familia.
+ *
+ * FASE 3a do redesign v4 — SUPERFICIE SE SEPARA POR LUZ, NAO POR LINHA.
+ * As tres receitas perderam a borda em volta. Quem separa agora e o degrau de
+ * luminancia que a FASE 1 mediu e escreveu no `globals.css` (0.061 entre
+ * surface-0 e surface-1, 0.053 entre surface-1 e surface-2), mais a aresta
+ * iluminada de 1px (`--realce-interno`). Isso e o que o gate G3′ permite, e a
+ * razao de ele existir: a regra antiga obrigava linha em volta de TODA
+ * superficie que contem outra, e "linha em volta de tudo" e literalmente o
+ * traco minimalista de que o dono reclamou — 18 Sections, 15 Panels e 40
+ * Callouts desenhando uma caixa cada um.
+ *
+ * A borda passou a ser vocabulario de CONTROLE e de mais nada: input, select,
+ * botao secundario, checkbox, cartao clicavel. A unica linha que sobrou numa
+ * superficie e a de 2px de tinta no topo do `Destaque`, que e identidade de
+ * area e nao contorno.
+ *
+ * 🔴 Consequencia que o G3′ cobra: uma superficie so separa da que a CONTEM se
+ * houver 0.04 de degrau de L entre as duas. `bg-surface-1` dentro de outro
+ * `bg-surface-1` nao separa por nada e vira uma mancha — dentro de um cartao,
+ * o aninhado sobe para `surface-2`.
  */
 
 import * as React from 'react';
@@ -29,14 +49,22 @@ import s from './superficies.module.css';
 /* As tres receitas de conteiner                                       */
 /* ------------------------------------------------------------------ */
 
-/** Cartao — o objeto que o operador manipula. Raio 12, borda forte, rampa. */
-export const receitaCartao = cn(
-  'min-w-0 rounded-panel border border-line-strong p-4 sm:p-5',
-  s.cartao
-);
+/**
+ * Cartao — o objeto que o operador manipula. Raio 10, SEM borda: `s.cartao`
+ * poe `--surface-1` (0.061 de L acima do fundo), a rampa curta do topo e a
+ * aresta de luz de `--realce-interno`. O cartao sobe do fundo; nao e recortado
+ * nele.
+ */
+export const receitaCartao = cn('min-w-0 rounded-panel p-4 sm:p-5', s.cartao);
 
-/** Bloco — grupo aninhado DENTRO de um cartao. Raio 8, superficie chapada. */
-export const receitaBloco = 'min-w-0 rounded-lg border border-line bg-surface-2 p-3';
+/**
+ * Bloco — grupo aninhado DENTRO de um cartao. Raio 8, superficie chapada e
+ * tambem sem borda: `surface-2` esta 0.053 de L acima do cartao, que e o que
+ * o G3′ pede. Fora de um cartao ele fica 0.114 acima do fundo — separa nos
+ * dois lugares, e por isso e o degrau certo para o que pode ou nao estar
+ * dentro de um cartao (filtro de lista, estado vazio, bloco de codigo).
+ */
+export const receitaBloco = 'min-w-0 rounded-lg bg-surface-2 p-3';
 
 /** Destaque — no maximo um por tela: cartao + linha de tinta + halo da area. */
 export const receitaDestaque = cn(receitaCartao, s.destaque, 'p-5 sm:p-6');
@@ -78,34 +106,17 @@ export function Destaque({
 }
 
 /* ------------------------------------------------------------------ */
-/* ChipDeIcone — o icone da area, em fundo e borda da tinta            */
+/* (aqui morava o ChipDeIcone)                                         */
 /* ------------------------------------------------------------------ */
 
 /**
- * Um por cartao, no maximo. Nunca uma fileira de cinco iguais: e essa fileira
- * que denuncia interface feita por IA, e o plano v3 manda apagar todas.
- * A tinta entra em fundo, borda e traco — nunca no texto ao lado (DS-1.5').
+ * `ChipDeIcone` e a classe `.chip` foram REMOVIDOS na FASE 3a do redesign v4.
+ * "Icone dentro de quadrado arredondado" e uma das assinaturas de template que
+ * a pesquisa lista, e o v3 ja tinha apagado a fileira de cinco iguais sem
+ * apagar o quadradinho em si. Agora o icone do assunto e glifo solto na tinta
+ * da area — no titulo da Section, no `pageTitleMark` do cabecalho de pagina e
+ * na estacao do `IntegrationFlow`. Sem caixa, sem borda, sem fundo.
  */
-export function ChipDeIcone({
-  icon: Icon,
-  className = '',
-}: {
-  icon: React.ElementType;
-  className?: string;
-}) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid size-8 shrink-0 place-items-center rounded-lg border',
-        s.chip,
-        className
-      )}
-    >
-      <Icon className="size-4" strokeWidth={1.75} />
-    </span>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* ParamChip — o nome do parametro da API, fora do rotulo             */
@@ -317,9 +328,17 @@ export function Section({
               {step}
             </span>
           )}
-          {/* O icone do titulo entra como chip na tinta da area — nunca em
-              azul: azul e acao, tinta e assunto. */}
-          {Icon && <ChipDeIcone icon={Icon} />}
+          {/* O icone do titulo e GLIFO, nao selo: a tinta da area entra no
+              traco e em mais nada. O quadradinho de 32px que morava aqui
+              repetia a mesma forma em 18 secoes — e forma repetida vira
+              textura, nao sinal. */}
+          {Icon && (
+            <Icon
+              aria-hidden
+              className="size-5 shrink-0 text-tinta"
+              strokeWidth={1.75}
+            />
+          )}
           <div className="min-w-0">
             <h2
               id={headingId}
@@ -396,15 +415,20 @@ export function Panel({
   className?: string;
   tone?: 'default' | 'warning' | 'danger' | 'success';
 }) {
-  const borda = {
+  /* O tom nao contorna mais o painel: ele pinta um FILETE de 2px na aresta
+     esquerda, o mesmo vocabulario que o Callout passou a usar na FASE 3a. Um
+     retangulo inteiro cercado de ambar dizia "esta caixa e o aviso"; o filete
+     diz "esta caixa TEM um aviso", que e o que `tone` sempre quis dizer — e
+     nao devolve um contorno a uma superficie que acabou de perder o dela. */
+  const filete = {
     default: '',
-    warning: 'border-warning/40',
-    danger: 'border-danger/40',
-    success: 'border-success/40',
+    warning: 'border-l-2 border-l-warning/70',
+    danger: 'border-l-2 border-l-danger/70',
+    success: 'border-l-2 border-l-success/70',
   }[tone];
 
   return (
-    <div className={cn(receitaCartao, borda, className)}>
+    <div className={cn(receitaCartao, filete, className)}>
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
@@ -420,9 +444,23 @@ export function Panel({
 }
 
 /* ------------------------------------------------------------------ */
-/* Callout — aviso inline (semantico, nao estrutural)                  */
+/* Callout — NOTA inline (semantica, nao estrutural)                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * FASE 3a: o Callout deixou de ser caixa e virou NOTA.
+ *
+ * Sao 40 usos. Com fundo, borda em volta e o texto inteiro na cor do tom, as
+ * 40 gritavam juntas — e quarenta avisos com o mesmo volume e o mesmo que
+ * nenhum. Agora a forma e um filete de 2px a esquerda na cor do tom, e SO o
+ * icone e o filete carregam cor. O texto fica em `--fg-body`, onde ele se le.
+ *
+ * `danger` e a unica excecao, e ela e deliberada: mantem fundo (`bg-danger/8`),
+ * porque "isto para uma venda" precisa de peso. A excecao NAO se estende a
+ * `warning` — se tudo que avisa tiver fundo, voltamos as 40 caixas.
+ *
+ * A assinatura nao mudou: nenhum dos 40 pontos de chamada foi tocado.
+ */
 export function Callout({
   tone = 'warning',
   icon: Icon,
@@ -438,24 +476,41 @@ export function Callout({
   className?: string;
   id?: string;
 }) {
-  const estilo = {
-    warning: 'border-warning/40 bg-warning/8 text-warning',
-    danger: 'border-danger/40 bg-danger/8 text-danger',
-    success: 'border-success/40 bg-success/8 text-success',
-    info: 'border-tinta-texto/40 bg-tinta/8 text-tinta-texto',
+  const filete = {
+    warning: 'border-l-warning',
+    danger: 'border-l-danger',
+    success: 'border-l-success',
+    info: 'border-l-tinta',
+  }[tone];
+
+  const corDoIcone = {
+    warning: 'text-warning',
+    danger: 'text-danger',
+    success: 'text-success',
+    info: 'text-tinta-texto',
   }[tone];
 
   return (
     <div
       id={id}
       className={cn(
-        'flex min-w-0 items-start gap-2.5 rounded-lg border p-3',
-        estilo,
+        'flex min-w-0 items-start gap-2.5 border-l-2 pl-3',
+        filete,
+        // O fundo e privilegio do `danger`, e o raio so existe por causa dele:
+        // sem fundo nao ha canto para arredondar.
+        tone === 'danger' ? 'rounded-r-lg bg-danger/8 py-3 pr-3' : 'py-1',
         className
       )}
     >
-      {Icon && <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />}
-      <div className="min-w-0 flex-1">
+      {Icon && (
+        <Icon className={cn('mt-0.5 size-4 shrink-0', corDoIcone)} aria-hidden />
+      )}
+      <div className="min-w-0 flex-1 text-fg-body">
+        {/* A hierarquia do titulo sai do PESO e do corpo, nao da cor: colorir
+            a frase inteira e o que fazia 40 notas competirem com o dado da
+            tela. Titulo e texto ficam os dois em `--fg-body` — 13px semibold
+            contra 12px regular ja separa, e e a mesma regra que a FASE 2
+            aplicou no resto do console. */}
         {title && <p className="text-label font-semibold">{title}</p>}
         {children && (
           <div className={cn('text-caption text-fg-body', title && 'mt-1')}>

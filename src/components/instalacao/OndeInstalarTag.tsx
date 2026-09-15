@@ -126,18 +126,25 @@ export function OndeInstalarTag() {
         {CAMINHOS.map((caminho) => {
           const Icone = caminho.icone;
           return (
+            // FASE 3a: os dois caminhos estão DENTRO de um `Panel`, que é
+            // `surface-1`. Em `surface-1` eles não teriam degrau nenhum contra
+            // o cartão que os contém; em `surface-2` ficam 0.053 de L acima
+            // dele, que é o que o G3′ pede — e aí a borda some, porque a luz
+            // já faz o trabalho dela.
             <section
               key={caminho.id}
               aria-labelledby={`instalar-${caminho.id}`}
-              className="flex min-w-0 flex-col rounded-panel border border-line-strong bg-surface-1 p-4"
+              className="flex min-w-0 flex-col rounded-panel bg-surface-2 p-4"
             >
               <h4
                 id={`instalar-${caminho.id}`}
                 className="flex items-center gap-2 text-label font-semibold text-fg-strong"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-control border border-tinta-texto/20 bg-tinta/8 text-tinta-texto">
-                  <Icone className="size-4" strokeWidth={1.75} aria-hidden />
-                </span>
+                <Icone
+                  aria-hidden
+                  className="size-5 shrink-0 text-tinta"
+                  strokeWidth={1.75}
+                />
                 {caminho.titulo}
               </h4>
 
@@ -154,7 +161,7 @@ export function OndeInstalarTag() {
                   >
                     <span
                       aria-hidden
-                      className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full border border-line-control bg-surface-2 font-mono text-caption font-semibold tabular text-fg-muted"
+                      className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full border border-line-control bg-surface-3 font-mono text-caption font-semibold tabular text-fg-muted"
                     >
                       {indice + 1}
                     </span>

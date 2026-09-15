@@ -40,7 +40,9 @@ export function ConsolePageHeader({
       <div className={styles.pageHeaderLead}>
         <h1 className={styles.pageTitle}>
           <span className={styles.pageTitleMark} aria-hidden="true">
-            <Icon size={28} strokeWidth={1.75} />
+            {/* 1em, nao 28px: o titulo e fluido e o glifo acompanha a letra
+                ao lado. Ver `.pageTitleMark` em console.module.css. */}
+            <Icon size="1em" strokeWidth={1.75} />
           </span>
           {title}
         </h1>

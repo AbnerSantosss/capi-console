@@ -409,7 +409,10 @@ export function TagDoSite({
               return (
                 <li
                   key={d.id}
-                  className="rounded-panel border border-line-strong bg-surface-1 p-4"
+                  // FASE 3a: a lista mora dentro de um `Panel` (`surface-1`).
+                  // Item em `surface-1` dentro dele = degrau zero; `surface-2`
+                  // põe os 0.053 de L que o G3′ exige e dispensa a borda.
+                  className="rounded-panel bg-surface-2 p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -540,7 +543,9 @@ export function TagDoSite({
               return (
                 <div
                   key={d.id}
-                  className="rounded-panel border border-line-strong bg-surface-1 p-4"
+                  // Mesmo caso do bloco de domínios acima: dentro de `Panel`,
+                  // então sobe para `surface-2` e larga a borda (G3′).
+                  className="rounded-panel bg-surface-2 p-4"
                 >
                   <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
                     {reg.nome}.{d.host}

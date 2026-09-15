@@ -263,7 +263,10 @@ export function FiltrosInbox({
   const pct = rodando && lote.total > 0 ? Math.round((lote.feitos / lote.total) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-2 rounded-control border border-line-strong bg-surface-1 p-3">
+    // FASE 3a: a barra de filtros é renderizada pela `InboxList`, dentro do
+    // cartão da caixa de entrada. Em `surface-2` ela fica 0.053 de L acima
+    // dele — separa por luz, como manda o G3′, e a borda sai.
+    <div className="flex flex-col gap-2 rounded-control bg-surface-2 p-3">
       {/* Abaixo de 48rem cada campo ocupa a linha inteira: cinco selects lado a
           lado em 360px davam 5 linhas de filtro antes da lista, e cada gatilho
           ficava estreito demais para ler o valor escolhido. */}

@@ -6,9 +6,14 @@
    Destaque no máximo um por tela
 
    Só entra aqui o que classe utilitária não escreve: a rampa de duas paradas
-   do cartão, a linha de tinta de 2px e o halo da tinta no canto. Padding,
-   raio e borda ficam em Tailwind de propósito — assim `Panel tone="warning"`
-   e um `className` de quem chama continuam mandando neles.
+   do cartão, a linha de tinta de 2px e o halo da tinta no canto. Padding e
+   raio ficam em Tailwind de propósito — assim o filete de tom do `Panel` e um
+   `className` de quem chama continuam mandando neles.
+
+   FASE 3a: o cartão não tem mais borda. O que o separa do fundo é o degrau de
+   luminância que a FASE 1 mediu (0.061 de L entre --surface-0 e --surface-1,
+   acima do piso de 0.04 do G3′) somado ao --realce-interno abaixo. Linha em
+   volta virou vocabulário de controle, e só.
 
    Sem hexadecimal e sem `font-size` (G6/G7). O tom mais claro do topo do
    cartão sai de `color-mix` sobre `--surface-1`: não existe token de
@@ -35,8 +40,9 @@
   isolation: isolate;
 }
 
-/* A linha de 2px no topo. É a única borda colorida permitida (DS-1.5′): a
-   borda do cartão continua sendo `--border-*`. */
+/* A linha de 2px no topo. Depois da FASE 3a ela é a ÚNICA linha que sobrou em
+   superfície no produto inteiro — e ela não é contorno, é identidade: diz de
+   que área é esta tela e qual cartão dela manda. Todo o resto separa por luz. */
 .destaque::before {
   content: '';
   position: absolute;
@@ -70,13 +76,10 @@
   );
 }
 
-/* --- Chip de ícone da área --------------------------------------------- */
+/* --- (aqui morava o `.chip`) -------------------------------------------- */
 
-/* O quadradinho de ícone só é permitido aqui, uma vez por cartão, na tinta da
-   área — nunca como grade de cinco iguais, que é a assinatura de IA que o
-   plano v3 manda apagar. A cor entra em fundo, borda e ícone; nunca em texto. */
-.chip {
-  color: var(--tinta);
-  background-color: color-mix(in srgb, var(--tinta) 14%, transparent);
-  border-color: color-mix(in srgb, var(--tinta) 22%, transparent);
-}
+/* O quadradinho de ícone saiu na FASE 3a, junto com o `ChipDeIcone` que o
+   vestia. "Ícone dentro de quadrado arredondado" está na lista de assinaturas
+   de template da pesquisa (§8 do plano v4): o v3 já tinha apagado a fileira de
+   cinco iguais, mas manteve a forma — e a forma é o que o olho reconhece.
+   Agora o ícone do assunto é glifo solto em `--tinta`, sem caixa. */
