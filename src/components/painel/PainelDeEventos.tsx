@@ -249,9 +249,25 @@ function CardPainel({
 /* O destaque de compras                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * `valor === null` quer dizer que o recorte tem compras em mais de uma moeda e
+ * o resumo se recusou a somar (ver `inbox-resumo.ts`). O espaço de 56px do
+ * `--text-display` é para NÚMERO — uma frase ali vira o maior objeto da tela e
+ * não explica nada (o dono leu "moedas misturadas" e não entendeu; DS-v4-3).
+ * Por isso o degrau grande recebe um travessão, e a explicação vai numa linha
+ * pequena logo abaixo, em `SemSomaPorMoeda`.
+ */
 function dinheiro(valor: number | null, moeda: string | null): string {
-  if (valor === null) return 'moedas misturadas';
+  if (valor === null) return '—';
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: moeda ?? 'BRL' });
+}
+
+/** Frase que substitui a soma quando as compras do período têm moedas diferentes. */
+const SEM_SOMA_POR_MOEDA = 'Compras em mais de uma moeda — o total não soma. A lista mostra cada valor.';
+
+function SemSomaPorMoeda({ valor }: { valor: number | null }) {
+  if (valor !== null) return null;
+  return <span className="text-caption text-fg-muted">{SEM_SOMA_POR_MOEDA}</span>;
 }
 
 /**
@@ -291,7 +307,9 @@ function DestaqueDeCompras({
     >
       <Link
         href={href}
-        aria-label={`${compras.total} ${plural}, ${dinheiro(compras.valor, compras.moeda)}. Abrir a lista de quem comprou.`}
+        aria-label={`${compras.total} ${plural}, ${
+          compras.valor === null ? SEM_SOMA_POR_MOEDA : dinheiro(compras.valor, compras.moeda)
+        } Abrir a lista de quem comprou.`}
         className={cn(
           'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
           'hover:border-tinta-texto hover:bg-surface-3',
@@ -321,6 +339,7 @@ function DestaqueDeCompras({
                 <span className="text-label text-fg-muted">{plural}</span>
               </span>
             </span>
+            <SemSomaPorMoeda valor={compras.valor} />
           </div>
 
           <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-tinta-texto">
