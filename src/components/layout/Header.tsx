@@ -18,7 +18,7 @@ import {
   Target,
   User,
   Workflow,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { useBrandStore, limparLegado } from '@/stores/useBrandStore';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
@@ -249,7 +249,7 @@ export function Header() {
                       : 'text-fg-muted group-hover:bg-surface-2 group-hover:text-fg-body'
                   )}
                 >
-                  <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  <Icon className="size-4 shrink-0" aria-hidden />
                   {item.rotulo}
                 </span>
               </Link>
@@ -308,7 +308,7 @@ export function Header() {
             aria-label="Buscar pedido, e-mail ou regra"
             className="hidden h-control-sm w-60 shrink items-center gap-2 rounded-control border border-line bg-surface-1 px-2.5 text-label text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:flex xl:hidden"
           >
-            <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            <Search className="size-4 shrink-0" aria-hidden />
             <span className="truncate">Buscar pedido, e-mail, regra</span>
             <kbd
               aria-hidden
@@ -326,7 +326,7 @@ export function Header() {
             title="Buscar pedido, e-mail ou regra (⌘K)"
             className="grid size-control-sm shrink-0 place-items-center gap-1.5 rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:hidden xl:flex xl:h-control-sm xl:w-auto xl:items-center xl:px-2"
           >
-            <Search className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            <Search className="size-4 shrink-0" aria-hidden />
             {/* O atalho fica à vista de propósito: sem o campo por extenso, é
                 ele que conta que dá para buscar digitando. */}
             <kbd
@@ -346,7 +346,7 @@ export function Header() {
             title="Avisos: retornos e erros do disparo automático"
             className="grid size-control-sm shrink-0 place-items-center rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
           >
-            <Bell className="size-4" strokeWidth={1.75} aria-hidden />
+            <Bell className="size-4" aria-hidden />
           </Link>
 
           {/* Menu do operador. Os três botões soltos que moravam aqui (Guia,
@@ -367,7 +367,7 @@ export function Header() {
                 />
               }
             >
-              {iniciais ?? <User className="size-4" strokeWidth={2} aria-hidden />}
+              {iniciais ?? <User className="size-4" aria-hidden />}
             </Menu.Trigger>
 
             <Menu.Portal>

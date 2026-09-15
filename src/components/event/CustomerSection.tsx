@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Fingerprint, Lock } from 'lucide-react';
+import { Fingerprint, Lock } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { Field, Section } from '@/components/common/primitives';
@@ -134,7 +134,7 @@ export function CustomerSection() {
 
         <div className="sm:col-span-2 mt-2 border-t border-line pt-4">
           <h3 className="flex items-center gap-2 text-label font-semibold text-fg-strong">
-            <Fingerprint className="size-4 text-tinta-texto" strokeWidth={1.75} aria-hidden />
+            <Fingerprint className="size-4 text-tinta-texto" aria-hidden />
             Dados de rastreamento
           </h3>
           <p className="mt-1 text-caption text-fg-muted">

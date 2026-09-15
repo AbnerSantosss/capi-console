@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Target } from 'lucide-react';
+import { AlertTriangle, Target } from '@/components/ui/icones';
 
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { Badge } from '@/components/ui/badge';

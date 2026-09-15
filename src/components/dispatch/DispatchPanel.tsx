@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { AlertTriangle, Eraser, FlaskConical, Target } from 'lucide-react';
+import { AlertTriangle, Eraser, FlaskConical, Target } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { useEmq } from '@/components/quality/QualityPanel';

@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { AlertTriangle, Code2, Container } from 'lucide-react';
+import { AlertTriangle, Code2, Container } from '@/components/ui/icones';
 
 import { Callout, Panel } from '@/components/common/primitives';
 
@@ -143,7 +143,6 @@ export function OndeInstalarTag() {
                 <Icone
                   aria-hidden
                   className="size-5 shrink-0 text-tinta"
-                  strokeWidth={1.75}
                 />
                 {caminho.titulo}
               </h4>

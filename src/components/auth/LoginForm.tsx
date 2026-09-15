@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Eye, EyeOff, FlaskConical, LoaderCircle } from 'lucide-react';
+import { Eye, EyeOff, FlaskConical, LoaderCircle } from '@/components/ui/icones';
 import { toast } from 'sonner';
 
 import { AppMark } from '@/components/ui/app-mark';

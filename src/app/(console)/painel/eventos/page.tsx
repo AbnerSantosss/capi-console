@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { Inbox } from 'lucide-react';
+import { Inbox } from '@/components/ui/icones';
 
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';

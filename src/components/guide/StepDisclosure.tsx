@@ -9,7 +9,7 @@
  */
 
 import { useId, useState } from 'react';
-import { AlertTriangle, ChevronDown, MapPin } from 'lucide-react';
+import { AlertTriangle, ChevronDown, MapPin } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
 import type { ItemGuia } from './conteudo';

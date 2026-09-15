@@ -38,7 +38,7 @@
  */
 
 import * as React from 'react';
-import { Info, TriangleAlert } from 'lucide-react';
+import { Info, TriangleAlert } from '@/components/ui/icones';
 import Link from 'next/link';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -336,7 +336,6 @@ export function Section({
             <Icon
               aria-hidden
               className="size-5 shrink-0 text-tinta"
-              strokeWidth={1.75}
             />
           )}
           <div className="min-w-0">

@@ -27,7 +27,7 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { GitBranch, Zap, ZapOff } from 'lucide-react';
+import { GitBranch, Zap, ZapOff } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -292,7 +292,7 @@ export function ChaveDoAutomatico({
           )}
           aria-hidden
         >
-          <IconeDoEstado className="size-4" strokeWidth={1.75} />
+          <IconeDoEstado className="size-4" />
         </span>
 
         <div className="min-w-0 flex-1">

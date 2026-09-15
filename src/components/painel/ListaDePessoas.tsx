@@ -11,7 +11,7 @@ import {
   Inbox,
   ShieldAlert,
   Users,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { pedir } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
@@ -177,7 +177,7 @@ function LinhaDaPessoa({ p, mostrarEvento }: { p: PessoaDoEvento; mostrarEvento:
           <span className="wrap-token min-w-0 font-mono">{p.emailMascarado}</span>
         )}
         <span className="inline-flex shrink-0 items-center gap-1">
-          <Clock className="size-3" strokeWidth={1.75} aria-hidden />
+          <Clock className="size-3" aria-hidden />
           {quando(p.recebidoEm)}
         </span>
         {p.orderId && <span className="wrap-token min-w-0 font-mono">pedido {p.orderId}</span>}

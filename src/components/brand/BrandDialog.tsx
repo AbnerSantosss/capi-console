@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck } from '@/components/ui/icones';
 
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import {

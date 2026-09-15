@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, Gauge, Lock } from 'lucide-react';
+import { CheckCircle2, XCircle, Gauge, Lock } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { calcularEmq, CORES_EMQ, type ResultadoEmq } from '@/lib/emq';

@@ -19,7 +19,7 @@
  */
 
 import React, { useState } from 'react';
-import { AlertTriangle, FlaskConical, Send } from 'lucide-react';
+import { AlertTriangle, FlaskConical, Send } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';

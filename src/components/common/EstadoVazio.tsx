@@ -18,7 +18,7 @@
  */
 
 import * as React from 'react';
-import { Inbox, SearchX, TriangleAlert } from 'lucide-react';
+import { Inbox, SearchX, TriangleAlert } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
 
@@ -98,7 +98,7 @@ export function EstadoVazio({
         className
       )}
     >
-      <Icone className={cn('size-6 shrink-0', c.cor)} strokeWidth={1.75} aria-hidden />
+      <Icone className={cn('size-6 shrink-0', c.cor)} aria-hidden />
       <div className="flex flex-col gap-1">
         <p className="text-label font-semibold text-fg-strong">{titulo}</p>
         <p className="mx-auto max-w-md text-caption text-fg-muted">{motivo}</p>

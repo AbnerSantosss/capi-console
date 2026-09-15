@@ -1,4 +1,4 @@
-import { Gauge } from 'lucide-react';
+import { Gauge } from '@/components/ui/icones';
 
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';

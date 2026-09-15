@@ -12,7 +12,7 @@
  * ao lado, nunca no lugar.
  */
 
-import type { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from '@/components/ui/icones';
 
 import { acharEventoPadrao } from '@/lib/meta-events';
 import {

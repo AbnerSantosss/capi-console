@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu } from '@base-ui/react/menu';
 import { toast } from 'sonner';
-import { Building2, Check, ChevronDown, Pencil, Plus } from 'lucide-react';
+import { Building2, Check, ChevronDown, Pencil, Plus } from '@/components/ui/icones';
 
 import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
 import { EmpresaDialog } from '@/components/empresa/EmpresaDialog';
@@ -201,7 +201,7 @@ export function SeletorDeEmpresa(): React.JSX.Element {
               aria-hidden
               className="flex size-[1.375rem] shrink-0 items-center justify-center rounded-control bg-surface-2 text-fg-muted"
             >
-              <Building2 className="size-3.5" strokeWidth={1.75} />
+              <Building2 className="size-3.5" />
             </span>
           )}
           {/* O nome da empresa aparece em TODA largura — inclusive no celular,

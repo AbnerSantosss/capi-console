@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Clock, ReceiptText, Wand2 } from 'lucide-react';
+import { Clock, ReceiptText, Wand2 } from '@/components/ui/icones';
 
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EVENTOS_META, acharEvento } from '@/lib/meta-events';

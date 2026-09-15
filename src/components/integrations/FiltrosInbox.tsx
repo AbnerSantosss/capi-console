@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { ListFilter, Send, Square, X } from 'lucide-react';
+import { ListFilter, Send, Square, X } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import {

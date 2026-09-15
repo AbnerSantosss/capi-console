@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { toast } from 'sonner';
-import { Copy, FileJson } from 'lucide-react';
+import { Copy, FileJson } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import {

@@ -8,7 +8,7 @@ import {
   RotateCcw,
   Target,
   Webhook,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 /**
  * As abas que sobraram em `/automatico`. `historico` saiu porque deixou de ser
@@ -163,7 +163,7 @@ function ConteudoDaEstacao({
         className={`flex size-8 items-center justify-center ${ativa ? '' : 'text-fg-muted'}`}
         style={ativa ? ({ color: passo.tinta } as CSSProperties) : undefined}
       >
-        <Icon className="size-5" strokeWidth={1.75} />
+        <Icon className="size-5" />
       </span>
       <span className="min-w-0">
         <span className="flex items-center gap-1 text-label font-semibold text-fg-strong">
@@ -171,7 +171,6 @@ function ConteudoDaEstacao({
           {passo.tipo === 'rota' && (
             <ArrowUpRight
               className="size-3.5 shrink-0 text-fg-muted"
-              strokeWidth={1.75}
               aria-hidden
             />
           )}
@@ -281,7 +280,6 @@ export function IntegrationFlow({
         <ListTree
           aria-hidden
           className="size-5 shrink-0 text-tinta"
-          strokeWidth={1.75}
         />
         <h2
           id="trilho-de-estado"

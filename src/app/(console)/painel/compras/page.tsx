@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { ShoppingBag } from 'lucide-react';
+import { ShoppingBag } from '@/components/ui/icones';
 
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';

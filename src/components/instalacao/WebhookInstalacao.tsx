@@ -26,7 +26,7 @@ import {
   RefreshCw,
   Send,
   Terminal,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -446,7 +446,7 @@ export function WebhookInstalacao({
           <AccordionItem value="instrucoes" className="last:border-b-0">
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="flex items-center gap-2 text-label font-semibold text-fg-body">
-                <Terminal className="size-4 text-fg-muted" strokeWidth={1.75} aria-hidden />
+                <Terminal className="size-4 text-fg-muted" aria-hidden />
                 Instruções técnicas
               </span>
             </AccordionTrigger>

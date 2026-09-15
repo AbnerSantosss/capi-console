@@ -26,7 +26,7 @@ import {
   Plus,
   History,
   MoreHorizontal,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { parseWebhook, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';

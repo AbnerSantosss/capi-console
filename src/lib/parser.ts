@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Import de TIPO apenas: some na compilacao, entao parser.ts continua rodando
-// no Node puro (scripts/parser-eventos.test.mjs) sem carregar lucide-react.
+// no Node puro (scripts/parser-eventos.test.mjs) sem carregar o pacote de
+// icones que meta-events.ts importa junto com o catalogo.
 // O ganho e o `tsc --noEmit` quebrar se alguem escrever aqui um nome de evento
 // que nao existe em EVENTOS_META.
 import type { NomeEventoMetaPadrao } from './meta-events';

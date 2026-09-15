@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Send, Target } from 'lucide-react';
+import { BookOpen, Send, Target } from '@/components/ui/icones';
 
 import { SourceSection } from '@/components/event/SourceSection';
 import { TransactionSection } from '@/components/event/TransactionSection';
@@ -60,7 +60,7 @@ export default function Home() {
               href="/guia#como-usar"
               className={buttonVariants({ variant: 'outline' })}
             >
-              <BookOpen className="size-4" strokeWidth={1.75} aria-hidden />
+              <BookOpen className="size-4" aria-hidden />
               Abrir guia
             </Link>
           }

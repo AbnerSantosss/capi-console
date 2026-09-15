@@ -58,13 +58,19 @@ export function BarraDeAbas() {
             )}
           >
             {/* Ícone na tinta da área quando ativo: a cor confirma o rótulo,
-                nunca substitui ele (o rótulo está sempre escrito). */}
+                nunca substitui ele (o rótulo está sempre escrito).
+
+                O peso do traço engrossava quando ativo (2 contra 1.75). Saiu
+                com a FASE 4: o peso agora é `regular` em todo o produto, e o
+                ativo já é dito por três sinais nesta mesma peça — a linha de
+                2px na tinta em cima, o texto em `--fg-strong` e o próprio
+                glifo em `--tinta`. Um quarto sinal, e logo o mais fraco de
+                ler num ícone de 20px, não acrescentava nada. */}
             <Icon
               className={cn(
                 'size-[1.25rem] shrink-0',
                 ativo && '[color:var(--tinta)]'
               )}
-              strokeWidth={ativo ? 2 : 1.75}
               aria-hidden
             />
             <span className="max-w-full truncate">{item.curto}</span>

@@ -24,7 +24,7 @@ import {
   Send,
   ShieldAlert,
   Trash2,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -482,7 +482,7 @@ export function IntegrationsPage({
                         aria-describedby={`grupo-${grupo.id}`}
                         className="h-11 gap-2 rounded-control px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
                       >
-                        <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
+                        <Icon className="size-[18px]" aria-hidden />
                         {item.label}
                         {count !== undefined && (
                           <Badge className="font-mono tabular">{count}</Badge>

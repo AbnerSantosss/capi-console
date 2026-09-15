@@ -17,7 +17,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Code2, Globe, Link2, Webhook } from 'lucide-react';
+import { Code2, Globe, Link2, Webhook } from '@/components/ui/icones';
 
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { Section, StatusDot } from '@/components/common/primitives';

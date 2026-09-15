@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from '@/components/ui/icones';
 
 import {
   useEmpresaStore,

@@ -11,7 +11,7 @@
  * precisam conseguir abrir um topico.
  */
 
-import { ChevronDown, Lock, ShieldCheck, Webhook } from 'lucide-react';
+import { ChevronDown, Lock, ShieldCheck, Webhook } from '@/components/ui/icones';
 
 import { calcularEmq } from '@/lib/emq';
 import { Callout } from '@/components/common/primitives';

@@ -9,7 +9,7 @@ import {
   Copy,
   ExternalLink,
   X,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/common/primitives';

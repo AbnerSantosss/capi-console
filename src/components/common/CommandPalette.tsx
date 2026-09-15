@@ -17,7 +17,7 @@ import {
   Target,
   Wand2,
   Workflow,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 

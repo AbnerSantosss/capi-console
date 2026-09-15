@@ -33,7 +33,7 @@
  */
 
 import { useState, type ComponentProps } from 'react';
-import { FlaskConical, Mail, Plus, Repeat2, Trash2, User } from 'lucide-react';
+import { FlaskConical, Mail, Plus, Repeat2, Trash2, User } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,7 +108,7 @@ function Item({
 }) {
   return (
     <li className="flex min-w-0 items-center gap-2 rounded-control border border-line bg-surface-2 py-1.5 pr-1.5 pl-2.5">
-      <Icone className="size-3.5 shrink-0 text-fg-muted" strokeWidth={1.75} aria-hidden />
+      <Icone className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
       <span className="wrap-token min-w-0 flex-1 font-mono text-caption text-fg-body">{valor}</span>
       <Button size="icon-sm" variant="ghost" aria-label={rotuloRemover} onClick={aoRemover}>
         <Trash2 className="size-3.5 text-danger" aria-hidden />

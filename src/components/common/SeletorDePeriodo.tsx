@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useId, useSyncExternalStore } from 'react';
-import { CalendarRange } from 'lucide-react';
+import { CalendarRange } from '@/components/ui/icones';
 
 import { Input } from '@/components/ui/input';
 import { dataIsoValida, dataLocalIso } from '@/lib/inbox-resumo';
@@ -189,7 +189,7 @@ export function SeletorDePeriodo({
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <CalendarRange className="size-4 shrink-0 text-fg-muted" strokeWidth={1.75} aria-hidden />
+        <CalendarRange className="size-4 shrink-0 text-fg-muted" aria-hidden />
         <label htmlFor={idDe} className="text-caption text-fg-muted">
           De
         </label>

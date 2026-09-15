@@ -1,4 +1,6 @@
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+
+import type { Icone } from '@/components/ui/icones';
 
 import styles from './console.module.css';
 
@@ -32,7 +34,12 @@ export function ConsolePageHeader({
   title: string;
   /** Uma frase, no maximo 120 caracteres renderizados. Veja o bloco acima. */
   description: ReactNode;
-  icon: ElementType;
+  /**
+   * Tipado como `Icone` (e nao `ElementType`) porque este e o UNICO lugar do
+   * console que passa `weight` — e `ElementType` aceitaria qualquer coisa,
+   * inclusive um componente que ignora a prop em silencio.
+   */
+  icon: Icone;
   action?: ReactNode;
 }) {
   return (
@@ -41,8 +48,17 @@ export function ConsolePageHeader({
         <h1 className={styles.pageTitle}>
           <span className={styles.pageTitleMark} aria-hidden="true">
             {/* 1em, nao 28px: o titulo e fluido e o glifo acompanha a letra
-                ao lado. Ver `.pageTitleMark` em console.module.css. */}
-            <Icon size="1em" strokeWidth={1.75} />
+                ao lado. Ver `.pageTitleMark` em console.module.css.
+
+                `duotone` e o UNICO peso fora do `regular` em todo o produto, e
+                vive so aqui: um glifo por tela, no lugar mais alto dela. A
+                segunda camada do duotone e a mesma cor a 20% de opacidade,
+                entao o glifo ganha um corpo preenchido na tinta da area sem
+                virar um segundo bloco de cor — e o que faz o titulo da pagina
+                se distinguir dos 18 titulos de `Section`, que ficam em
+                `regular`. Espalhar duotone seria repetir a forma outra vez e
+                cair no mesmo erro do quadradinho que a FASE 3a matou. */}
+            <Icon size="1em" weight="duotone" />
           </span>
           {title}
         </h1>

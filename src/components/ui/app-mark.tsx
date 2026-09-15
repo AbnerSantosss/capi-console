@@ -29,8 +29,17 @@ export function AppMark({ size = 40, decorative = true, className = '' }: Props)
         ? { 'aria-hidden': true }
         : { role: 'img', 'aria-label': 'Abner Traker' })}
     >
-      {/* Tracos da mira — o vao central e proposital: e o alvo. */}
-      <g stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      {/* Tracos da mira — o vao central e proposital: e o alvo.
+
+          A espessura vem por CSS (`stroke-width` e propriedade de apresentacao
+          do SVG, entao a classe pinta igualzinho ao atributo). Nao e manha de
+          estilo: depois da FASE 4 o produto tem um conjunto de icones so, o
+          Phosphor, que dimensiona traco por `weight` e nao conhece a prop de
+          espessura do conjunto antigo — e procurar essa prop em src/ passou a
+          ser o jeito de achar sobra dele. Este SVG e desenho nosso, nao icone
+          de biblioteca, e ficaria dando falso positivo para sempre. O valor
+          2.5 e o mesmo de antes; a marca nao mudou um pixel. */}
+      <g stroke="currentColor" className="[stroke-width:2.5]" strokeLinecap="round">
         <path d="M24 4v11" />
         <path d="M24 33v11" />
         <path d="M4 24h11" />

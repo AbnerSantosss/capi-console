@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, Send } from 'lucide-react';
+import { AlertTriangle, Send } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { useEmq } from '@/components/quality/QualityPanel';

@@ -2,7 +2,7 @@ import { IntegrationsPage } from '@/components/integrations/IntegrationsPage';
 import { ErroConfiguracaoIndisponivel, lerIntegracoes } from '@/lib/config-store';
 import { listarEntregas } from '@/lib/relay';
 import { empresaDaPagina } from '@/lib/empresa-ativa';
-import { Workflow } from 'lucide-react';
+import { Workflow } from '@/components/ui/icones';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
 import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';

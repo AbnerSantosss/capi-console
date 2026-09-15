@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, Type } from 'lucide-react';
+import { Sparkles, Type } from '@/components/ui/icones';
 
 import { useUserStore, type Densidade } from '@/stores/useUserStore';
 import {

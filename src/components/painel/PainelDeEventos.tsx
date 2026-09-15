@@ -15,7 +15,7 @@ import {
   ShoppingBag,
   Sparkles,
   X,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import { pedir } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
@@ -193,7 +193,7 @@ function CardPainel({
           aria-hidden
           className={cn('flex size-7 shrink-0 items-center justify-center rounded-control', FUNDO_DO_MATIZ[matiz])}
         >
-          <Icone className="size-4" strokeWidth={1.75} />
+          <Icone className="size-4" />
         </span>
       </span>
 
@@ -327,7 +327,6 @@ function DestaqueDeCompras({
             Ver quem comprou
             <ArrowRight
               className="size-4 transition-transform group-hover:translate-x-0.5"
-              strokeWidth={1.75}
               aria-hidden
             />
           </span>
@@ -750,7 +749,6 @@ export function PainelDeEventos() {
                         <span className="text-label font-semibold text-fg-strong">{e.total}</span>
                         <ArrowRight
                           className="size-3.5 text-fg-muted transition-transform group-hover:translate-x-0.5 group-hover:text-tinta-texto"
-                          strokeWidth={1.75}
                           aria-hidden
                         />
                       </span>
@@ -801,7 +799,7 @@ export function PainelDeEventos() {
                         FUNDO_DO_MATIZ['chart-2']
                       )}
                     >
-                      <ShoppingBag className="size-4" strokeWidth={1.75} />
+                      <ShoppingBag className="size-4" />
                     </span>
                   </span>
                   <span className="text-data font-semibold text-fg-strong tabular-nums">

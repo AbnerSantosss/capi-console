@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Braces, Inbox, Trash2, Wand2, Webhook, Zap } from 'lucide-react';
+import { Braces, Inbox, Trash2, Wand2, Webhook, Zap } from '@/components/ui/icones';
 import Link from 'next/link';
 
 import { useEventStore } from '@/stores/useEventStore';

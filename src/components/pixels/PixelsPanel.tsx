@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { Plus, Target } from 'lucide-react';
+import { Plus, Target } from '@/components/ui/icones';
 
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { useRegrasDeRoteamento } from '@/hooks/useEstadoAutomatico';

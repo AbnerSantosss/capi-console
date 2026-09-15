@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from 'lucide-react';
+import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -167,7 +167,6 @@ export function RulesSection({
             <span className="sr-only">Buscar regra</span>
             <Search
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted"
-              strokeWidth={1.75}
               aria-hidden
             />
             <Input

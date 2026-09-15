@@ -1,6 +1,6 @@
 import type { CSSProperties, ElementType } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Plug, Send, Workflow } from 'lucide-react';
+import { ArrowUpRight, Plug, Send, Workflow } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
 
@@ -128,7 +128,7 @@ function CartaoDeTela({ dados, aqui }: { dados: Descricao; aqui: boolean }) {
             borderColor: 'color-mix(in srgb, var(--c) 22%, transparent)',
           }}
         >
-          <Icone className="size-4" strokeWidth={1.75} />
+          <Icone className="size-4" />
         </span>
 
         <h3 className="min-w-0 flex-1 truncate text-label font-semibold text-fg-strong">

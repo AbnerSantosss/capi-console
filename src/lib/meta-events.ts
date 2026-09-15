@@ -18,7 +18,7 @@ import {
   Search,
   FileText,
   type LucideIcon,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 export interface EventoMeta {
   /** Nome tecnico. E exatamente o que vai em event_name e o que aparece no Gerenciador. */

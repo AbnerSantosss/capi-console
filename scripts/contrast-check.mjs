@@ -12,7 +12,8 @@
  *   G6  font-size fora do @theme      DS-0.4              zero
  *   G7  Literal de cor fora da lista de excecoes          zero
  *       (hexadecimal E TAMBEM rgb/rgba/hsl/hsla/oklch/oklab/lab/lch)
- *   G9  Token morto do v3 vivo em src/                    zero
+ *   G9  Sobra do v3 viva em src/ (token morto e o conjunto
+ *       de icones antigo)                                 zero
  *
  * A numeracao pula o G8 de proposito: ela e a do `plano-redesign-visual-v4.md`,
  * e renumerar aqui quebraria a conversa entre o gate e o documento que o
@@ -58,6 +59,15 @@
  * simplesmente nao pinta, e o elemento fica transparente ou preto sem que
  * ninguem perceba ate ver a tela. G9 existe para que a morte seja verificada e
  * nao prometida.
+ *
+ * A FASE 4 acrescentou ao G9 o NOME DO PACOTE de icones antigo. O caso e o
+ * mesmo em especie: importar dele nao quebra build nenhum (o pacote pode voltar
+ * numa instalacao transitiva a qualquer momento), mas mistura dois desenhos de
+ * icone na mesma tela — que e exatamente o que o movimento M5 do plano foi
+ * fechar. E, ao contrario do token morto, esse aqui SUME da tela sem avisar:
+ * dois conjuntos desenham o mesmo assunto de formas parecidas o bastante para
+ * ninguem notar na revisao e diferentes o bastante para a tela parecer que
+ * ninguem decidiu. Todo icone entra por `@/components/ui/icones`.
  *
  * Uso: node scripts/contrast-check.mjs   (sai 1 se qualquer verificacao falhar)
  */
@@ -559,9 +569,9 @@ function verificarClasses() {
 }
 
 /* -------------------------------------------------------------------------
-   G9 — token morto do v3 vivo em src/
+   G9 — sobra do v3 viva em src/
    -------------------------------------------------------------------------
-   Quatro nomes que o v4 enterrou, e o que os substituiu:
+   Cinco nomes que o v4 enterrou, e o que os substituiu:
 
      accent-text   -> tinta-texto   (link, aba ativa, icone ativo, valor em
                                      destaque, anel de foco, barra de selecao)
@@ -569,23 +579,44 @@ function verificarClasses() {
                                      de controle marcado, barra de progresso)
      bg-primary    -> bg-papel      (a acao primaria e o papel claro)
      text-primary  -> text-papel-texto, ou text-fg-strong quando era so enfase
+     lucide-react  -> @/components/ui/icones   (o barril do Phosphor)
+
+   Os quatro primeiros sao COR: nome de token que o v4 apagou do `:root`. O
+   quinto e o conjunto de icones antigo, entrou na lista com a FASE 4 e esta
+   aqui pelo mesmo motivo — some da tela sem dar erro. Token morto nao pinta;
+   import do conjunto velho pinta, e ate bonito, so que com outro desenho ao
+   lado do desenho novo. Nenhum dos dois quebra o build, e por isso nenhum dos
+   dois e pego por `tsc`: quem pega e este gate.
+
+   O barril existe para que sobre um caminho unico. Qualquer import direto do
+   pacote antigo reabre a porta que a FASE 4 fechou, inclusive se ele voltar
+   como dependencia transitiva de outra coisa — o `package.json` limpo nao e
+   garantia, a ausencia em `src/` e.
 
    A busca e feita aqui dentro, lendo os arquivos, e nao por `grep` externo: o
    repositorio roda em Windows e um gate que depende de um binario que pode nao
    existir e um gate que as vezes nao roda — o que e pior do que nao ter gate,
    porque da a impressao de que rodou.
 
-   Esta regua tem data de validade. Quando `accent-*` nao existir mais em
-   nenhum branch nem na memoria de ninguem, ela pode sair — e nao antes.
+   Esta regua tem data de validade. Quando `accent-*` e o pacote antigo nao
+   existirem mais em nenhum branch nem na memoria de ninguem, ela pode sair — e
+   nao antes.
    ------------------------------------------------------------------------- */
 
-const TOKENS_MORTOS = ['accent-fill', 'accent-text', 'bg-primary', 'text-primary'];
+const TOKENS_MORTOS = [
+  'accent-fill',
+  'accent-text',
+  'bg-primary',
+  'text-primary',
+  'lucide-react',
+];
 
 const SUBSTITUTO = {
   'accent-fill': 'bg-tinta (ou bg-tinta/16 quando era pintura)',
   'accent-text': 'tinta-texto',
   'bg-primary': 'bg-papel',
   'text-primary': 'text-papel-texto ou text-fg-strong',
+  'lucide-react': "import { ... } from '@/components/ui/icones'",
 };
 
 /** Todo arquivo de `src/` que pode carregar uma classe ou um nome de token. */
@@ -967,9 +998,10 @@ rodarLista(
 
 rodarLista(
   'G9',
-  'Token morto do v3 (accent-fill, accent-text, bg-primary, text-primary)',
+  'Sobra do v3 (accent-fill, accent-text, bg-primary, text-primary, lucide-react)',
   verificarTokensMortos(),
-  `o azul de acao nao existe mais em nenhum dos ${ARQUIVOS_DE_FONTE.length} arquivos de src/`
+  `nem o azul de acao nem o conjunto de icones antigo aparecem em nenhum dos ` +
+    `${ARQUIVOS_DE_FONTE.length} arquivos de src/`
 );
 
 const tudoOk = Object.values(veredito).every(Boolean);

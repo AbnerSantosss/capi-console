@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from '@/components/ui/icones';
 
 /**
  * Modo degradado de B1-e: o arquivo de configuração existe mas nem ele nem o
@@ -24,7 +24,7 @@ export function AvisoConfigIndisponivel({ arquivo }: { arquivo: string }) {
       role="alert"
       className="flex items-start gap-3 rounded-panel border border-danger bg-surface-1 p-4"
     >
-      <AlertTriangle size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-danger" />
+      <AlertTriangle size={20} className="mt-0.5 shrink-0 text-danger" />
       <div className="min-w-0 space-y-1">
         <h2 className="text-title font-semibold text-fg-strong">
           Configuração indisponível — nada foi alterado

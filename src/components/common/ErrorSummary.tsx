@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 

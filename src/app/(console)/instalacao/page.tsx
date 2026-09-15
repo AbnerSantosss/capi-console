@@ -1,7 +1,7 @@
 import { InstalacaoPage } from '@/components/instalacao/InstalacaoPage';
 import { ErroConfiguracaoIndisponivel, lerIntegracoes } from '@/lib/config-store';
 import { empresaDaPagina } from '@/lib/empresa-ativa';
-import { Plug } from 'lucide-react';
+import { Plug } from '@/components/ui/icones';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';

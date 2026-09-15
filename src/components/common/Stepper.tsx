@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useEventStore } from '@/stores/useEventStore';
-import { Check, AlertCircle } from 'lucide-react';
+import { Check, AlertCircle } from '@/components/ui/icones';
 import { cn } from '@/lib/utils';
 
 /**

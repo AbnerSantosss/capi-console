@@ -12,7 +12,7 @@ import {
   ShieldAlert,
   Trash2,
   Zap,
-} from 'lucide-react';
+} from '@/components/ui/icones';
 
 import type { MarcaPublica } from '@/stores/useBrandStore';
 import { Badge } from '@/components/ui/badge';
