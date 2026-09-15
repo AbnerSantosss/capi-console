@@ -69,7 +69,7 @@ export function ConsoleBackground() {
         <video
           ref={iniciarLaco}
           className={styles.fundoVideoDesktop}
-          src="/brand/fundo/console-desktop.mp4"
+          data-fonte="/brand/fundo/console-desktop.mp4"
           autoPlay
           loop
           muted
@@ -79,7 +79,7 @@ export function ConsoleBackground() {
         <video
           ref={iniciarLaco}
           className={styles.fundoVideoMobile}
-          src="/brand/fundo/console-mobile.mp4"
+          data-fonte="/brand/fundo/console-mobile.mp4"
           autoPlay
           loop
           muted
@@ -106,9 +106,18 @@ export function ConsoleBackground() {
  * plano no momento da montagem, e nao volta atras sozinho quando ela aparece.
  * Um `play()` explicito resolve e nao custa nada: e uma chamada por montagem.
  *
- * O `display: none` e testado aqui, e nao no CSS, porque e o que impede o
- * telefone de baixar a peca de desktop e o desktop de baixar a do telefone —
- * e tambem o que respeita `prefers-reduced-motion`, que esconde as duas.
+ * O `src` NAO vem no JSX: vem de `data-fonte`, e so a peca visivel recebe o
+ * seu. Com `src` cravado nas duas, o telefone baixava a peca de desktop
+ * inteira — 1.955.792 bytes numa carga fria medida no ar, com
+ * `preload="metadata"` e `display: none` valendo os dois. Esconder no CSS nao
+ * impede o navegador de buscar; nao ter endereco impede. Sob
+ * `prefers-reduced-motion` as duas ficam escondidas e nao se baixa nada: o
+ * fundo vira a imagem parada que o CSS poe no lugar.
+ *
+ * O preco e a janela redimensionada atravessando os 48rem: o `ref` roda na
+ * montagem, entao a peca que aparece depois fica sem endereco ate recarregar.
+ * Num telefone isso nao acontece, e num desktop o que sobra e o fundo escuro
+ * com o grao — o estado de repouso do desenho, nao um defeito visivel.
  *
  * A promessa e engolida de proposito: se a politica de autoplay recusar, o
  * lugar certo de falhar e em silencio, com o fundo escuro que ja estava la.
@@ -117,6 +126,8 @@ export function ConsoleBackground() {
 function iniciarLaco(el: HTMLVideoElement | null) {
   if (!el) return;
   if (getComputedStyle(el).display === 'none') return;
+  const fonte = el.dataset.fonte;
+  if (fonte && !el.getAttribute('src')) el.setAttribute('src', fonte);
   el.muted = true;
   void el.play().catch(() => {});
 }
