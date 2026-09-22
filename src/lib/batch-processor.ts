@@ -7,6 +7,7 @@ import { calcularEmq, type ResultadoEmq } from './emq';
 import { extrairAtribuicao, registrarDisparo, type Atribuicao } from './attribution-log';
 import { acharMarca } from './config-store';
 import { jaEnviado, marcarEnviado } from './dedup';
+import { normalizarTelefone } from './telefone';
 
 export interface WebhookDeliveryRaw {
   id?: string | number;
@@ -179,8 +180,15 @@ export function montarFilaDisparo(entregas: WebhookDeliveryRaw[]): ResumoFila {
         action_source: 'website',
         user: {
           email: fieldsMerged.email,
-          phone: fieldsMerged.phone,
-          addDDI: true,
+          // Pais automatico (telefone.ts), ja em E.164: por isso sem addDDI,
+          // que colaria 55 em numero uruguaio de 10/11 digitos.
+          phone: fieldsMerged.phone
+            ? normalizarTelefone(String(fieldsMerged.phone), {
+                url: fieldsMerged.sourceUrl ? String(fieldsMerged.sourceUrl) : undefined,
+                moeda: fieldsMerged.currency ? String(fieldsMerged.currency) : undefined,
+              })
+            : undefined,
+          addDDI: false,
           firstName: fieldsMerged.firstName,
           lastName: fieldsMerged.lastName,
           externalId: fieldsMerged.externalId,

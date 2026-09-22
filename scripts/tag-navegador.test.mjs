@@ -39,6 +39,12 @@
  *     cliente A: os PageView de A cairiam no pixel de B e a campanha de B
  *     otimizaria para um publico que nunca viu a oferta dela.
  *
+ *  9. O FIO DE VERDADE — o script manda `v`, `c`, `x` e `d` aninhados, e o
+ *     coletor lia tudo plano: ate 22/09/2026 todo hit real chegava sem fbc, sem
+ *     fbp, sem visitId e sem fbclid, e a juncao do item 5 nunca aconteceu fora
+ *     do teste. Aqui o hit sai do PROPRIO script gerado, rodando num navegador
+ *     de mentira, e entra no coletor do jeito que chegaria da internet.
+ *
  * Roda num diretorio temporario (nunca toca os logs reais) e sem rede.
  *
  * Uso: npm run test:tag
@@ -46,6 +52,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import { registerHooks } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -88,7 +95,9 @@ const { origemPermitida } = await import(
 const { EVENTOS_TAG, EVENTOS_TAG_PROIBIDOS, eventoTagPermitido, regrasSementeTag } = await import(
   new URL('../src/lib/tag-eventos.ts', import.meta.url).href
 );
-const { gerarScriptTag } = await import(new URL('../src/lib/tag-script.ts', import.meta.url).href);
+const { gerarScriptTag, gerarTagGtm, gerarTagSite } = await import(
+  new URL('../src/lib/tag-script.ts', import.meta.url).href
+);
 const { guardarPerfil, enriquecer, _limparCache } = await import(
   new URL('../src/lib/perfil-atribuicao.ts', import.meta.url).href
 );
@@ -393,6 +402,147 @@ try {
 }
 ok(recusou, 'gerarScriptTag recusa gerar uma tag de Purchase');
 
+/* ---------------- 7b. O script rodando num navegador de mentira ---------------- */
+
+// Compilar nao basta: o bug de 22/09/2026 era um script VALIDO mandando o corpo
+// num formato que o coletor nao lia. Aqui o script roda de verdade e o que ele
+// despacharia fica guardado — o bloco 10 entrega esses corpos ao coletor.
+
+const miolo = (html) => html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
+
+const quebradosEmbalados = [];
+for (const e of EVENTOS_TAG) {
+  const o = { endpoint: ENDPOINT, chave: CHAVE, evento: e };
+  for (const [onde, html] of [['gtm', gerarTagGtm(o)], ['site', gerarTagSite(o)]]) {
+    try {
+      new Function(miolo(html));
+    } catch (err) {
+      quebradosEmbalados.push(`${onde} ${e.origem}: ${String(err?.message ?? err)}`);
+    }
+  }
+}
+ok(
+  quebradosEmbalados.length === 0,
+  'a versao GTM e a versao site de todos os eventos compilam',
+  quebradosEmbalados.join(' | ')
+);
+
+function navegadorDeMentira(href, cookies = '') {
+  const u = new URL(href);
+  const enviados = [];
+  const armazem = () => {
+    const m = new Map();
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => void m.set(k, String(v)),
+      removeItem: (k) => void m.delete(k),
+    };
+  };
+  const pote = new Map();
+  const document = {
+    referrer: 'https://l.facebook.com/',
+    readyState: 'complete',
+    get cookie() {
+      return [...pote].map(([k, v]) => `${k}=${v}`).join('; ');
+    },
+    set cookie(txt) {
+      const par = String(txt).split(';')[0];
+      const i = par.indexOf('=');
+      pote.set(par.slice(0, i).trim(), par.slice(i + 1));
+    },
+    addEventListener() {},
+    getElementsByTagName: () => [],
+  };
+  for (const c of cookies.split(';').filter(Boolean)) document.cookie = c;
+  const janela = {
+    location: {
+      href,
+      hostname: u.hostname,
+      host: u.host,
+      protocol: u.protocol,
+      pathname: u.pathname,
+      search: u.search,
+    },
+    document,
+    navigator: {
+      sendBeacon: (_url, blob) => {
+        enviados.push(JSON.parse(blob.texto));
+        return true;
+      },
+    },
+    localStorage: armazem(),
+    sessionStorage: armazem(),
+    crypto: globalThis.crypto,
+    Blob: function Blob(partes) {
+      this.texto = partes.join('');
+    },
+    URL,
+    setTimeout: () => 0,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  janela.window = janela;
+  vm.createContext(janela);
+  return { janela, enviados, rodar: (codigo) => vm.runInContext(codigo, janela) };
+}
+
+const FBP_DO_SITE = 'fb.1.1788449825431.1234567890';
+const nav = navegadorDeMentira(
+  'https://gtech.uy/contacto?fbclid=IwAR0teste123&utm_source=facebook',
+  `_fbp=${FBP_DO_SITE}`
+);
+nav.rodar(
+  miolo(gerarTagGtm({ endpoint: ENDPOINT, chave: CHAVE, evento: eventoTagPermitido('tag.lead') }))
+);
+ok(nav.janela.cvtag?.versao === 2, 'o nucleo da tag e a versao 2', String(nav.janela.cvtag?.versao));
+
+const colado = nav.enviados[0];
+ok(nav.enviados.length === 1, 'a tag de Lead do GTM, colada sem mexer em nada, manda um hit');
+ok(colado && !('d' in colado), "com os '' intocados o Lead sai sem bloco d, e nao com d vazio");
+ok(
+  colado?.i === nav.janela.cvtag.eventId('tag.lead'),
+  'e com o event_id nosso, o mesmo que window.cvtag.eventId devolve ao Pixel'
+);
+ok(colado?.c?.fbp === FBP_DO_SITE, 'o fbp vem do cookie do Pixel, em c.fbp', String(colado?.c?.fbp));
+ok(
+  /^fb\.1\.\d+\.IwAR0teste123$/.test(String(colado?.c?.fbc)),
+  'o fbc nasce do fbclid da URL, em c.fbc',
+  String(colado?.c?.fbc)
+);
+ok(colado?.x?.fbclid === 'IwAR0teste123', 'o fbclid vai em x.fbclid');
+ok(Boolean(colado?.v), 'o visit id vai em v');
+
+// Janela 0 fura a deduplicacao da sessao: e o mesmo visitante mandando outro Lead.
+nav.rodar(
+  "window.cvtag.enviar('tag.lead', 0, { email: '  Cliente@Exemplo.com ', " +
+    "telefone: '099 123 456', nome: 'María José Pérez', eventId: 'pixel-lead-0001' });"
+);
+const comDados = nav.enviados[1];
+ok(comDados?.i === 'pixel-lead-0001', 'o event_id do Pixel passado de fora ganha do nosso');
+ok(
+  comDados?.d?.em === 'Cliente@Exemplo.com' &&
+    comDados?.d?.ph === '099 123 456' &&
+    comDados?.d?.nome === 'María José Pérez',
+  'e-mail, telefone e nome vao em d do jeito que foram digitados (so aparados)',
+  JSON.stringify(comDados?.d)
+);
+
+// Variavel do GTM vazia chega como undefined, null ou o TEXTO "undefined"; a que
+// nao resolveu chega com as chaves. Nenhuma pode virar dado do visitante.
+nav.rodar(
+  "window.cvtag.enviar('tag.lead', 0, { email: 'undefined', telefone: undefined, " +
+    "nome: null, eventId: 'undefined' });" +
+    "window.cvtag.enviar('tag.lead', 0, { email: '{{Email do formulario}}' });"
+);
+const [vazio, naoResolvido] = nav.enviados.slice(2);
+ok(vazio && !('d' in vazio), 'variavel vazia do GTM nao vira bloco d');
+ok(
+  Boolean(vazio?.i) && vazio.i !== 'undefined',
+  'e o event_id "undefined" cai no nosso',
+  String(vazio?.i)
+);
+ok(naoResolvido && !('d' in naoResolvido), 'variavel do GTM nao resolvida nao vira e-mail');
+
 /* ---------------- 8. Volume em disco do PageView ---------------- */
 
 // PageView e o unico evento de trafego alto que existe aqui: o mesmo visitante
@@ -590,6 +740,77 @@ ok(deB.status !== 403, 'a mesma chave de B coleta numa origem que a empresa B ac
 // a outra diz "chave existe, mas nao neste dominio".
 const semDono = await processarTag(hitDe('https://' + HOST_A, 'cvt_chaveQueNinguemCadastrou', 'v3'));
 ok(semDono.status === 401, 'chave de tag sem dono -> 401, nao 403', String(semDono.status));
+
+
+/* ---------------- 10. O hit do script atravessa o coletor ---------------- */
+
+// O corpo do bloco 7b, do jeito que o navegador mandaria, so com a chave trocada
+// pela da empresa B. Lead em 'fila' (e nunca 'auto': este teste nao tem rede e
+// nao pode ter caminho nenhum ate a Meta).
+await cfgStore.atualizarIntegracoes((b) => {
+  for (const r of b.regras) if (r.eventoOrigem === 'tag.lead') r.modo = 'fila';
+}, 'emp_b');
+const { listarEntradas, mascararEmail } = await import(new URL('../src/lib/inbox.ts', import.meta.url).href);
+
+const doNavegador = (corpo, pais) =>
+  new Request(BASE + '/api/tag/coletar', {
+    method: 'POST',
+    headers: {
+      origin: 'http://localhost:3333',
+      // O que o sendBeacon manda de verdade: text/plain, para nao ter OPTIONS.
+      'content-type': 'text/plain;charset=UTF-8',
+      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X)',
+      'x-forwarded-for': '190.64.10.20',
+      ...(pais ? { 'cf-ipcountry': pais } : {}),
+    },
+    body: JSON.stringify({ ...corpo, k: cfgB.tag.chave }),
+  });
+
+const respostaLead = await processarTag(doNavegador(comDados, 'UY'));
+ok(respostaLead.status === 202, 'o Lead do script entra no coletor', String(respostaLead.status));
+
+const itemLead = (await listarEntradas(50, 'emp_b')).find((i) => i.eventoOrigem === 'tag.lead');
+ok(Boolean(itemLead), 'e vira item na caixa de entrada da empresa B');
+ok(
+  itemLead?.temFbc && itemLead?.temFbp && itemLead?.temFbclid,
+  '🔴 fbc, fbp e fbclid dos blocos c e x CHEGAM (antes de 22/09 se perdiam todos)'
+);
+ok(itemLead?.nomeCliente === 'María José Pérez', 'o nome do formulario aparece no item');
+ok(
+  itemLead?.emailMascarado === mascararEmail('cliente@exemplo.com'),
+  'e o e-mail so aparece mascarado',
+  String(itemLead?.emailMascarado)
+);
+ok(
+  !JSON.stringify(itemLead?.payload ?? {}).includes(cfgB.tag.chave),
+  'a chave publica da tag nao fica guardada no item'
+);
+
+// O disparo manual e o "Carregar no formulario" relem o payload guardado pelo
+// parser do webhook. Payload no formato da tag voltaria de la vazio.
+const relido = itemLead ? parseWebhook(JSON.stringify(itemLead.payload)).fields : {};
+ok(relido.email === 'cliente@exemplo.com', 'relido pelo parser: e-mail em minusculas', String(relido.email));
+ok(
+  relido.phone === '59899123456',
+  'relido pelo parser: o celular uruguaio digitado sem DDI ganhou o 598 pelo pais do visitante',
+  String(relido.phone)
+);
+ok(String(relido.firstName).toLowerCase() === 'maría', 'relido pelo parser: primeiro nome', String(relido.firstName));
+ok(
+  relido.fbc === comDados.c.fbc && relido.fbp === comDados.c.fbp,
+  'relido pelo parser: fbc e fbp da visita'
+);
+ok(relido.visitId === comDados.v, 'relido pelo parser: visit id', String(relido.visitId));
+ok(relido.eventId === 'pixel-lead-0001', 'relido pelo parser: o event_id do Pixel', String(relido.eventId));
+
+// O motivo de o Lead levar e-mail e telefone: a venda que chegar pelo webhook,
+// sem visit id nenhum, acha a visita por eles.
+const porEmail = await enriquecer({ email: 'cliente@exemplo.com' }, 'emp_b');
+ok(porEmail.campos.fbc === comDados.c.fbc, 'a venda com o mesmo e-mail herda o fbc do Lead');
+const porTelefone = await enriquecer({ phone: '59899123456' }, 'emp_b');
+ok(porTelefone.campos.fbc === comDados.c.fbc, 'e a venda com o mesmo telefone tambem');
+const deOutraEmpresa = await enriquecer({ email: 'cliente@exemplo.com' });
+ok(!deOutraEmpresa.campos.fbc, 'mas o perfil do Lead de B nao vaza para a empresa padrao');
 
 
 process.chdir(raiz);

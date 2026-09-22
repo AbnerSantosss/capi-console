@@ -10,11 +10,12 @@ import {
 import { acharEmpresaPorChaveTag, listarEmpresas } from '@/lib/empresas';
 import { origemPermitida, type DominioTag } from '@/lib/tag-dominios';
 import { eventoTagPermitido } from '@/lib/tag-eventos';
-import { registrarEntrada } from '@/lib/inbox';
+import { registrarEntrada, mascararEmail } from '@/lib/inbox';
 import { calcularEmq } from '@/lib/emq';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { resolverModoPorMarca } from '@/lib/modo-por-marca';
+import { normalizarTelefone } from '@/lib/telefone';
 
 /**
  * Coletor da tag de navegador — o unico endpoint PUBLICO deste console.
@@ -38,8 +39,22 @@ import { resolverModoPorMarca } from '@/lib/modo-por-marca';
  * curtas de proposito: o hit sai por `navigator.sendBeacon`, que tem teto de
  * corpo apertado e nao pode falhar em conexao ruim de celular.
  *
- *   { k: chave publica, e: 'tag.pageview', i: event_id, u: URL da pagina,
- *     vi: visitId, r: referrer, fbc, fbp, fbclid, gclid, ttclid, msclkid }
+ *   { k: chave publica, e: 'tag.pageview', i: event_id, v: visitId,
+ *     u: URL da pagina, r: referrer, t: hora do hit (ms),
+ *     c: { fbc, fbp },
+ *     x: { fbclid, gclid, ttclid, msclkid, utm_source, ... },
+ *     d: { em: e-mail, ph: telefone, fn: nome, ln: sobrenome, nome: completo } }
+ *
+ * `d` so vem em evento de formulario (Lead), quando a tag do GTM passa as
+ * variaveis do formulario. O telefone chega como o visitante digitou e sai
+ * daqui em E.164, com o pais descoberto por `normalizarTelefone`.
+ *
+ * 🔴 Ate 22/09/2026 este handler lia `vi`, `fbc` e `fbclid` SOLTOS na raiz,
+ * mas o script gerado sempre mandou `v`, `c.fbc` e `x.fbclid`: todo hit real
+ * chegava sem fbc, fbp, visitId e click id, e ninguem viu porque o teste
+ * montava o corpo no formato do handler, nao no do script. Por isso o formato
+ * plano continua aceito (tag antiga escrita a mao) E o teste agora usa o corpo
+ * que `gerarScriptTag` de fato produz.
  *
  * Os nomes longos (`chave`, `evento`, `eventId`, `sourceUrl`, `visitId`,
  * `referrer`) tambem sao aceitos: uma tag escrita a mao por um cliente nao pode
@@ -378,6 +393,86 @@ function sePreenchido(alvo: Record<string, string>, chave: string, valor: string
   if (valor) alvo[chave] = valor;
 }
 
+/** Sub-objeto do hit (`c`, `x`, `d`); vazio quando nao veio ou nao e objeto. */
+function bloco(corpo: Record<string, unknown>, chave: string): Record<string, unknown> {
+  const v = corpo[chave];
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RE_SHA256 = /^[a-f0-9]{64}$/;
+
+/**
+ * E-mail do formulario, ou '' quando o valor nao parece e-mail. O campo vem de
+ * uma variavel do GTM: "undefined", o texto de um placeholder ou um nome no
+ * lugar errado virariam uma chave de perfil que casa com ninguem — ou pior,
+ * com alguem. Hash SHA-256 passa, porque ha site que ja hasheia no navegador.
+ */
+function emailDoHit(valor: string): string {
+  const s = valor.trim().toLowerCase().slice(0, 254);
+  return RE_EMAIL.test(s) || RE_SHA256.test(s) ? s : '';
+}
+
+/**
+ * O payload guardado no item, no MESMO formato que `parseWebhook` le.
+ *
+ * Nao e cosmetica: "Disparar agora" e "Carregar no formulario" releem o item
+ * pelo `parseWebhook`. Guardado com as chaves curtas do fio (`v`, `c`, `x`),
+ * o parser nao achava nada — o disparo manual de um Lead da tag saia sem
+ * fbc, sem fbp, sem IP, sem user-agent e sem o e-mail do formulario.
+ *
+ * O hit original vai junto em `tag`, sem a chave (publica, mas so atrapalha
+ * quem le a tela) e sem `d` (o dado pessoal ja esta em `lead`; duas copias
+ * de e-mail em texto claro no jsonl e uma a mais do que precisa).
+ */
+function payloadNoVocabularioDoParser(
+  corpo: Record<string, unknown>,
+  eventoOrigem: string,
+  campos: Record<string, string>,
+  ids: Record<string, unknown>
+): Record<string, unknown> {
+  const bruto: Record<string, unknown> = { ...corpo };
+  delete bruto.k;
+  delete bruto.chave;
+  delete bruto.d;
+
+  const lead: Record<string, string> = {};
+  sePreenchido(lead, 'email', campos.email ?? '');
+  sePreenchido(lead, 'phone', campos.phone ?? '');
+  sePreenchido(lead, 'name', [campos.firstName, campos.lastName].filter(Boolean).join(' '));
+
+  const cookiesGuardados: Record<string, string> = {};
+  for (const k of ['fbc', 'fbp', 'fbclid', 'gclid', 'ttclid', 'msclkid']) {
+    sePreenchido(cookiesGuardados, k, campos[k] ?? '');
+  }
+
+  // utm_source -> source: e o formato de `attribution.utm` no parser.
+  const utm: Record<string, string> = {};
+  for (const [k, v] of Object.entries(ids)) {
+    if (k.startsWith('utm_') && typeof v === 'string' && v.trim()) utm[k.slice(4)] = v.trim();
+  }
+
+  const attribution: Record<string, unknown> = { cookies: cookiesGuardados };
+  if (Object.keys(utm).length) attribution.utm = utm;
+  if (campos.sourceUrl) attribution.eventSourceUrl = campos.sourceUrl;
+  if (campos.referrer) attribution.referrer = campos.referrer;
+  if (campos.userAgent) attribution.userAgent = campos.userAgent;
+  if (campos.ip) attribution.ipAddress = campos.ip;
+
+  const payload: Record<string, unknown> = {
+    event: eventoOrigem,
+    // Hora do hit: o disparo manual horas depois tem de mandar o event_time de
+    // quando o visitante preencheu, nao o de quando o operador clicou.
+    occurredAt: new Date().toISOString(),
+    attribution,
+    tag: bruto,
+  };
+  if (campos.eventId) payload.eventId = campos.eventId;
+  if (Object.keys(lead).length) payload.lead = lead;
+  if (campos.visitId) payload.tracking = { visitId: campos.visitId };
+  return payload;
+}
+
 /* ------------------------------------------------------------------ */
 /* Handler                                                             */
 /* ------------------------------------------------------------------ */
@@ -471,21 +566,59 @@ export async function processarTag(
   // 7. Campos no MESMO vocabulario do parser, para o resto do sistema (perfil,
   // enriquecimento, disparo, EMQ, log de atribuicao) nao precisar saber que
   // este evento veio da tag e nao do webhook.
+  //
+  // O script manda os cookies em `c` e os click ids em `x`; o formato plano
+  // (tudo na raiz) vem de tag antiga escrita a mao. Os dois valem, aninhado
+  // primeiro — ver o CONTRATO DE FIO no topo.
+  const cookies = bloco(corpo, 'c');
+  const ids = bloco(corpo, 'x');
+  const dados = bloco(corpo, 'd');
   const campos: Record<string, string> = {};
-  sePreenchido(campos, 'visitId', texto(corpo, 'vi', 'visitId'));
-  sePreenchido(campos, 'fbc', texto(corpo, 'fbc'));
-  sePreenchido(campos, 'fbp', texto(corpo, 'fbp'));
+  sePreenchido(campos, 'visitId', texto(corpo, 'v', 'vi', 'visitId'));
+  sePreenchido(campos, 'fbc', texto(cookies, 'fbc') || texto(corpo, 'fbc'));
+  sePreenchido(campos, 'fbp', texto(cookies, 'fbp') || texto(corpo, 'fbp'));
   sePreenchido(campos, 'sourceUrl', texto(corpo, 'u', 'sourceUrl', 'url'));
   sePreenchido(campos, 'referrer', texto(corpo, 'r', 'referrer'));
-  sePreenchido(campos, 'fbclid', texto(corpo, 'fbclid'));
-  sePreenchido(campos, 'gclid', texto(corpo, 'gclid'));
-  sePreenchido(campos, 'ttclid', texto(corpo, 'ttclid'));
-  sePreenchido(campos, 'msclkid', texto(corpo, 'msclkid'));
+  for (const id of ['fbclid', 'gclid', 'ttclid', 'msclkid']) {
+    sePreenchido(campos, id, texto(ids, id) || texto(corpo, id));
+  }
   sePreenchido(campos, 'eventId', texto(corpo, 'i', 'eventId'));
   // IP e user-agent SEMPRE do cabecalho, nunca do corpo: vindos do corpo sao
   // escolha do visitante, e um par ip/ua forjado suja o geo do pixel.
   sePreenchido(campos, 'ip', ipDoVisitante(request));
   sePreenchido(campos, 'userAgent', request.headers.get('user-agent') ?? '');
+
+  // 7b. Dados do formulario (so Lead e cadastro trazem `d`). E-mail e telefone
+  // viram chave de perfil (passo 8): a compra que chegar pelo webhook com o
+  // mesmo e-mail herda o fbc desta visita, mesmo sem o visitId ter viajado ate
+  // o checkout.
+  //
+  // O telefone sai em E.164 ja aqui, enquanto ainda ha o sinal mais forte do
+  // pais: o CF-IPCountry que a Cloudflare poe na requisicao do visitante. No
+  // disparo esse cabecalho nao existe mais.
+  sePreenchido(campos, 'email', emailDoHit(texto(dados, 'em', 'email')));
+  const telefoneCru = texto(dados, 'ph', 'telefone', 'phone', 'whatsapp').slice(0, 40);
+  if (telefoneCru) {
+    sePreenchido(
+      campos,
+      'phone',
+      normalizarTelefone(telefoneCru, {
+        ddi: texto(dados, 'ddi'),
+        paisVisitante: request.headers.get('cf-ipcountry') ?? '',
+        url: campos.sourceUrl,
+      })
+    );
+  }
+  let primeiroNome = texto(dados, 'fn', 'firstName').slice(0, 100);
+  let sobrenome = texto(dados, 'ln', 'lastName').slice(0, 100);
+  const nomeCompleto = texto(dados, 'nome', 'name').slice(0, 200);
+  if (nomeCompleto && !primeiroNome) {
+    const partes = nomeCompleto.split(/\s+/);
+    primeiroNome = partes[0];
+    if (!sobrenome && partes.length > 1) sobrenome = partes.slice(1).join(' ');
+  }
+  sePreenchido(campos, 'firstName', primeiroNome);
+  sePreenchido(campos, 'lastName', sobrenome);
 
   // 8. O coracao do recurso. Grava a atribuicao ANTES de qualquer decisao sobre
   // disparo: mesmo com a regra em 'ignorar', o fbc capturado agora vai
@@ -526,6 +659,10 @@ export async function processarTag(
   // aparecer na tela, no SSE, no relay e no log de atribuicao sem uma linha de
   // codigo nova em nenhum deles.
   const emq = calcularEmq({
+    email: campos.email,
+    phone: campos.phone,
+    firstName: campos.firstName,
+    lastName: campos.lastName,
     fbc: campos.fbc,
     fbp: campos.fbp,
     ip: campos.ip,
@@ -534,11 +671,7 @@ export async function processarTag(
     eventId: campos.eventId,
   });
 
-  // A chave sai do payload guardado: e publica, mas nao ha motivo para ela ficar
-  // no jsonl e no SSE, onde so atrapalha quem le a tela.
-  const payload: Record<string, unknown> = { ...corpo };
-  delete payload.k;
-  delete payload.chave;
+  const payload = payloadNoVocabularioDoParser(corpo, eventoOrigem, campos, ids);
 
   // A TRAVA DO PIXEL (FASE 6, alteracao 9.B). Mesma decisao do webhook, mesma
   // funcao: a tag do site e o segundo caminho que chega em dispararItem(), e
@@ -563,13 +696,17 @@ export async function processarTag(
     classificacao: 'mapeado',
     temFbc: Boolean(campos.fbc),
     temFbp: Boolean(campos.fbp),
-    // A tag do site mede VISITA, nao venda: nao ha nome de comprador para
-    // guardar aqui, e por isso `nomeCliente` fica ausente de proposito. O que
-    // ha e a atribuicao de clique, que e justamente o motivo de a tag existir —
-    // e o fbclid capturado na pagina de vendas que salva o Purchase do PIX,
-    // que chega depois, fora do navegador, sem atribuicao nenhuma.
+    // A tag do site mede VISITA, nao venda: nome e e-mail so existem quando a
+    // tag de formulario (Lead) os passou em `d`. No resto dos hits o que ha e a
+    // atribuicao de clique, que e justamente o motivo de a tag existir — e o
+    // fbclid capturado na pagina de vendas que salva o Purchase do PIX, que
+    // chega depois, fora do navegador, sem atribuicao nenhuma.
+    nomeCliente: [campos.firstName, campos.lastName].filter(Boolean).join(' ') || undefined,
+    emailMascarado: campos.email?.includes('@') ? mascararEmail(campos.email) : undefined,
     temFbclid: Boolean(campos.fbclid),
     temGclid: Boolean(campos.gclid),
+    temTtclid: Boolean(campos.ttclid),
+    temMsclkid: Boolean(campos.msclkid),
     emq: emq.nota,
     payload,
   });

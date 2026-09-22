@@ -11,6 +11,7 @@ import { marcarStatus, anotarResultado, type ItemInbox } from './inbox';
 import { ehTesteInterno } from './parser';
 import { avaliarTeste } from './deteccao-de-teste';
 import { pixelAceitaAuto } from './modo-por-marca';
+import { normalizarTelefone } from './telefone';
 
 /**
  * Disparo de um item da caixa de entrada para um ou mais pixels.
@@ -200,6 +201,14 @@ export async function dispararItem(params: {
   const { campos, herdados } = await enriquecer(params.campos, empresaDoItem);
   const t = (k: string) => (typeof campos[k] === 'string' ? (campos[k] as string) : undefined);
 
+  // Telefone com o pais descoberto pelo proprio numero e pelos sinais do
+  // evento (dominio da pagina, moeda). Sai em E.164 e por isso vai com
+  // `addDDI: false`: a regra antiga de meta-capi colava 55 em qualquer numero
+  // de 10/11 digitos, inclusive no uruguaio. Ver telefone.ts.
+  const telefone = t('phone')
+    ? normalizarTelefone(t('phone') as string, { url: t('sourceUrl'), moeda: t('currency') })
+    : undefined;
+
   const eventInput: EventInput = {
     event_name: eventoMeta,
     event_time: paraUnix(t('eventTime')),
@@ -208,8 +217,8 @@ export async function dispararItem(params: {
     action_source: 'website',
     user: {
       email: t('email'),
-      phone: t('phone'),
-      addDDI: true,
+      phone: telefone,
+      addDDI: false,
       firstName: t('firstName'),
       lastName: t('lastName'),
       externalId: t('externalId'),

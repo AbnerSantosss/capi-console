@@ -1,11 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { montarEvento, validar, enviarParaMeta } from '@/lib/meta-capi';
+import { montarEvento, validar, enviarParaMeta, type EventInput } from '@/lib/meta-capi';
 import { extrairAtribuicao, registrarDisparo } from '@/lib/attribution-log';
 import { EMPRESA_DEFAULT_ID, acharMarca, empresaDaMarca } from '@/lib/config-store';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { jaEnviado, marcarEnviado } from '@/lib/dedup';
 import { exigirSessao } from '@/lib/sessao';
+import { normalizarTelefone } from '@/lib/telefone';
+
+/**
+ * Com a caixa "DDI automatico" ligada (o padrao), o telefone sai em E.164 com
+ * o pais descoberto pelo proprio numero, pela URL e pela moeda do formulario —
+ * e o `addDDI` desliga, porque a regra antiga de meta-capi colaria 55 num
+ * numero uruguaio. Com a caixa desligada o numero vai como o operador digitou.
+ */
+function comTelefoneNormalizado(ev: EventInput): EventInput {
+  const u = ev.user;
+  if (!u?.phone || u.addDDI === false) return ev;
+  const phone = normalizarTelefone(u.phone, {
+    url: ev.event_source_url,
+    moeda: ev.custom?.currency,
+  });
+  return { ...ev, user: { ...u, phone, addDDI: false } };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const evento = montarEvento(body.event || {});
+    const evento = montarEvento(comTelefoneNormalizado(body.event || {}));
     const erros = validar(evento);
     if (erros.length) {
       return NextResponse.json({ erros, eventoMontado: evento }, { status: 400 });

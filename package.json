@@ -23,7 +23,8 @@
     "test:inbox-carga": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/inbox-carga.test.mjs",
     "test:empresas": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/empresas.test.mjs",
     "test:deteccao-teste": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/deteccao-de-teste.test.mjs",
-    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel && npm run test:inbox-sinais && npm run test:inbox-lote && npm run test:inbox-resumo && npm run test:inbox-carga && npm run test:empresas && npm run test:deteccao-teste"
+    "test:telefone": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/_resolver-ts.mjs scripts/telefone.test.mjs",
+    "check": "npm run lint && tsc --noEmit && npm run check:contrast && npm run check:segredos && npm run test:relay && npm run test:parser && npm run test:atribuicao && npm run test:sessao && npm run test:tag && npm run test:persistencia && npm run test:rotas && npm run test:auto-pixel && npm run test:inbox-sinais && npm run test:inbox-lote && npm run test:inbox-resumo && npm run test:inbox-carga && npm run test:empresas && npm run test:deteccao-teste && npm run test:telefone"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -36,6 +37,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "libphonenumber-js": "1.13.13",
     "motion": "^13.2.0",
     "next": "16.3.4",
     "puppeteer-core": "^25.10.0",

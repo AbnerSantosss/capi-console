@@ -58,7 +58,7 @@ export function CustomerSection() {
           helper={
             <span className="inline-flex items-center gap-1.5">
               <WhatsAppMark size={13} />
-              Só números. O DDI 55 entra automaticamente.
+              Com DDD. De fora do Brasil, com o DDI (+598…). O país sai do próprio número.
             </span>
           }
           error={erros.phone}
@@ -68,7 +68,7 @@ export function CustomerSection() {
                 checked={s.addDDI}
                 onCheckedChange={(v) => setField('addDDI', Boolean(v))}
               />
-              +55
+              DDI automático
             </label>
           }
         >

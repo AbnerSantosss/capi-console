@@ -38,7 +38,18 @@ import { NOME_PRODUTO } from './produto';
  * numero — senao uma pagina com a tag antiga em cache continuaria mandando no
  * formato velho e o operador nunca saberia.
  */
-const VERSAO_NUCLEO = 1;
+const VERSAO_NUCLEO = 2;
+
+/**
+ * Eventos de formulario: so eles ganham, na tag do GTM e nas instrucoes do
+ * site, o terceiro argumento de `enviar` com e-mail, telefone e nome. Num
+ * PageView esse bloco seria convite para colar variavel de formulario numa
+ * pagina que nao tem formulario.
+ */
+const COM_DADOS_DE_FORMULARIO: ReadonlySet<string> = new Set([
+  'tag.lead',
+  'tag.completeregistration',
+]);
 
 /** Unico objeto global que o script cria na pagina do cliente. */
 const GLOBAL = 'cvtag';
@@ -229,6 +240,10 @@ function cabecalho(o: OpcoesTag, evento: EventoTag): string {
     '',
     `  fbq('track', '${evento.evento}', {}, ` +
       `{ eventID: window.${GLOBAL}.eventId('${evento.origem}') });`,
+    '',
+    'Pixel instalado por modelo do GTM, que gera o próprio event_id: faça o',
+    'caminho inverso e passe o id DELE para cá, no terceiro argumento —',
+    `  window.${GLOBAL}.enviar('${evento.origem}', janela, { eventId: ID_DO_PIXEL });`,
     '',
     'Gerado pelo console. Não edite à mão: a próxima geração sobrescreve.',
   ];
@@ -636,14 +651,51 @@ ${disparo}
       }
     }
 
-    function enviar(origem, janela) {
+    // Dados do formulário (Lead): e-mail, telefone e nome, do jeito que o
+    // visitante digitou. Quem normaliza é o servidor — o telefone, por
+    // exemplo, precisa do país do visitante, e só o servidor sabe qual é.
+    // Aceita os nomes curtos da Meta e os legíveis.
+    var CAMPOS_DO_FORMULARIO = {
+      em: ['em', 'email'],
+      ph: ['ph', 'telefone', 'phone', 'whatsapp'],
+      fn: ['fn', 'firstName'],
+      ln: ['ln', 'lastName'],
+      nome: ['nome', 'name']
+    };
+
+    function dadosDoFormulario(dados) {
+      if (!dados || typeof dados !== 'object') return null;
+      var d = {};
+      var achou = false;
+      for (var campo in CAMPOS_DO_FORMULARIO) {
+        if (!Object.prototype.hasOwnProperty.call(CAMPOS_DO_FORMULARIO, campo)) continue;
+        var nomes = CAMPOS_DO_FORMULARIO[campo];
+        for (var i = 0; i < nomes.length; i++) {
+          var v = limpo(dados[nomes[i]]);
+          // Variável do GTM vazia costuma chegar como o TEXTO "undefined".
+          if (v && v !== 'undefined' && v !== 'null') {
+            d[campo] = v.slice(0, 200);
+            achou = true;
+            break;
+          }
+        }
+      }
+      return achou ? d : null;
+    }
+
+    function enviar(origem, janela, dados) {
       try {
         origem = String(origem || '');
         if (origem.indexOf('tag.') !== 0) return false;
         janela = typeof janela === 'number' ? janela : ${DEDUP_PADRAO};
         var chaveDedup = 'cv_ev_' + origem + '|' + location.pathname;
         if (jaMandou(chaveDedup, janela)) return false;
-        var id = eventIdDe(origem);
+        // event_id vindo de fora ganha do nosso: é o da tag do Pixel no GTM,
+        // e só com os dois iguais a Meta junta navegador e servidor numa
+        // conversão só.
+        var idDeFora = dados && typeof dados === 'object' ? limpo(dados.eventId) : '';
+        if (idDeFora === 'undefined' || idDeFora === 'null') idDeFora = '';
+        var id = idDeFora || eventIdDe(origem);
         // NÃO mandamos IP nem user-agent: o servidor lê os dois do cabeçalho
         // da requisição. Valor vindo do cliente é forjável, e um IP mentiroso
         // estraga a geolocalização do evento no Gerenciador.
@@ -661,6 +713,8 @@ ${disparo}
           x: estado.ids,
           t: Date.now()
         };
+        var formulario = dadosDoFormulario(dados);
+        if (formulario) corpo.d = formulario;
         despachar(JSON.stringify(corpo));
         marcar(chaveDedup);
         // Evento que pode repetir na mesma página (busca, por exemplo) precisa
@@ -747,11 +801,27 @@ export function gerarTagGtm(o: OpcoesTag): string {
   const janela = DEDUP_MS[evento.origem] ?? DEDUP_PADRAO;
   const modo = MODO[evento.origem] ?? 'manual';
   const acionador = paraComentario(ACIONADOR_GTM[evento.origem] || evento.quando);
+  // Evento de formulario sai com o bloco de dados ja escrito e VAZIO: string
+  // vazia e ignorada pelo nucleo, entao a tag funciona do jeito que foi colada
+  // e o operador so troca cada '' pela variavel do GTM do campo. O nome da
+  // variavel nao da para gerar daqui — cada conteiner chama de um jeito, e uma
+  // variavel inexistente entre chaves faz o GTM recusar salvar a tag.
+  const argumentos = COM_DADOS_DE_FORMULARIO.has(evento.origem)
+    ? `${paraJs(evento.origem)}, ${janela}, {\n` +
+      "    // Troque cada '' pela variável do GTM do campo. Vazio é ignorado.\n" +
+      "    email: '',\n" +
+      "    telefone: '',   // do jeito que o visitante digitou: o país sai sozinho\n" +
+      "    nome: '',\n" +
+      "    // Mesmo event_id da tag do Pixel deste evento, para a Meta não contar\n" +
+      "    // em dobro. Vazio: o nosso, de window.cvtag.eventId().\n" +
+      "    eventId: ''\n" +
+      '  }'
+    : `${paraJs(evento.origem)}, ${janela}`;
   const extra =
     modo === 'manual'
       ? '\n' +
         'try {\n' +
-        `  window.${GLOBAL}.enviar(${paraJs(evento.origem)}, ${janela});\n` +
+        `  window.${GLOBAL}.enviar(${argumentos});\n` +
         '} catch (e) {\n' +
         '  // Vazio de propósito: ver o cabeçalho. A página vem primeiro.\n' +
         '}'
@@ -784,11 +854,30 @@ export function gerarTagSite(o: OpcoesTag): string {
           '     Este evento NÃO dispara sozinho. No momento certo, chame:',
           `       window.${GLOBAL}.enviar('${evento.origem}', ${janela});`,
           '',
-          '     Exemplo, no clique de um botão:',
-          "       document.getElementById('SEU-BOTAO')",
-          "         .addEventListener('click', function () {",
-          `           window.${GLOBAL}.enviar('${evento.origem}', ${janela});`,
-          '         });',
+          ...(COM_DADOS_DE_FORMULARIO.has(evento.origem)
+            ? [
+                '',
+                '     Exemplo, no envio do formulário, levando e-mail, telefone e',
+                '     nome (o telefone vai do jeito que foi digitado — o país do',
+                '     número é descoberto no servidor):',
+                "       document.getElementById('SEU-FORMULARIO')",
+                "         .addEventListener('submit', function (ev) {",
+                '           var f = ev.target;',
+                `           window.${GLOBAL}.enviar('${evento.origem}', ${janela}, {`,
+                '             email: f.email && f.email.value,',
+                '             telefone: f.telefone && f.telefone.value,',
+                '             nome: f.nome && f.nome.value',
+                '           });',
+                '         });',
+              ]
+            : [
+                '',
+                '     Exemplo, no clique de um botão:',
+                "       document.getElementById('SEU-BOTAO')",
+                "         .addEventListener('click', function () {",
+                `           window.${GLOBAL}.enviar('${evento.origem}', ${janela});`,
+                '         });',
+              ]),
         ]
       : [];
   return [
