@@ -95,8 +95,14 @@ export function DialogoLote({
   const marcas = useBrandStore((s) => s.marcas);
   const empresa = useEmpresaStore((s) => s.ativa());
 
+  // F1 (auditoria de 23/09/2026): so vale o que esta na lista mostrada. Id
+  // marcado fora dela (Pixel de outra empresa, ou apagado) nao aparece no
+  // seletor — e o que nao aparece nao pode habilitar o botao nem sumir do
+  // aviso. Quem chama ja manda filtrado; isto e a mesma conta, repetida aqui.
+  const escolhidasVisiveis = marcasEscolhidas.filter((id) => marcas.some((m) => m.id === id));
+
   const escolhidasEmProducao = marcas.filter(
-    (m) => marcasEscolhidas.includes(m.id) && !m.testCode?.trim()
+    (m) => escolhidasVisiveis.includes(m.id) && !m.testCode?.trim()
   );
 
   const porMotivo = ORDEM_MOTIVO.map((motivo) => ({
@@ -104,7 +110,7 @@ export function DialogoLote({
     itens: fora.filter((f) => f.motivo === motivo),
   })).filter((g) => g.itens.length > 0);
 
-  const podeDisparar = ciente && marcasEscolhidas.length > 0 && elegiveis.length > 0;
+  const podeDisparar = ciente && escolhidasVisiveis.length > 0 && elegiveis.length > 0;
 
   return (
     <Dialog
@@ -159,7 +165,7 @@ export function DialogoLote({
         <SeletorDePixel
           modo="varios"
           rotulo="Pixels de destino"
-          valor={marcasEscolhidas}
+          valor={escolhidasVisiveis}
           onChange={onMarcas}
         />
 
@@ -195,12 +201,17 @@ export function DialogoLote({
             {elegiveis.length} evento{elegiveis.length === 1 ? '' : 's'} vão contar como conversão
             de verdade na campanha, e não há como desfazer.
           </Callout>
-        ) : (
+        ) : escolhidasVisiveis.length > 0 ? (
           <Callout tone="info" icon={FlaskConical} title="Todos os Pixels estão em modo de teste">
             Com Código de teste preenchido, os eventos aparecem em Testar Eventos e não contam na
             campanha.
           </Callout>
-        )}
+        ) : marcas.length > 0 ? (
+          // Sem nada marcado, "todos em teste" seria mentira: nao ha nenhum.
+          <Callout tone="info">
+            Nenhum Pixel marcado. Marque pelo menos um Pixel desta empresa para disparar.
+          </Callout>
+        ) : null}
 
         <label className="group/field-label flex cursor-pointer items-start gap-2.5 rounded-control border border-line-strong bg-surface-2 p-2.5">
           <Checkbox

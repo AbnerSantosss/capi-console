@@ -62,6 +62,10 @@ import { ItemDeLista, AnimatePresence } from '@/components/common/motion';
 import { SeletorDePixel, nomeDoPixel } from '@/components/pixels/SeletorDePixel';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { useRegrasDeRoteamento } from '@/hooks/useEstadoAutomatico';
+// So o TIPO: `config-store.ts` abre com `server-only`, e `import type` some na
+// compilacao — o mesmo que `useEstadoAutomatico.ts` ja faz.
+import type { RegraRoteamento } from '@/lib/config-store';
 import { nomeDaPlataforma } from '@/lib/produto';
 import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis';
 // Fonte UNICA da elegibilidade do lote (regras 1 e 4 do CLAUDE.md). A tela nao
@@ -94,7 +98,9 @@ interface ResultadoDisparo {
     | 'erro'
     | 'teste-ignorado'
     | 'sem-token'
-    | 'pixel-desligado';
+    | 'pixel-desligado'
+    /** Recusado sem envio: o Pixel é de outra empresa, não a do item (F1). */
+    | 'pixel-de-outra-empresa';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -119,6 +125,12 @@ export interface ItemInbox {
   eventoOrigem?: string;
   eventoMeta?: string;
   regraId?: string;
+  /**
+   * Empresa que recebeu o item. Ausente em item gravado antes da FASE E — e
+   * ai e a empresa padrao, a unica que existia. Decide quais Pixels o disparo
+   * manual pode abrir marcados (F1).
+   */
+  empresaId?: string;
   modo?: 'auto' | 'fila' | 'ignorar';
   conhecido?: boolean;
   valor?: number;
@@ -203,6 +215,8 @@ const TOM_RESULTADO: Record<ResultadoDisparo['status'], 'success' | 'danger' | '
   // Neutro, nao vermelho: o Pixel estar desligado e uma escolha de quem
   // opera, nao um defeito. O item continua na fila, inteiro, esperando.
   'pixel-desligado': 'neutral',
+  // Vermelho: alguem pediu destino errado. Nada saiu, mas o pedido estava mal.
+  'pixel-de-outra-empresa': 'danger',
 };
 
 /**
@@ -220,6 +234,7 @@ const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
   'teste-ignorado': 'teste interno, não enviado',
   'sem-token': 'sem Pixel ID ou token',
   'pixel-desligado': 'automático deste Pixel desligado',
+  'pixel-de-outra-empresa': 'recusado: Pixel de outra empresa',
 };
 
 const FORMATO_TEXTO: Record<'A' | 'B' | 'outro', string> = {
@@ -243,6 +258,60 @@ function podeDisparar(item: ItemInbox): boolean {
   if (item.status === 'ignorado' || item.modo === 'ignorar') return false;
   if (item.testePlataforma || ehNaoLido(item)) return false;
   return Boolean(item.eventoMeta && parMeta(item.eventoMeta)?.padrao);
+}
+
+/**
+ * A empresa que sempre existe. Copia de `EMPRESA_DEFAULT_ID` (`config-store.ts`,
+ * que e `server-only`) — a mesma copia que `useEmpresaStore.ts` guarda.
+ */
+const EMPRESA_PADRAO = 'default';
+
+/**
+ * 🔴 F1 (auditoria de 23/09/2026): os Pixels que o disparo manual ABRE
+ * marcados, de um item ou do lote inteiro.
+ *
+ * Antes era sempre `['default']`, o Pixel do Codigo Vencedor. Numa empresa nao
+ * padrao ele nem aparece no seletor (a lista e so da empresa aberta), entao ia
+ * marcado e ESCONDIDO: a venda de um cliente saia no Pixel do dono sem que
+ * ninguem visse o destino.
+ *
+ * Agora parte dos Pixels da regra do evento — a mesma busca de `acharRegra`:
+ * nome exato, depois '*' — e so dos que sao da EMPRESA DO ITEM e estao na
+ * lista carregada. As regras podem estar velhas depois de uma troca de
+ * empresa; o filtro pela empresa do item torna isso inofensivo (no pior caso
+ * nada vem marcado). Sem Pixel nenhum, o `['default']` de sempre vale so para
+ * item da empresa padrao, que e a dona dele; em outra empresa nada vem marcado
+ * e o operador escolhe.
+ *
+ * No lote vale a INTERSECAO: todos os itens vao para a mesma lista, e marcar o
+ * que so a regra de um evento pede mandaria os outros para onde nenhuma regra
+ * mandou.
+ *
+ * So PROPOE. Quem confere de verdade e a rota (`/api/inbox/disparar`, Trava 3)
+ * e, por ultimo, `dispararItem`.
+ */
+function pixelsIniciais(
+  itens: ItemInbox[],
+  regras: RegraRoteamento[] | null,
+  marcas: MarcaPublica[]
+): string[] {
+  if (!itens.length) return [];
+  const ativas = (regras ?? []).filter((r) => r.ativo);
+  const daRegra = (item: ItemInbox): string[] => {
+    const empresa = item.empresaId ?? EMPRESA_PADRAO;
+    const regra =
+      (item.eventoOrigem
+        ? ativas.find((r) => r.eventoOrigem === item.eventoOrigem)
+        : undefined) ?? ativas.find((r) => r.eventoOrigem === '*');
+    return (regra?.marcas ?? []).filter((id) =>
+      marcas.some((m) => m.id === id && m.empresaId === empresa)
+    );
+  };
+  const comum = itens.map(daRegra).reduce((a, b) => a.filter((id) => b.includes(id)));
+  if (comum.length) return comum;
+  return itens.every((i) => (i.empresaId ?? EMPRESA_PADRAO) === EMPRESA_PADRAO)
+    ? ['default']
+    : [];
 }
 
 /**
@@ -318,7 +387,8 @@ export function InboxList({
   const [filtros, setFiltros] = useState<FiltrosInboxValor>(filtrosIniciais ?? FILTROS_VAZIOS);
   const [payloadAberto, setPayloadAberto] = useState<ItemInbox | null>(null);
   const [loteAberto, setLoteAberto] = useState(false);
-  const [marcasDoLote, setMarcasDoLote] = useState<string[]>(['default']);
+  // Vazio ate abrir: a escolha nasce a cada abertura, de `pixelsIniciais` (F1).
+  const [marcasDoLote, setMarcasDoLote] = useState<string[]>([]);
   const [lote, setLote] = useState<ProgressoLote | null>(null);
   const [resumoLote, setResumoLote] = useState<ProgressoLote | null>(null);
   /**
@@ -333,6 +403,23 @@ export function InboxList({
   // mesma sessao, e destino errado num disparo real e venda no pixel errado.
   const marcas = useBrandStore((s) => s.marcas);
   const carregarMarcas = useBrandStore((s) => s.carregar);
+  const regras = useRegrasDeRoteamento();
+
+  /**
+   * 🔴 F1: so vale o Pixel que o operador VE marcado. Id marcado fora da lista
+   * mostrada (Pixel de outra empresa, ou apagado) nao aparece no seletor — e o
+   * que nao aparece nao pode sair, habilitar o botao nem sumir do aviso de
+   * metricas reais. Estas duas listas sao o que vai para a rota, o que liga o
+   * botao e o que o aviso le: uma fonte so para as tres coisas.
+   */
+  const escolhidasVisiveis = useMemo(
+    () => marcasEscolhidas.filter((id) => marcas.some((m) => m.id === id)),
+    [marcasEscolhidas, marcas]
+  );
+  const loteVisiveis = useMemo(
+    () => marcasDoLote.filter((id) => marcas.some((m) => m.id === id)),
+    [marcasDoLote, marcas]
+  );
 
   // O rotulo de origem da linha. Ate a primeira carga da lista de empresas
   // `nomeDaPlataforma(undefined)` devolve "a plataforma" — texto verdadeiro
@@ -577,7 +664,7 @@ export function InboxList({
 
   const abrirDisparo = (item: ItemInbox) => {
     setAlvo(item);
-    setMarcasEscolhidas(['default']);
+    setMarcasEscolhidas(pixelsIniciais([item], regras, marcas));
   };
 
   /**
@@ -589,8 +676,11 @@ export function InboxList({
    * que é o mesmo caminho do botão "Disparar direto" de uma linha:
    *
    *  • CORPO: `{ id: string, marcas?: string[], eventoMeta?: string }`.
+   *    Todo Pixel de `marcas` tem de ser da empresa do item (Trava 3, F1).
    *    Sem `marcas`, a rota cai nas marcas da regra e, se não houver, em
-   *    `['default']`. `eventoMeta` é obrigatório na prática — a rota recusa
+   *    `['default']` — só para item da empresa padrão; em outra empresa é
+   *    recusa. Esta tela manda sempre a lista visível, nunca vazia.
+   *    `eventoMeta` é obrigatório na prática — a rota recusa
    *    qualquer nome fora do padrão da Meta (`ehNomePadraoMeta`), porque nome
    *    livre vira evento personalizado com HTTP 200 que não otimiza campanha.
    *
@@ -604,7 +694,8 @@ export function InboxList({
    *    para `teste-ignorado`, que é a trava de teste interno respondendo.
    *
    *  • RECUSA: HTTP 4xx com `{ erro: string }` — 404 item sumiu, 409 regra em
-   *    Ignorar, 400 sem evento da Meta ou nome fora do padrão. O `pedir()`
+   *    Ignorar, 400 sem evento da Meta ou nome fora do padrão, 400 Pixel de
+   *    outra empresa ou nenhum Pixel (nada sai para ninguém). O `pedir()`
    *    transforma isso em `ErroApi` com a mensagem do servidor.
    */
   const dispararUm = useCallback(
@@ -624,10 +715,10 @@ export function InboxList({
   );
 
   const confirmarDisparo = async () => {
-    if (!alvo?.eventoMeta) return;
+    if (!alvo?.eventoMeta || escolhidasVisiveis.length === 0) return;
     setDisparando(true);
     try {
-      const d = await dispararUm(alvo, marcasEscolhidas);
+      const d = await dispararUm(alvo, escolhidasVisiveis);
 
       const enviados = (d.resultados ?? []).filter((x) => x.status === 'enviado');
       if (enviados.length) {
@@ -772,6 +863,9 @@ export function InboxList({
    * cronológica dos eventos que chegam ao Gerenciador.
    */
   const executarLote = useCallback(async () => {
+    // F1: sem Pixel VISIVEL marcado nao ha lote. O botao do dialogo ja trava;
+    // isto fecha a porta para quem chegar aqui por outro caminho.
+    if (loteVisiveis.length === 0) return;
     setLoteAberto(false);
     setResumoLote(null);
     cancelarLote.current = false;
@@ -787,7 +881,7 @@ export function InboxList({
       const nome = item.eventoOrigem ?? item.evento ?? item.id;
 
       try {
-        const d = await dispararUm(item, marcasDoLote);
+        const d = await dispararUm(item, loteVisiveis);
         const r = d.resultados ?? [];
         if (r.some((x) => x.status === 'enviado')) {
           p = { ...p, ok: p.ok + 1 };
@@ -858,10 +952,12 @@ export function InboxList({
     // O SSE já anuncia cada item atualizado; o GET é a rede de segurança para
     // quando o stream estiver preso num buffer de proxy.
     void buscar();
-  }, [elegiveis, marcasDoLote, dispararUm, buscar]);
+  }, [elegiveis, loteVisiveis, dispararUm, buscar]);
 
+  // F1: lido da MESMA lista que vai para a rota. Antes o aviso filtrava a
+  // lista da empresa e o `default` escondido saia sem aparecer aqui.
   const escolhidasEmProducao = marcas.filter(
-    (m) => marcasEscolhidas.includes(m.id) && !m.testCode?.trim()
+    (m) => escolhidasVisiveis.includes(m.id) && !m.testCode?.trim()
   );
 
   const aguardando = useMemo(
@@ -984,7 +1080,11 @@ export function InboxList({
           totalVisiveis={visiveis.length}
           totalElegiveis={elegiveis.length}
           lote={lote}
-          onAbrirLote={() => setLoteAberto(true)}
+          onAbrirLote={() => {
+            // A escolha nasce a cada abertura, dos itens que vao de fato (F1).
+            setMarcasDoLote(pixelsIniciais(elegiveis, regras, marcas));
+            setLoteAberto(true);
+          }}
           onPararLote={() => {
             cancelarLote.current = true;
           }}
@@ -1129,9 +1229,15 @@ export function InboxList({
           <SeletorDePixel
             modo="varios"
             rotulo="Pixels de destino"
-            valor={marcasEscolhidas}
+            valor={escolhidasVisiveis}
             onChange={setMarcasEscolhidas}
           />
+
+          {marcas.length > 0 && escolhidasVisiveis.length === 0 && (
+            <Callout tone="info">
+              Nenhum Pixel marcado. Marque pelo menos um Pixel desta empresa para enviar.
+            </Callout>
+          )}
 
           {alvo?.testeInterno && (
             <Callout tone="warning" icon={FlaskConical} title="Isto parece teste da equipe">
@@ -1152,7 +1258,7 @@ export function InboxList({
             </Button>
             <Button
               onClick={confirmarDisparo}
-              disabled={disparando || marcasEscolhidas.length === 0 || !alvo?.eventoMeta}
+              disabled={disparando || escolhidasVisiveis.length === 0 || !alvo?.eventoMeta}
             >
               <Send className="size-4" aria-hidden />
               {disparando ? 'Enviando…' : 'Enviar para a Meta'}
@@ -1171,7 +1277,7 @@ export function InboxList({
         elegiveis={elegiveis}
         fora={fora}
         descricaoFiltro={descreverFiltros(filtros)}
-        marcasEscolhidas={marcasDoLote}
+        marcasEscolhidas={loteVisiveis}
         onMarcas={setMarcasDoLote}
         onConfirmar={() => void executarLote()}
       />

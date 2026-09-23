@@ -44,6 +44,12 @@ export interface MarcaPublica {
    * repetir a normalizacao com `!!`, `?? true` ou `!== false`.
    */
   autoDisparo: boolean;
+  /**
+   * Empresa dona do Pixel, ja resolvida no servidor por `empresaDaMarca()` —
+   * firme, como `autoDisparo`. O servidor ja mandava; faltava so aqui. O
+   * disparo manual usa para nunca abrir marcado o Pixel de outra empresa (F1).
+   */
+  empresaId: string;
 }
 
 /** O que o formulario de Pixel devolve. `token` vazio mantem o do servidor. */

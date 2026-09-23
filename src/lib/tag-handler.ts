@@ -238,19 +238,32 @@ function ehIpNaoRoteavel(ip: string): boolean {
 }
 
 /**
- * IP do visitante, para o `user_data` da Meta. Aqui, ao contrario do freio,
- * queremos o PRIMEIRO valor publico de X-Forwarded-For: e o navegador de
- * verdade, antes da Cloudflare e do proxy interno. Nunca do corpo — IP vindo do
+ * IP do visitante, para o `user_data` da Meta. Nunca do corpo — IP vindo do
  * corpo e IP escolhido pelo visitante, e um `ip` forjado envenena o geo do pixel
  * sem deixar rastro.
+ *
+ * 🔴 F8 (auditoria de 23/09/2026): CF-Connecting-IP PRIMEIRO, como o freio acima
+ * e /api/sessao. Quem escreve esse cabecalho e a Cloudflare, que sobrescreve o
+ * que o cliente mandar. X-Forwarded-For e o contrario: texto que o REMETENTE
+ * escreve. Ate aqui valia o primeiro IP publico dele — e um atacante que manda
+ * `X-Forwarded-For: 8.8.8.8` recebe da Cloudflare `8.8.8.8, <ip real>`, entao o
+ * "primeiro publico" era o IP que ele escolheu: o mesmo envenenamento do `ip` no
+ * corpo, so que pela porta do cabecalho.
+ *
+ * Com CF-Connecting-IP presente, X-Forwarded-For nem e lido. Se o valor da
+ * Cloudflare nao for roteavel, o campo fica vazio — cair para o texto do
+ * remetente seria devolver a ele a escolha. X-Forwarded-For so vale quando nao
+ * ha Cloudflare na frente (dev local), e ai continua o primeiro IP publico.
+ *
+ * Exportada so para o teste (`scripts/disparo-por-empresa.test.mjs`).
  */
-function ipDoVisitante(req: NextRequest): string {
+export function ipDoVisitante(req: NextRequest): string {
+  const cf = (req.headers.get('cf-connecting-ip') ?? '').trim();
+  if (cf) return ehIpNaoRoteavel(cf) ? '' : cf;
   const xff = req.headers.get('x-forwarded-for') ?? '';
   for (const parte of xff.split(',').map((p) => p.trim())) {
     if (parte && !ehIpNaoRoteavel(parte)) return parte;
   }
-  const cf = (req.headers.get('cf-connecting-ip') ?? '').trim();
-  if (cf && !ehIpNaoRoteavel(cf)) return cf;
   return '';
 }
 

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acharEntrada } from '@/lib/inbox';
 import { parseWebhook } from '@/lib/parser';
-import { EMPRESA_DEFAULT_ID, lerIntegracoes, acharRegra } from '@/lib/config-store';
+import {
+  EMPRESA_DEFAULT_ID,
+  lerIntegracoes,
+  acharRegra,
+  listarMarcas,
+  empresaDaMarca,
+} from '@/lib/config-store';
 import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { exigirSessao } from '@/lib/sessao';
@@ -15,6 +21,10 @@ export const dynamic = 'force-dynamic';
  * que as travas (teste interno, heranca de atribuicao, dedup) sejam identicas.
  *
  * POST { id, marcas?: string[], eventoMeta?: string }
+ *
+ * `marcas` so aceita Pixels da empresa do item (400 se vier um de fora, e nada
+ * sai). Ausente: os Pixels da regra; sem nenhum, `default` — so na empresa
+ * padrao. Ver a Trava 3.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -69,11 +79,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /**
+     * 🔴 Trava 3 (F1, auditoria de 23/09/2026): todo Pixel de destino tem de ser
+     * da EMPRESA DO ITEM — a mesma autoridade que `dispararItem` usa.
+     *
+     * Antes a lista entrava como viesse, e a tela de uma empresa nao padrao
+     * mandava o Pixel `default` (do Codigo Vencedor) marcado e escondido: a
+     * venda de um cliente saia no Pixel do dono. Conversao enviada ao Pixel
+     * errado nao volta atras, entao a conferencia e da lista INTEIRA, antes do
+     * primeiro envio: um unico Pixel de fora recusa o pedido todo (400) e nada
+     * sai para ninguem. Mandar "so os certos" esconderia do operador que a tela
+     * dele pediu errado.
+     *
+     * Mesma regra de dono do PUT de /api/integracoes (`empresaDaMarca`, a que
+     * `listarMarcas(empresa)` aplica): id que nao existe mais tambem fica de
+     * fora, em vez de cair no Pixel `default` pela queda de `acharMarca`.
+     *
+     * O recuo para `['default']` so vale para item da empresa padrao, que e a
+     * dona dele. Item de outra empresa sem Pixel pedido e sem Pixel na regra e
+     * 400, pedindo a escolha.
+     */
+    const empresaDoItem = item.empresaId ?? EMPRESA_DEFAULT_ID;
     const marcas: string[] = Array.isArray(body.marcas) && body.marcas.length
       ? body.marcas
       : regra?.marcas?.length
         ? regra.marcas
-        : ['default'];
+        : empresaDoItem === EMPRESA_DEFAULT_ID
+          ? ['default']
+          : [];
+
+    if (!marcas.length) {
+      return NextResponse.json(
+        {
+          erro: 'Escolha ao menos um Pixel desta empresa para enviar o evento. Nada foi enviado.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const todas = await listarMarcas();
+    const daEmpresa = new Set(
+      todas.filter((m) => empresaDaMarca(m) === empresaDoItem).map((m) => m.id)
+    );
+    const deFora = marcas.filter((m) => !daEmpresa.has(m));
+    if (deFora.length) {
+      const motivo = (id: string) => {
+        const m = todas.find((x) => x.id === id);
+        return m ? `o Pixel "${m.nome || id}" é de outra empresa` : `o Pixel "${id}" não existe mais`;
+      };
+      return NextResponse.json(
+        {
+          erro: `Nada foi enviado: ${deFora.map(motivo).join('; ')}. Este evento só pode ir para os Pixels da empresa que o recebeu — desmarque esse Pixel e escolha um desta empresa.`,
+        },
+        { status: 400 }
+      );
+    }
 
     const resultados = await dispararItem({ item, campos: r.fields, eventoMeta, marcas, origem: 'manual' });
     return NextResponse.json({ resultados });

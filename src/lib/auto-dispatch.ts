@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { acharMarca, lerIntegracoes, EMPRESA_DEFAULT_ID } from './config-store';
+import { acharMarca, lerIntegracoes, empresaDaMarca, EMPRESA_DEFAULT_ID, type Marca } from './config-store';
 import { montarEvento, validar, enviarParaMeta, type EventInput } from './meta-capi';
 import { calcularEmq } from './emq';
 import { extrairAtribuicao, registrarDisparo } from './attribution-log';
@@ -21,6 +21,8 @@ import { normalizarTelefone } from './telefone';
  * porque um pixel sem token nao pode impedir o outro de receber a conversao.
  *
  * A ordem das travas e deliberada:
+ *   0.  empresa          -> Pixel de outra empresa nunca recebe, por marca, em
+ *                           todos os caminhos abaixo (F1, `deOutraEmpresa`)
  *   1.  teste            -> nunca chega na Meta (regras 1 e 4 do CLAUDE.md).
  *                           Padrao conhecido + a lista que o operador cadastrou.
  *   1-B. suspeita        -> so barra o AUTOMATICO; o botao continua funcionando
@@ -55,7 +57,12 @@ export interface ResultadoDisparoAuto {
      * certeza e o item morre; aqui ele so nao sai sozinho, e o botao "Disparar
      * agora" continua funcionando normalmente.
      */
-    | 'suspeita-de-teste';
+    | 'suspeita-de-teste'
+    /**
+     * O Pixel e de OUTRA empresa, e nao a do item. Recusado sem envio, por
+     * qualquer caminho — automatico ou botao. Ver `deOutraEmpresa` abaixo.
+     */
+    | 'pixel-de-outra-empresa';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -99,6 +106,27 @@ export async function dispararItem(params: {
    * /api/integracoes), entao nos casos sadios as duas leituras dao o mesmo.
    */
   const empresaDoItem = item.empresaId ?? EMPRESA_DEFAULT_ID;
+
+  /**
+   * 🔴 F1 (auditoria de 23/09/2026): Pixel de OUTRA empresa nunca recebe este
+   * evento. E a ultima barreira — a rota do botao e a tela ja conferem antes —
+   * e vale tambem para o automatico, que chega aqui sem passar por elas.
+   *
+   * A pergunta e feita ao Pixel JA RESOLVIDO, o mesmo objeto que iria para
+   * `enviarParaMeta`, e nao ao id pedido: `acharMarca` cai na primeira marca
+   * (o Pixel `default`, do Codigo Vencedor) quando o id nao existe, e um id
+   * apagado no meio do caminho mandaria a venda de um cliente para o Pixel do
+   * dono. Conferido pelo objeto, esse caminho tambem e barrado.
+   *
+   * Para a empresa padrao nada muda: o `default` e todo Pixel sem `empresaId`
+   * sao dela (`empresaDaMarca`), e a queda de `acharMarca` cai nela mesma. So
+   * RECUSA, como a B4-a: nunca liga nada nem troca o destino por outro.
+   */
+  const deOutraEmpresa = (marca: Marca | undefined): boolean =>
+    marca !== undefined && empresaDaMarca(marca) !== empresaDoItem;
+  const ERRO_OUTRA_EMPRESA =
+    'Este Pixel é de outra empresa: o evento só vai para os Pixels da empresa que o recebeu. Nada foi enviado a ele.';
+
   const texto = (k: string) => (typeof params.campos[k] === 'string' ? (params.campos[k] as string) : undefined);
 
   /**
@@ -141,16 +169,22 @@ export async function dispararItem(params: {
     await marcarStatus(item.id, 'ignorado');
     // P-12: mesmo sem enviar nada, o registro guarda PARA ONDE teria ido. Sem o
     // ID do Pixel aqui a tela so teria o id interno da marca, que vira um
-    // codigo sem dono no dia em que o cadastro for apagado.
+    // codigo sem dono no dia em que o cadastro for apagado. Pixel de outra
+    // empresa nao entra como "teria ido": ele nunca iria (F1).
     const ignorados = await Promise.all(
-      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => ({
-        marcaId: m,
-        pixelId: ((await acharMarca(m))?.pixelId || '').trim(),
-        status: 'teste-ignorado',
-        modoTeste: false,
-        herdados: [],
-        emq: 0,
-      }))
+      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => {
+        const marca = await acharMarca(m);
+        return {
+          marcaId: m,
+          pixelId: (marca?.pixelId || '').trim(),
+          ...(deOutraEmpresa(marca)
+            ? { status: 'pixel-de-outra-empresa' as const, erro: ERRO_OUTRA_EMPRESA }
+            : { status: 'teste-ignorado' as const }),
+          modoTeste: false,
+          herdados: [],
+          emq: 0,
+        };
+      })
     );
     await anotarResultado(item.id, ignorados);
     console.log(`[auto-dispatch] ${eventoMeta} inbox=${item.id} -> teste interno, nada enviado`);
@@ -172,17 +206,24 @@ export async function dispararItem(params: {
    */
   if (params.origem === 'auto' && item.autoBloqueadoPorSuspeita === true) {
     const barrados = await Promise.all(
-      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => ({
-        marcaId: m,
-        pixelId: ((await acharMarca(m))?.pixelId || '').trim(),
-        status: 'suspeita-de-teste',
-        erro:
-          item.explicacaoDeTeste ??
-          'Este evento está sob suspeita de teste. Confira e dispare pelo botão se for uma venda real.',
-        modoTeste: false,
-        herdados: [],
-        emq: 0,
-      }))
+      alvos.map<Promise<ResultadoDisparoAuto>>(async (m) => {
+        const marca = await acharMarca(m);
+        return {
+          marcaId: m,
+          pixelId: (marca?.pixelId || '').trim(),
+          ...(deOutraEmpresa(marca)
+            ? { status: 'pixel-de-outra-empresa' as const, erro: ERRO_OUTRA_EMPRESA }
+            : {
+                status: 'suspeita-de-teste' as const,
+                erro:
+                  item.explicacaoDeTeste ??
+                  'Este evento está sob suspeita de teste. Confira e dispare pelo botão se for uma venda real.',
+              }),
+          modoTeste: false,
+          herdados: [],
+          emq: 0,
+        };
+      })
     );
     await anotarResultado(item.id, barrados);
     console.log(`[auto-dispatch] ${eventoMeta} inbox=${item.id} -> suspeita de teste, automático barrado`);
@@ -276,6 +317,14 @@ export async function dispararItem(params: {
     const accessToken = (marca?.accessToken || '').trim();
     const modoTeste = Boolean(marca?.testCode?.trim());
     const base = { marcaId, pixelId, modoTeste, herdados, emq: emq.nota };
+
+    // F1: antes de qualquer outra trava, e pelo mesmo objeto que seria enviado.
+    // Vem antes da B4-a de proposito: Pixel de outra empresa e o motivo que o
+    // operador precisa ler, mesmo com o automatico dele desligado.
+    if (deOutraEmpresa(marca)) {
+      resultados.push({ ...base, status: 'pixel-de-outra-empresa', erro: ERRO_OUTRA_EMPRESA });
+      continue;
+    }
 
     /**
      * B4-a: conferencia final da trava do Pixel, dentro do laco, por marca.

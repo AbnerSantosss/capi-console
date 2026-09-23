@@ -17,6 +17,7 @@ import {
 import { Field, Callout, StatusDot } from '@/components/common/primitives';
 import { SeletorDePixel } from '@/components/pixels/SeletorDePixel';
 import { useBrandStore } from '@/stores/useBrandStore';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
@@ -58,6 +59,9 @@ export function RulesSection({
   // esta secao e a Caixa de entrada liam a mesma coisa em dois lugares, e duas
   // copias da lista de Pixel podem divergir dentro da mesma sessao.
   const marcas = useBrandStore((s) => s.marcas);
+  // A empresa que `pedir()` manda no header `X-Empresa-Id` — a mesma que o PUT
+  // de /api/integracoes usa para conferir os Pixels da regra.
+  const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<'todas' | ModoRegra | 'desativadas'>('todas');
   const [abertas, setAbertas] = useState<string[]>([]);
@@ -68,6 +72,25 @@ export function RulesSection({
     onChange(novas);
   };
 
+  /**
+   * 🔴 F2 (auditoria de 23/09/2026): com que Pixels a regra nova NASCE.
+   *
+   * Antes era sempre `['default']`, o Pixel do Codigo Vencedor. Numa empresa
+   * nao padrao ele nem aparece no seletor, entao a regra nascia com um destino
+   * invisivel e o PUT de /api/integracoes recusava o salvamento ("o Pixel
+   * default e de outra empresa") sem que desse para achar o que desmarcar.
+   *
+   * Na empresa padrao continua `['default']`. Nas outras: o unico Pixel da
+   * empresa, se ela tiver exatamente um; senao nada, e o operador escolhe. O
+   * filtro por `empresaId` cobre a lista de Pixels ainda da empresa anterior
+   * logo depois de uma troca.
+   */
+  const pixelsDaRegraNova = (): string[] => {
+    if (empresaAtivaId === 'default') return ['default'];
+    const daEmpresa = marcas.filter((m) => m.empresaId === empresaAtivaId);
+    return daEmpresa.length === 1 ? [daEmpresa[0].id] : [];
+  };
+
   const adicionar = () => {
     const id = `r_${Date.now().toString(36)}`;
     onChange([
@@ -76,7 +99,7 @@ export function RulesSection({
         id,
         eventoOrigem: '',
         eventoMeta: 'Purchase',
-        marcas: ['default'],
+        marcas: pixelsDaRegraNova(),
         modo: 'fila',
         ativo: true,
       },
