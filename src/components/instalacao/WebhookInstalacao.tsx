@@ -267,7 +267,7 @@ export function WebhookInstalacao({
         {ehXWinner && (
           <div className="rounded-lg border border-line bg-surface-2 p-4">
             <p className="flex items-center gap-2 text-label font-semibold text-fg-strong">
-              <Info className="size-4 shrink-0 text-fg-muted" aria-hidden />
+              <Info className="size-4 shrink-0 text-fg-body" aria-hidden />
               Como cadastrar esta URL no xWinner
             </p>
             {/* O numero e um selo escrito, e nao o marcador de `list-decimal`:
@@ -337,7 +337,7 @@ export function WebhookInstalacao({
               </span>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              <p className="mb-2 text-caption text-fg-muted">
+              <p className="mb-2 text-body text-fg-body">
                 É o formato cadastrado antes de o apelido existir. Não precisa
                 trocar: o endpoint aceita os dois. Serve de saída se algo der
                 errado com o apelido.
@@ -446,15 +446,15 @@ export function WebhookInstalacao({
           <AccordionItem value="instrucoes" className="last:border-b-0">
             <AccordionTrigger className="px-4 hover:no-underline">
               <span className="flex items-center gap-2 text-label font-semibold text-fg-body">
-                <Terminal className="size-4 text-fg-muted" aria-hidden />
+                <Terminal className="size-4 text-fg-body" aria-hidden />
                 Instruções técnicas
               </span>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              <p className="mb-2 text-caption text-fg-muted">
+              <p className="mb-2 text-body text-fg-body">
                 Teste pela linha de comando somente em um ambiente isolado.
               </p>
-              <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-muted">
+              <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
                 {curlVisivel}
               </pre>
               <Button variant="outline" className="mt-3" onClick={() => void onSimular()}>
@@ -468,19 +468,19 @@ export function WebhookInstalacao({
 
       <div className="flex min-w-0 flex-col gap-4">
         <Panel title="Expor para a internet" icon={ArrowUpRight}>
-          <p className="text-caption text-fg-muted">
+          <p className="text-body text-fg-body">
             Este console roda em <code className="font-mono">localhost</code> e
             não é alcançável de fora. Para receber webhooks reais, abra um túnel:
           </p>
-          <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-2 p-2.5 font-mono text-caption text-fg-muted">
+          <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-1 p-2.5 font-mono text-caption text-fg-strong">
             cloudflared tunnel --url http://localhost:3333
           </pre>
-          <p className="mt-2 text-caption text-fg-muted">
+          <p className="mt-2 text-body text-fg-body">
             Na VPS o console roda em <code className="font-mono">3334</code> (a
             3333 já é de outro container) e o hostname fixo do túnel é{' '}
             <code className="font-mono">capi.proxserverabner.site</code>.
           </p>
-          <p className="mt-2 text-caption text-fg-muted">
+          <p className="mt-2 text-body text-fg-body">
             Use a URL gerada + <code className="font-mono">/api/webhook/in</code>.
             O segredo é a única proteção — não o compartilhe.
           </p>

@@ -25,7 +25,6 @@ import { TagDoSite } from '@/components/integrations/TagDoSite';
 import type { Integracoes } from '@/components/integrations/tipos';
 import type { DominioTag } from '@/lib/tag-dominios';
 import { WebhookInstalacao } from './WebhookInstalacao';
-import { OndeInstalarTag } from './OndeInstalarTag';
 
 /** Âncoras públicas desta tela. O `?aba=` antigo de `/automatico` aponta para cá. */
 const ANCORA_WEBHOOK = 'webhook';
@@ -230,8 +229,17 @@ export function InstalacaoPage({
         aria-label="Resumo da instalação"
         className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-panel border border-line-strong bg-surface-1 p-4"
       >
-        <StatusDot tone="success" icon={Webhook}>
-          Webhook pronto para receber
+        {/* Nunca houve como saber, a partir do que a integração guarda, se a
+            plataforma de fato manda alguma coisa para este endereço — não
+            existe histórico de recebimento no modelo de dados. "Pronto para
+            receber" era uma alegação real (o endpoint aceita qualquer POST
+            autenticado agora mesmo), mas o tom de sucesso e o verbo levavam a
+            crer que a integração já tinha sido confirmada de ponta a ponta.
+            Tom neutro e o fato que dá para provar: o endpoint está sempre no
+            ar, a confirmação de que a plataforma o usa vem de uma venda
+            chegando na caixa de entrada. */}
+        <StatusDot tone="neutral" icon={Webhook}>
+          Endpoint do webhook sempre ativo
         </StatusDot>
 
         <StatusDot
@@ -263,33 +271,20 @@ export function InstalacaoPage({
         </nav>
       </section>
 
-      <Section
-        id={ANCORA_WEBHOOK}
-        step={1}
-        icon={Webhook}
-        variant="card"
-        title="Webhook da plataforma de vendas"
-        description="Aponte a plataforma de vendas ou o n8n para este endereço e o payload chega pronto para revisão. É o que traz a venda — inclusive a de PIX, que acontece fora do navegador."
-      >
-        <WebhookInstalacao
-          entrada={cfg.entrada}
-          base={base}
-          ehLocal={ehLocal}
-          copiar={copiar}
-          copiado={copiado}
-          onTrocarSegredo={novoSegredo}
-          onSalvarRotulo={salvarRotulo}
-          onSimular={simular}
-        />
-      </Section>
-
+      {/* As duas seções viravam duas paradas de uma corrida (V-01/Tarefa 6):
+          o operador terminava o webhook, via "Passo 1 concluído" e não fazia
+          ideia de que a tag — o pedaço que realmente falta na maioria das
+          instalações — ainda estava logo abaixo. Um Section só, com a tag
+          primeiro (o que costuma faltar) e o webhook por último (o que já
+          costuma estar pronto), reflete a ordem de trabalho de verdade em vez
+          da ordem em que os dois blocos foram escritos no código. */}
       <Section
         id={ANCORA_TAG}
-        step={2}
+        step={1}
         icon={Code2}
         variant="card"
-        title="Tag do site"
-        description="O código que mede a visita no site do cliente e guarda a atribuição antes de a venda por PIX acontecer fora do navegador."
+        title="Webhook e tag do site"
+        description="O webhook traz a venda da plataforma; a tag mede a visita no navegador e guarda a atribuição antes de a venda por PIX acontecer fora dele. Comece pela tag — é o que costuma faltar instalar."
       >
         <TagDoSite
           tag={cfg.tag}
@@ -299,7 +294,29 @@ export function InstalacaoPage({
           onSalvarDominios={salvarDominios}
           onTrocarChave={novaChaveDaTag}
           salvando={salvando}
-          antesDasTags={<OndeInstalarTag />}
+          blocoWebhood={
+            <div id={ANCORA_WEBHOOK} className="flex scroll-mt-32 flex-col gap-3">
+              <h3 className="flex items-center gap-2 text-label font-semibold text-fg-strong">
+                <Webhook className="size-3.5" aria-hidden />
+                Webhook da plataforma de vendas
+              </h3>
+              <p className="text-body text-fg-body">
+                Aponte a plataforma de vendas ou o n8n para este endereço e o
+                payload chega pronto para revisão. É o que traz a venda —
+                inclusive a de PIX, que acontece fora do navegador.
+              </p>
+              <WebhookInstalacao
+                entrada={cfg.entrada}
+                base={base}
+                ehLocal={ehLocal}
+                copiar={copiar}
+                copiado={copiado}
+                onTrocarSegredo={novoSegredo}
+                onSalvarRotulo={salvarRotulo}
+                onSimular={simular}
+              />
+            </div>
+          }
         />
       </Section>
     </div>

@@ -239,6 +239,25 @@
   --realce-interno-forte: inset 0 1px 0 rgb(255 255 255 / 12%);
   --sombra-cartao: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 24px -12px rgb(0 0 0 / 55%);
 
+  /* --- Véu da imagem do login (23/09/2026, pedido do dono) ---------------
+     A coluna do formulário ganhou a imagem que o dono trouxe
+     (`/brand/login-painel-desktop.webp`), só a partir de `lg`. Este véu é a
+     camada de cima dela, e não é cor nova: é o próprio fundo do app em três
+     opacidades. 25 % no topo, para a imagem aparecer; 45 % a 10rem do pé; e o
+     fundo sólido nos últimos 4,5rem, por baixo do rodapé da coluna.
+     Quem garante a leitura do formulário NÃO é o véu, é o painel surface-1 a
+     88 % que fica em cima dele. A imagem tem ponto de luz branco puro em
+     qualquer altura, e só com véu ele teria de cobrir 86 % para o texto mudo
+     passar de 4.5 — a imagem sumiria. Se subir o 25 % do topo, o painel pode
+     descer; se baixar, o painel tem de subir: meça os dois juntos. Números em
+     wiki/sessoes/2026-09-23-stape-ux/13-login-imagem.md.                   */
+  --veu-login: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--surface-0) 25%, transparent),
+    color-mix(in srgb, var(--surface-0) 45%, transparent) calc(100% - 10rem),
+    var(--surface-0) calc(100% - 4.5rem)
+  );
+
   /* --- Medidas de casca (em rem: acompanham o zoom de texto do usuário) -- */
   --altura-cabecalho: 3.5rem;
   --altura-barra-abas: 3.75rem;

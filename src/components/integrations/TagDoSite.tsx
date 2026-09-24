@@ -20,7 +20,6 @@ import { ptBR } from 'date-fns/locale';
 import {
   AlertTriangle,
   Check,
-  Code2,
   Copy,
   Globe,
   KeyRound,
@@ -35,19 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
-import {
-  Callout,
-  Field,
-  Panel,
-  ParamChip,
-  StatusDot,
-} from '@/components/common/primitives';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+import { Callout, Field, Panel, ParamChip, StatusDot } from '@/components/common/primitives';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import {
   erroDoDominio,
@@ -58,23 +45,10 @@ import {
   type ConfigTag,
   type DominioTag,
 } from '@/lib/tag-dominios';
-import { EVENTOS_TAG, type EventoTag } from '@/lib/tag-eventos';
+import { OndeInstalarTag } from '@/components/instalacao/OndeInstalarTag';
+import { EventosExtras } from '@/components/instalacao/EventosExtras';
+import type { TagGerada } from '@/components/instalacao/tag-estado';
 import type { RegraRoteamento } from '@/lib/config-store';
-
-/** Uma tag gerada pelo servidor, nos dois formatos de instalação. */
-interface TagGerada {
-  evento: EventoTag;
-  gtm: string;
-  site: string;
-}
-
-/** Qual das duas cópias está à vista no cartão do evento. */
-type FormatoTag = 'gtm' | 'site';
-
-const ROTULO_FORMATO: Record<FormatoTag, string> = {
-  gtm: 'Para o GTM',
-  site: 'Para colar no site',
-};
 
 /** Assinatura vazia: só serve para `useSyncExternalStore` distinguir servidor
  *  de navegador sem precisar de um efeito que dispara re-render. */
@@ -96,14 +70,16 @@ export interface TagDoSitePropriedades {
   /** true enquanto um PUT de integrações está em voo. */
   salvando: boolean;
   /**
-   * Bloco livre inserido ENTRE o DNS e as tags geradas.
+   * Bloco do webhook da plataforma de vendas — Tarefa 6 do plano v5 (§6.2).
    *
-   * Existe para a tela de Instalação encaixar o "onde colar o código" no ponto
-   * exato em que ele é lido: depois de o domínio estar autorizado, antes de o
-   * código aparecer. Opcional de propósito — em `/automatico` a aba nunca
-   * mostrou isto, e não passa a mostrar.
+   * A tela de Instalação tinha duas seções lado a lado (Webhook, depois Tag);
+   * a nova ordem funde as duas num fluxo só, com a tag primeiro (é o que falta
+   * instalar) e o webhook por último (já costuma estar pronto). Este slot é
+   * onde `InstalacaoPage` encaixa o card de webhook, entre o DNS e a chave
+   * pública da tag — a mesma posição em que `antesDasTags` costumava aparecer,
+   * só que depois das tags, não antes.
    */
-  antesDasTags?: React.ReactNode;
+  blocoWebhood: React.ReactNode;
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,68 +107,6 @@ function erroDoSubdominio(v: string): string | null {
 }
 
 /* ------------------------------------------------------------------ */
-/* Estado da regra de cada evento                                      */
-/* ------------------------------------------------------------------ */
-
-type TomEstado = 'success' | 'warning' | 'neutral';
-
-interface EstadoRegra {
-  texto: string;
-  tom: TomEstado;
-  explicacao: string;
-}
-
-/**
- * O que acontece de verdade com o evento depois que a tag o envia.
- *
- * Sem isto a tela mentiria por omissão: o operador instalaria a tag no site do
- * cliente, veria o evento chegar e acharia que a Meta já está recebendo —
- * quando na verdade a regra correspondente nasceu em fila ou em ignorar e nada
- * saiu daqui.
- */
-function estadoDaRegra(regras: RegraRoteamento[], origem: string): EstadoRegra {
-  const regra = regras.find((r) => r.eventoOrigem === origem);
-  if (!regra) {
-    return {
-      texto: 'Sem regra — fica na fila',
-      tom: 'warning',
-      explicacao:
-        'Nenhuma regra cobre este evento, então ele para na caixa de entrada esperando um clique. Crie a regra na aba Regras.',
-    };
-  }
-  if (!regra.ativo) {
-    return {
-      texto: 'Regra desativada',
-      tom: 'neutral',
-      explicacao:
-        'A regra existe mas está desligada: o evento chega, é registrado e não vai para a Meta.',
-    };
-  }
-  if (regra.modo === 'auto') {
-    return {
-      texto: 'Ligada',
-      tom: 'success',
-      explicacao:
-        'Assim que a tag envia, o evento vai sozinho para a Meta, sem revisão humana.',
-    };
-  }
-  if (regra.modo === 'ignorar') {
-    return {
-      texto: 'Ignorada',
-      tom: 'neutral',
-      explicacao:
-        'O evento chega e fica só no registro. Nunca vai para a Meta enquanto a regra estiver em Ignorar.',
-    };
-  }
-  return {
-    texto: 'Na fila',
-    tom: 'warning',
-    explicacao:
-      'O evento fica na caixa de entrada esperando você revisar e disparar. Nada sai daqui sozinho.',
-  };
-}
-
-/* ------------------------------------------------------------------ */
 /* Datas                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -216,7 +130,7 @@ export function TagDoSite({
   onSalvarDominios,
   onTrocarChave,
   salvando,
-  antesDasTags,
+  blocoWebhood,
 }: TagDoSitePropriedades) {
   const dominios = tag.dominios;
 
@@ -226,7 +140,6 @@ export function TagDoSite({
   const [confirmandoChave, setConfirmandoChave] = useState(false);
   const [trocandoChave, setTrocandoChave] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
-  const [formatos, setFormatos] = useState<Record<string, FormatoTag>>({});
   const [selecionado, setSelecionado] = useState<string>('');
   const [tags, setTags] = useState<TagGerada[]>([]);
   const [erroTags, setErroTags] = useState<string | null>(null);
@@ -357,6 +270,21 @@ export function TagDoSite({
       Boolean(x.reg)
     );
 
+  /**
+   * Pré-requisito da tag (Tarefa 6, §6.2 item 2): domínio autorizado e — só
+   * para quem escolheu subdomínio próprio — o primeiro hit já registrado. O
+   * hit NÃO prova o CNAME: o coletor conta pelo Origin do site
+   * (`tag-handler.ts`), venha a chamada pelo subdomínio ou pelo nosso
+   * endereço. Por isso o texto de sucesso diz "recebendo eventos", nunca
+   * "DNS confirmado" — a verificação de DNS de verdade é do plano v6. Um
+   * domínio SEM subdomínio nunca bloqueia o estado de sucesso: ele já usa o
+   * nosso endereço, que não depende de DNS nenhum do cliente.
+   */
+  const cnamesPendentes = dominios.filter(
+    (d) => d.subdominio && (d.hits ?? 0) === 0
+  );
+  const prerequisitosOk = dominios.length > 0 && cnamesPendentes.length === 0;
+
   /* ---------------------------------------------------------------- */
   /* Render                                                            */
   /* ---------------------------------------------------------------- */
@@ -373,7 +301,83 @@ export function TagDoSite({
         comprador paga no aplicativo do banco e nunca mais volta ao navegador.
       </p>
 
-      {/* 2 — domínios ---------------------------------------------- */}
+      {/* 2 — pré-requisito de DNS/domínio ---------------------------- */}
+      {prerequisitosOk ? (
+        <StatusDot tone="success" icon={Globe}>
+          Pré-requisitos atendidos — domínio autorizado e já recebendo eventos.
+        </StatusDot>
+      ) : (
+        <Callout
+          tone="warning"
+          icon={AlertTriangle}
+          title="Antes de gerar a tag, faça duas coisas."
+          className="rounded-r-lg bg-warning/8 py-3 pr-3"
+        >
+          1) Cadastre o domínio do site do cliente na lista de domínios
+          autorizados — sem isso o coletor recusa os eventos. 2) Se for usar um
+          subdomínio próprio do cliente (recomendado: faz o cookie durar mais
+          no Safari), peça ao cliente para criar o registro CNAME antes de
+          colar a tag. Só cadastre o subdomínio depois que o CNAME existir: com
+          ele cadastrado, o código gerado já chama o subdomínio, e colado antes
+          disso não coleta nada.
+        </Callout>
+      )}
+
+      {/* 3 — gerar a tag ---------------------------------------------- */}
+      <div className="flex flex-col gap-3">
+        {dominios.length > 1 && (
+          <div
+            className="flex max-w-full flex-wrap gap-1 overflow-x-auto rounded-control border border-line-control bg-surface-2 p-1"
+            role="group"
+            aria-label="Domínio das tags mostradas"
+          >
+            {dominios.map((d) => {
+              const ativo = d.id === alvoId;
+              return (
+                <Button
+                  key={d.id}
+                  size="sm"
+                  variant={ativo ? 'secondary' : 'ghost'}
+                  aria-pressed={ativo}
+                  onClick={() => setSelecionado(d.id)}
+                  className="font-mono"
+                >
+                  {ativo && <Check className="size-3.5" aria-hidden />}
+                  {d.host}
+                </Button>
+              );
+            })}
+          </div>
+        )}
+
+        {erroTags && (
+          <Callout tone="danger" icon={AlertTriangle} title="As tags não foram geradas">
+            {erroTags}
+          </Callout>
+        )}
+
+        {carregandoTags && !erroTags && (
+          <p className="text-body text-fg-body">Gerando as tags…</p>
+        )}
+
+        <OndeInstalarTag
+          tags={tagsNoAr}
+          regras={regras}
+          temDominio={dominios.length > 0}
+          copiar={copiar}
+          copiado={copiado}
+        />
+      </div>
+
+      {/* 4 — eventos extras (opcional) --------------------------------- */}
+      <EventosExtras
+        tags={tagsNoAr}
+        regras={regras}
+        copiar={copiar}
+        copiado={copiado}
+      />
+
+      {/* 5 — domínios ---------------------------------------------- */}
       <Panel title="Domínios autorizados" icon={Globe}>
         <p className="text-caption text-fg-muted">
           A lista abaixo é a única tranca do endereço público: o coletor só
@@ -419,7 +423,7 @@ export function TagDoSite({
                       <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
                         {d.host}
                       </p>
-                      <p className="mt-1 flex flex-wrap items-center gap-2 text-caption text-fg-muted">
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
                         <span>A tag chama:</span>
                         <ParamChip>{hostDaTag(d, base)}</ParamChip>
                         <span>
@@ -469,11 +473,11 @@ export function TagDoSite({
                         ? `Último hit ${relativo ?? `em ${dataCurta(d.ultimoHit)}`}`
                         : 'Nunca recebeu nada'}
                     </StatusDot>
-                    <span className="text-caption text-fg-muted tabular">
+                    <span className="text-label text-fg-body tabular">
                       {d.hits} evento{d.hits === 1 ? '' : 's'} recebido
                       {d.hits === 1 ? '' : 's'}
                     </span>
-                    <span className="text-caption text-fg-muted">
+                    <span className="text-label text-fg-body">
                       Cadastrado em {dataCurta(d.criadoEm)}
                     </span>
                   </div>
@@ -532,7 +536,7 @@ export function TagDoSite({
         </div>
       </Panel>
 
-      {/* 3 — DNS ---------------------------------------------------- */}
+      {/* 6 — DNS ---------------------------------------------------- */}
       <Panel title="Registro de DNS para o cliente criar" icon={Network}>
         {comDns.length === 0 ? (
           <p className="text-caption text-fg-muted">
@@ -569,7 +573,7 @@ export function TagDoSite({
                             <th
                               key={h}
                               scope="col"
-                              className="py-2 pr-4 text-caption font-semibold tracking-wide text-fg-muted uppercase"
+                              className="py-2 pr-4 text-label font-semibold text-fg-strong"
                             >
                               {h}
                             </th>
@@ -587,10 +591,10 @@ export function TagDoSite({
                           <td className="wrap-token py-2 pr-4 font-mono text-caption text-fg-body">
                             {reg.valor}
                           </td>
-                          <td className="py-2 pr-4 text-caption text-fg-muted">
+                          <td className="py-2 pr-4 text-label text-fg-body">
                             {reg.ttl}
                           </td>
-                          <td className="py-2 pr-4 text-caption text-fg-muted">
+                          <td className="py-2 pr-4 text-label text-fg-body">
                             {reg.proxy}
                           </td>
                         </tr>
@@ -598,7 +602,7 @@ export function TagDoSite({
                     </table>
                   </div>
 
-                  <p className="mt-2 text-caption text-fg-muted">
+                  <p className="mt-2 text-body text-fg-body">
                     {reg.observacao}
                   </p>
 
@@ -638,178 +642,10 @@ export function TagDoSite({
         )}
       </Panel>
 
-      {antesDasTags}
+      {/* 7 — webhook da plataforma de vendas ------------------------- */}
+      {blocoWebhood}
 
-      {/* 4 — tags geradas ------------------------------------------- */}
-      <Panel title="Tags geradas automaticamente" icon={Code2}>
-        <p className="text-caption text-fg-muted">
-          Uma tag por evento, já com a chave e o endereço do coletor dentro.{' '}
-          <ParamChip>Purchase</ParamChip> e <ParamChip>Subscribe</ParamChip> não
-          aparecem aqui de propósito: venda só entra pelo webhook do checkout,
-          autenticado por um segredo que nunca sai do servidor.
-        </p>
-
-        {dominios.length === 0 ? (
-          <EstadoVazio
-            className="mt-3"
-            icone={Code2}
-            titulo="Nenhuma tag gerada"
-            motivo={`A tag carrega o endereço do coletor e a chave do domínio dentro dela, então não existe tag antes do domínio. Cadastre um e as ${EVENTOS_TAG.length} tags aparecem prontas aqui.`}
-            acao={
-              <Button variant="outline" onClick={focarCampoDeDominio}>
-                <Plus className="size-4" aria-hidden />
-                Cadastrar domínio
-              </Button>
-            }
-          />
-        ) : (
-          <div className="mt-3 flex flex-col gap-3">
-            {dominios.length > 1 && (
-              <div
-                className="flex max-w-full flex-wrap gap-1 overflow-x-auto rounded-control border border-line-control bg-surface-2 p-1"
-                role="group"
-                aria-label="Domínio das tags mostradas"
-              >
-                {dominios.map((d) => {
-                  const ativo = d.id === alvoId;
-                  return (
-                    <Button
-                      key={d.id}
-                      size="sm"
-                      variant={ativo ? 'secondary' : 'ghost'}
-                      aria-pressed={ativo}
-                      onClick={() => setSelecionado(d.id)}
-                      className="font-mono"
-                    >
-                      {ativo && <Check className="size-3.5" aria-hidden />}
-                      {d.host}
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
-
-            {erroTags && (
-              <Callout tone="danger" icon={AlertTriangle} title="As tags não foram geradas">
-                {erroTags}
-              </Callout>
-            )}
-
-            {carregandoTags && !erroTags && (
-              <p className="text-caption text-fg-muted">Gerando as tags…</p>
-            )}
-
-            {tagsNoAr.length > 0 && (
-              <Accordion
-                multiple
-                className="flex flex-col gap-3"
-                defaultValue={EVENTOS_TAG.filter((e) => e.padrao).map((e) => e.origem)}
-              >
-                {tagsNoAr.map(({ evento, gtm, site }) => {
-                  const estado = estadoDaRegra(regras, evento.origem);
-                  const formato = formatos[evento.origem] ?? 'gtm';
-                  const codigo = formato === 'gtm' ? gtm : site;
-                  const chaveCopia = `${evento.origem}-${formato}`;
-                  return (
-                    <AccordionItem
-                      key={evento.origem}
-                      value={evento.origem}
-                      className="overflow-hidden rounded-panel border border-line-strong bg-surface-2 last:border-b"
-                    >
-                      <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
-                        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-3">
-                          <span className="text-label font-semibold text-fg-strong">
-                            {evento.rotuloPt}
-                          </span>
-                          <ParamChip>{evento.evento}</ParamChip>
-                          <StatusDot tone={estado.tom}>{estado.texto}</StatusDot>
-                        </span>
-                      </AccordionTrigger>
-
-                      <AccordionContent className="border-t border-line px-4 pt-4 pb-4">
-                        <p className="text-caption text-fg-muted">
-                          {evento.descricao}
-                        </p>
-                        <p className="mt-1 text-caption text-fg-muted">
-                          <strong className="font-medium text-fg-body">
-                            Quando dispara:
-                          </strong>{' '}
-                          {evento.quando}
-                        </p>
-                        <p className="mt-1 text-caption text-fg-muted">
-                          <strong className="font-medium text-fg-body">
-                            Destino hoje:
-                          </strong>{' '}
-                          {estado.explicacao}
-                        </p>
-
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <div
-                            className="inline-flex gap-1 rounded-control border border-line-control bg-surface-2 p-1"
-                            role="group"
-                            aria-label={`Formato da tag ${evento.evento}`}
-                          >
-                            {(['gtm', 'site'] as const).map((f) => {
-                              const ativo = formato === f;
-                              return (
-                                <Button
-                                  key={f}
-                                  size="sm"
-                                  variant={ativo ? 'secondary' : 'ghost'}
-                                  aria-pressed={ativo}
-                                  onClick={() =>
-                                    setFormatos((atuais) => ({
-                                      ...atuais,
-                                      [evento.origem]: f,
-                                    }))
-                                  }
-                                >
-                                  {ativo && <Check className="size-3.5" aria-hidden />}
-                                  {ROTULO_FORMATO[f]}
-                                </Button>
-                              );
-                            })}
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copiar(codigo, chaveCopia)}
-                          >
-                            {copiado === chaveCopia ? (
-                              <Check className="size-3.5 text-success" aria-hidden />
-                            ) : (
-                              <Copy className="size-3.5" aria-hidden />
-                            )}
-                            Copiar
-                          </Button>
-                        </div>
-
-                        <p className="mt-2 text-caption text-fg-muted">
-                          {formato === 'gtm'
-                            ? 'No GTM: nova tag do tipo HTML personalizado, com o acionador descrito no cabeçalho do código.'
-                            : 'No site: cole o bloco inteiro imediatamente antes de </head>, em todas as páginas.'}
-                        </p>
-
-                        <Textarea
-                          readOnly
-                          spellCheck={false}
-                          rows={14}
-                          value={codigo}
-                          aria-label={`Código da tag ${evento.evento} — ${ROTULO_FORMATO[formato]}`}
-                          className="wrap-token mt-2 font-mono text-caption"
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            )}
-          </div>
-        )}
-      </Panel>
-
-      {/* 5 — chave pública ------------------------------------------ */}
+      {/* 8 — chave pública ------------------------------------------ */}
       <Panel title="Chave pública da tag" icon={KeyRound}>
         <Callout
           tone="warning"
@@ -887,7 +723,7 @@ export function TagDoSite({
         </div>
       </Panel>
 
-      {/* 6 — aviso de localhost ------------------------------------- */}
+      {/* 9 — aviso de localhost ------------------------------------- */}
       {ehLocal && (
         <Callout
           tone="warning"

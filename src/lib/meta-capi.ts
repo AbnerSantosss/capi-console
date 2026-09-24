@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 
+import { jaEhSha256 } from './hash-detect';
 import { nomePadraoParecido } from './meta-events';
 
 const GRAPH_VERSION_PADRAO = 'v26.0';
@@ -80,20 +81,38 @@ export function montarEvento(ev: EventInput): MetaEvent {
   const c = ev.custom || {};
   const user_data: Record<string, unknown> = {};
 
-  const email = normEmail(u.email || '');
-  if (email) user_data.em = [sha256(email)];
+  // Deteccao de SHA-256 ANTES de normalizar: normalizar um hash e o que o
+  // destroi (o phone perde as letras do hex na hora do replace(/\D+/g,'') e
+  // ganha um "55" inventado). Se o valor cru ja e um hash de 64 hex, ele so
+  // desce em minusculo — nunca passa por sha256() de novo (hash-do-hash) nem
+  // pelas funcoes normEmail/normTelefone/normNome, que mutilam o hex.
+  // Valor que so fica vazio DEPOIS de normalizar ("N/A", "-", ".") continua
+  // fora do evento, como antes: sha256('') e o hash de nada, nunca um comprador.
+  const hashDe = (cru: unknown, normalizar: (v: string) => string): string => {
+    const v = String(cru || '').trim();
+    if (!v) return '';
+    if (jaEhSha256(v)) return v.toLowerCase();
+    const n = normalizar(v);
+    return n ? sha256(n) : '';
+  };
 
-  const tel = normTelefone(u.phone || '', u.addDDI !== false);
-  if (tel) user_data.ph = [sha256(tel)];
+  const em = hashDe(u.email, normEmail);
+  if (em) user_data.em = [em];
 
-  const fn = normNome(u.firstName || '');
-  if (fn) user_data.fn = [sha256(fn)];
+  const ph = hashDe(u.phone, (v) => normTelefone(v, u.addDDI !== false));
+  if (ph) user_data.ph = [ph];
 
-  const ln = normNome(u.lastName || '');
-  if (ln) user_data.ln = [sha256(ln)];
+  const fn = hashDe(u.firstName, normNome);
+  if (fn) user_data.fn = [fn];
 
-  const ext = String(u.externalId || '').trim();
-  if (ext) user_data.external_id = [sha256(ext)];
+  const ln = hashDe(u.lastName, normNome);
+  if (ln) user_data.ln = [ln];
+
+  // external_id de 64 hex em claro (nenhuma fonte de hoje manda assim) desce
+  // sem hash: a Meta aceita external_id sem hash, e casar exige só que o mesmo
+  // valor chegue igual nos dois lados.
+  const ext = hashDe(u.externalId, (v) => v);
+  if (ext) user_data.external_id = [ext];
 
   const fbc = String(u.fbc || '').trim();
   if (fbc) user_data.fbc = fbc;

@@ -6,6 +6,7 @@
 // O ganho e o `tsc --noEmit` quebrar se alguem escrever aqui um nome de evento
 // que nao existe em EVENTOS_META.
 import type { NomeEventoMetaPadrao } from './meta-events';
+import { jaEhSha256 } from './hash-detect';
 
 /**
  * Tres estados, sem ambiguidade:
@@ -300,17 +301,30 @@ export function parseWebhook(bruto: string): ParseResult {
   const lead = (raiz.lead || {}) as any;
   if (lead.email) { fields.email = lead.email; preenchidos.push('e-mail'); }
   if (lead.phone) {
-    // Formato A manda o DDI separado (phone_country_code). Sem juntar, o telefone
-    // sai sem o 55 e a Meta nao acha o comprador.
-    const ddi = String(lead.phone_country_code || '').replace(/\D+/g, '');
-    const digitos = String(lead.phone).replace(/\D+/g, '');
-    fields.phone = ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+    const telefoneBruto = String(lead.phone);
+    if (jaEhSha256(telefoneBruto)) {
+      // Ja veio hasheado: o replace(/\D+/g,'') abaixo tiraria as letras do hex
+      // e o DDI "55" entraria por cima de um numero que nao existe mais.
+      fields.phone = telefoneBruto.trim().toLowerCase();
+    } else {
+      // Formato A manda o DDI separado (phone_country_code). Sem juntar, o telefone
+      // sai sem o 55 e a Meta nao acha o comprador.
+      const ddi = String(lead.phone_country_code || '').replace(/\D+/g, '');
+      const digitos = telefoneBruto.replace(/\D+/g, '');
+      fields.phone = ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+    }
     preenchidos.push('telefone');
   }
   if (lead.name) {
-    const partes = String(lead.name).trim().split(/\s+/);
-    fields.firstName = partes[0];
-    if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+    const nomeBruto = String(lead.name).trim();
+    if (jaEhSha256(nomeBruto)) {
+      // Hash nao tem espaco: nao ha o que quebrar. Copia como veio.
+      fields.firstName = nomeBruto.toLowerCase();
+    } else {
+      const partes = nomeBruto.split(/\s+/);
+      fields.firstName = partes[0];
+      if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+    }
     preenchidos.push('nome');
   }
   if (lead.taxId) { fields.externalId = lead.taxId; preenchidos.push('external_id (CPF)'); }
@@ -325,9 +339,14 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push('e-mail (buyer)');
   }
   if (!fields.phone && buyer.phone) {
-    const ddi = String(buyer.phone_country_code || '').replace(/\D+/g, '');
-    const digitos = String(buyer.phone).replace(/\D+/g, '');
-    fields.phone = ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+    const telefoneBrutoBuyer = String(buyer.phone);
+    if (jaEhSha256(telefoneBrutoBuyer)) {
+      fields.phone = telefoneBrutoBuyer.trim().toLowerCase();
+    } else {
+      const ddi = String(buyer.phone_country_code || '').replace(/\D+/g, '');
+      const digitos = telefoneBrutoBuyer.replace(/\D+/g, '');
+      fields.phone = ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+    }
     preenchidos.push('telefone (buyer)');
   }
   if (!fields.firstName) {
@@ -335,9 +354,13 @@ export function parseWebhook(bruto: string): ParseResult {
       buyer.name || `${buyer.first_name || ''} ${buyer.last_name || ''}`
     ).trim();
     if (nomeBuyer) {
-      const partes = nomeBuyer.split(/\s+/);
-      fields.firstName = partes[0];
-      if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+      if (jaEhSha256(nomeBuyer)) {
+        fields.firstName = nomeBuyer.toLowerCase();
+      } else {
+        const partes = nomeBuyer.split(/\s+/);
+        fields.firstName = partes[0];
+        if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+      }
       preenchidos.push('nome (buyer)');
     }
   }

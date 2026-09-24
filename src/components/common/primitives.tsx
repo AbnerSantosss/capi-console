@@ -132,7 +132,7 @@ export function ParamChip({
   return (
     <code
       className={cn(
-        'rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-caption text-fg-muted',
+        'rounded border border-line-control bg-surface-2 px-1.5 py-0.5 font-mono text-caption text-fg-body',
         className
       )}
     >
@@ -318,7 +318,7 @@ export function Section({
         className
       )}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-line pb-3">
+      <div className="flex items-start justify-between gap-4 border-b border-line-strong pb-3">
         <div className="flex min-w-0 items-center gap-3">
           {step !== undefined && (
             <span
@@ -368,7 +368,7 @@ const TONE: Record<Tone, { dot: string; text: string }> = {
   warning: { dot: 'bg-warning', text: 'text-warning' },
   danger: { dot: 'bg-danger', text: 'text-danger' },
   accent: { dot: 'bg-tinta-texto', text: 'text-tinta-texto' },
-  neutral: { dot: 'bg-fg-disabled', text: 'text-fg-muted' },
+  neutral: { dot: 'bg-fg-muted', text: 'text-fg-muted' },
 };
 
 export function StatusDot({
@@ -430,7 +430,7 @@ export function Panel({
     <div className={cn(receitaCartao, filete, className)}>
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+          <h3 className="flex items-center gap-2 text-label font-semibold text-fg-strong">
             {Icon && <Icon className="size-3.5" aria-hidden />}
             {title}
           </h3>

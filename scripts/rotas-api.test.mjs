@@ -246,8 +246,8 @@ ok(
 const resumo5 = await rotaResumo.GET(req('/api/inbox/resumo?dias=5', { sessao: true }));
 const corpoResumo5 = await corpoDe(resumo5);
 ok(
-  resumo5.status === 200 && corpoResumo5?.resumo?.periodo === 30,
-  'GET /api/inbox/resumo?dias=5 → 200 e período inválido cai no padrão 30',
+  resumo5.status === 200 && corpoResumo5?.resumo?.periodo === 'hoje',
+  'GET /api/inbox/resumo?dias=5 → 200 e período inválido cai no padrão "hoje"',
   `status=${resumo5.status}`
 );
 
@@ -281,8 +281,8 @@ const resumoDataPodre = await rotaResumo.GET(
 );
 const corpoDataPodre = await corpoDe(resumoDataPodre);
 ok(
-  resumoDataPodre.status === 200 && corpoDataPodre?.resumo?.periodo === 30,
-  '🔴 data impossível na URL não derruba a rota nem inventa janela: cai no padrão 30',
+  resumoDataPodre.status === 200 && corpoDataPodre?.resumo?.periodo === 'hoje',
+  '🔴 data impossível na URL não derruba a rota nem inventa janela: cai no padrão "hoje"',
   `status=${resumoDataPodre.status}`
 );
 
@@ -316,8 +316,8 @@ const pessoasDataPodre = await rotaPessoas.GET(
 );
 const corpoPessoasPodre = await corpoDe(pessoasDataPodre);
 ok(
-  pessoasDataPodre.status === 200 && corpoPessoasPodre?.periodo === 30,
-  'data impossível na URL de /pessoas cai no mesmo padrão 30 do resumo, sem derrubar a rota',
+  pessoasDataPodre.status === 200 && corpoPessoasPodre?.periodo === 'hoje',
+  'data impossível na URL de /pessoas cai no mesmo padrão "hoje" do resumo, sem derrubar a rota',
   `status=${pessoasDataPodre.status}`
 );
 

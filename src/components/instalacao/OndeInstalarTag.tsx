@@ -13,12 +13,30 @@
  *
  * Por isso os dois caminhos aparecem lado a lado, numerados, com o aviso de
  * escolher UM no meio — e não como um parágrafo de ajuda no rodapé.
+ *
+ * Tarefa 5 do plano v5 (6.3): a lista de passos virou clicável. O texto
+ * continua todo visível na página — nada foi escondido atrás do modal —
+ * porque o conteúdo já era curto; clicar no selo numerado (ou na linha do
+ * passo) só abre o MESMO conteúdo com mais espaço, via `ModalDeEtapa`.
+ *
+ * Tarefa 6 do plano v5 (6.2 item 3): esta é a peça que virou "GERAR A TAG" no
+ * topo da tela. O gerador de código continua NÃO importado aqui — as tags
+ * chegam prontas por prop, vindas de `/api/tag/gerar` via `TagDoSite` — mas
+ * agora, escolhido o caminho, o código do evento padrão (PageView) aparece
+ * pronto para copiar, com o de ViewContent logo abaixo (os dois disparam
+ * sozinhos e por isso não entram no bloco "Eventos extras").
  */
 
-import React from 'react';
-import { AlertTriangle, Code2, Container } from '@/components/ui/icones';
+import React, { useState } from 'react';
+import { AlertTriangle, Check, Code2, Container, Copy } from '@/components/ui/icones';
 
-import { Callout, Panel } from '@/components/common/primitives';
+import { Callout, Field, Panel, StatusDot } from '@/components/common/primitives';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { ModalDeEtapa } from '@/components/instalacao/ModalDeEtapa';
+import { SeloDeEtapa, resumoDeEtapa } from '@/components/instalacao/SeloDeEtapa';
+import type { RegraRoteamento } from '@/lib/config-store';
+import { estadoDaRegra, type TagGerada } from './tag-estado';
 
 /** Um caminho de instalação, com os passos na ordem em que se faz. */
 interface Caminho {
@@ -93,15 +111,87 @@ const CAMINHOS: Caminho[] = [
       <>
         Confira na <strong>caixa de entrada</strong> do disparo automático que o
         evento chegou. Se não chegou, o domínio provavelmente não está na lista
-        autorizada acima.
+        de domínios autorizados, mais abaixo nesta página.
       </>,
     ],
   },
 ];
 
-export function OndeInstalarTag() {
+/** Qual passo, de qual caminho, está aberto no `ModalDeEtapa`. */
+interface EtapaAberta {
+  caminhoId: string;
+  indice: number;
+}
+
+/** O id do caminho é literalmente o nome do formato de tag — só o GTM difere. */
+function formatoDoCaminho(caminhoId: string): 'gtm' | 'site' {
+  return caminhoId === 'gtm' ? 'gtm' : 'site';
+}
+
+export interface OndeInstalarTagProps {
+  /**
+   * Tags já geradas pelo servidor para o domínio escolhido. Vazio antes de
+   * cadastrar um domínio, ou enquanto a chamada a `/api/tag/gerar` está em
+   * voo — `TagDoSite` mostra o estado de carregamento e de erro logo acima
+   * desta peça, então aqui só resta tratar "ainda não há nada".
+   */
+  tags: TagGerada[];
+  /**
+   * Regras de roteamento, para dizer ao lado de cada código o que acontece com
+   * o evento depois que a tag o envia. Sem isso o operador cola o PageView,
+   * vê o evento chegar e acha que a Meta já recebe — com a regra em fila.
+   */
+  regras: RegraRoteamento[];
+  /**
+   * true quando há pelo menos um domínio cadastrado. Com domínio e sem tags,
+   * a geração está em voo ou falhou (`TagDoSite` mostra qual, logo acima);
+   * pedir para cadastrar um domínio aí mandaria o operador fazer o que já fez.
+   */
+  temDominio: boolean;
+  copiar: (texto: string, chave: string) => void | Promise<void>;
+  copiado: string | null;
+}
+
+/** Frase de uso do código mais o destino real do evento, lado a lado. */
+function ajudaComDestino(frase: string, regras: RegraRoteamento[], origem: string) {
+  const estado = estadoDaRegra(regras, origem);
   return (
-    <Panel title="Onde colar o código" icon={Container}>
+    <>
+      {frase}
+      <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <StatusDot tone={estado.tom}>{estado.texto}</StatusDot>
+        <span>{estado.explicacao}</span>
+      </span>
+    </>
+  );
+}
+
+export function OndeInstalarTag({
+  tags,
+  regras,
+  temDominio,
+  copiar,
+  copiado,
+}: OndeInstalarTagProps) {
+  const [etapaAberta, setEtapaAberta] = useState<EtapaAberta | null>(null);
+
+  const pageview = tags.find((t) => t.evento.origem === 'tag.pageview');
+  const viewcontent = tags.find((t) => t.evento.origem === 'tag.viewcontent');
+
+  const abrirEtapa = (caminhoId: string, indice: number) =>
+    setEtapaAberta({ caminhoId, indice });
+  const fecharEtapa = () => setEtapaAberta(null);
+
+  const caminhoAberto = etapaAberta
+    ? CAMINHOS.find((c) => c.id === etapaAberta.caminhoId)
+    : undefined;
+  const passoAberto =
+    caminhoAberto && etapaAberta
+      ? caminhoAberto.passos[etapaAberta.indice]
+      : undefined;
+
+  return (
+    <Panel title="Gerar a tag" icon={Container}>
       <p className="text-caption text-fg-muted">
         São dois caminhos para o mesmo resultado. Escolha{' '}
         <strong className="text-fg-body">um</strong> por evento e siga os passos
@@ -156,22 +246,131 @@ export function OndeInstalarTag() {
                     // estática e a ORDEM é a identidade do passo — nada é
                     // inserido, removido nem reordenado em tempo de execução.
                     key={indice}
-                    className="flex min-w-0 gap-2.5 text-caption text-fg-body"
+                    // A linha inteira é clicável para o mouse (conveniência,
+                    // não o contrato de acessibilidade — quem carrega isso é
+                    // o `SeloDeEtapa` abaixo, o único controle focável da
+                    // linha). Nada do texto foi escondido: o clique só abre
+                    // o MESMO conteúdo no `ModalDeEtapa`, com mais espaço.
+                    onClick={() => abrirEtapa(caminho.id, indice)}
+                    className="-mx-1.5 flex min-w-0 cursor-pointer gap-2.5 rounded-md px-1.5 py-1 text-caption text-fg-body transition-colors hover:bg-surface-3"
                   >
-                    <span
-                      aria-hidden
-                      className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full border border-line-control bg-surface-3 font-mono text-caption font-semibold tabular text-fg-muted"
-                    >
-                      {indice + 1}
-                    </span>
+                    <SeloDeEtapa
+                      numero={indice + 1}
+                      titulo={resumoDeEtapa(passo)}
+                      className="mt-px"
+                      onClick={(evento) => {
+                        evento.stopPropagation();
+                        abrirEtapa(caminho.id, indice);
+                      }}
+                    />
                     <span className="min-w-0">{passo}</span>
                   </li>
                 ))}
               </ol>
+
+              <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+                {tags.length === 0 ? (
+                  <p className="text-body text-fg-body">
+                    {temDominio
+                      ? 'O código aparece aqui assim que as tags forem geradas.'
+                      : 'Cadastre um domínio na lista abaixo para o código aparecer aqui — a tag carrega o endereço do coletor e a chave do domínio dentro dela.'}
+                  </p>
+                ) : (
+                  <>
+                    {pageview && (
+                      <Field
+                        id={`codigo-pageview-${caminho.id}`}
+                        label="Código pronto — Visita à página (PageView)"
+                        helper={ajudaComDestino(
+                          'Dispara sozinho assim que a página abre. É o primeiro evento a colar.',
+                          regras,
+                          pageview.evento.origem
+                        )}
+                        action={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              copiar(pageview[formatoDoCaminho(caminho.id)], `pv-${caminho.id}`)
+                            }
+                          >
+                            {copiado === `pv-${caminho.id}` ? (
+                              <Check className="size-3.5 text-success" aria-hidden />
+                            ) : (
+                              <Copy className="size-3.5" aria-hidden />
+                            )}
+                            Copiar
+                          </Button>
+                        }
+                      >
+                        <Textarea
+                          id={`codigo-pageview-${caminho.id}`}
+                          readOnly
+                          spellCheck={false}
+                          rows={10}
+                          value={pageview[formatoDoCaminho(caminho.id)]}
+                          aria-label={`Código do PageView — ${caminho.titulo}`}
+                          className="wrap-token font-mono text-caption"
+                        />
+                      </Field>
+                    )}
+
+                    {viewcontent && (
+                      <Field
+                        id={`codigo-viewcontent-${caminho.id}`}
+                        label="Código pronto — Visualização de página (ViewContent)"
+                        helper={ajudaComDestino(
+                          'Também dispara sozinho: alguns segundos depois, ou quando o visitante rola a página.',
+                          regras,
+                          viewcontent.evento.origem
+                        )}
+                        action={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              copiar(
+                                viewcontent[formatoDoCaminho(caminho.id)],
+                                `vc-${caminho.id}`
+                              )
+                            }
+                          >
+                            {copiado === `vc-${caminho.id}` ? (
+                              <Check className="size-3.5 text-success" aria-hidden />
+                            ) : (
+                              <Copy className="size-3.5" aria-hidden />
+                            )}
+                            Copiar
+                          </Button>
+                        }
+                      >
+                        <Textarea
+                          id={`codigo-viewcontent-${caminho.id}`}
+                          readOnly
+                          spellCheck={false}
+                          rows={10}
+                          value={viewcontent[formatoDoCaminho(caminho.id)]}
+                          aria-label={`Código do ViewContent — ${caminho.titulo}`}
+                          className="wrap-token font-mono text-caption"
+                        />
+                      </Field>
+                    )}
+                  </>
+                )}
+              </div>
             </section>
           );
         })}
       </div>
+
+      <ModalDeEtapa
+        numero={etapaAberta ? etapaAberta.indice + 1 : 1}
+        titulo={caminhoAberto?.titulo ?? ''}
+        aberto={etapaAberta !== null}
+        aoFechar={fecharEtapa}
+      >
+        {passoAberto}
+      </ModalDeEtapa>
     </Panel>
   );
 }

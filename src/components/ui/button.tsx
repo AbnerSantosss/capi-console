@@ -31,7 +31,7 @@ const buttonVariants = cva(
         secondary:
           "bg-surface-2 text-fg-body shadow-realce hover:bg-surface-3 hover:text-fg-strong",
         ghost:
-          "text-fg-muted hover:bg-surface-2 hover:text-fg-strong aria-expanded:bg-surface-2",
+          "text-fg-body hover:bg-surface-2 hover:text-fg-strong aria-expanded:bg-surface-2",
         destructive:
           "border-danger/40 bg-danger/10 text-danger hover:bg-danger/20 focus-visible:outline-danger",
         link: "text-tinta-texto underline-offset-4 hover:underline",

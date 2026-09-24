@@ -29,7 +29,7 @@ export interface PeriodoEscolhido {
   ate: string | null;
 }
 
-export const PERIODO_PADRAO: PeriodoEscolhido = { dias: '30', de: null, ate: null };
+export const PERIODO_PADRAO: PeriodoEscolhido = { dias: 'hoje', de: null, ate: null };
 
 const FIXOS = [
   { valor: 'hoje', curto: 'Hoje', longo: 'Hoje' },
@@ -49,7 +49,7 @@ export function rotuloDoPeriodo(p: PeriodoEscolhido): string {
   if (p.dias === 'livre' && p.de && p.ate) {
     return p.de === p.ate ? porExtenso(p.de) : `${porExtenso(p.de)} a ${porExtenso(p.ate)}`;
   }
-  return FIXOS.find((f) => f.valor === p.dias)?.longo ?? 'Últimos 30 dias';
+  return FIXOS.find((f) => f.valor === p.dias)?.longo ?? 'Hoje';
 }
 
 /** A busca da URL, do jeito que `periodoValido` espera ler do outro lado. */
@@ -66,7 +66,7 @@ export function buscaDoPeriodo(p: PeriodoEscolhido): string {
  * É o inverso exato de `buscaDoPeriodo`, e existe porque as telas abertas por
  * clique (`/painel/compras`, `/painel/eventos`) nascem com o período JÁ
  * escolhido na tela anterior — ele viaja na URL. Sem esta função a lista abriria
- * nos 30 dias padrão e mostraria um total diferente do número que foi clicado.
+ * no período padrão (hoje) e mostraria um total diferente do número que foi clicado.
  *
  * 🔴 Só aceita o intervalo livre com as DUAS datas válidas, a mesma régua do
  * `periodoValido` do servidor. URL pela metade cai no padrão em vez de virar um
@@ -151,8 +151,8 @@ export function SeletorDePeriodo({
     aoMudar({
       ...proximo,
       // Só vira `livre` com as duas datas de pé. Apagar uma delas devolve o
-      // painel para os 30 dias em vez de deixá-lo num intervalo pela metade.
-      dias: completo ? 'livre' : valor.dias === 'livre' ? '30' : valor.dias,
+      // painel para hoje em vez de deixá-lo num intervalo pela metade.
+      dias: completo ? 'livre' : valor.dias === 'livre' ? 'hoje' : valor.dias,
     });
   }
 

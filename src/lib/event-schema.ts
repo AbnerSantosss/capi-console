@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { jaEhSha256 } from './hash-detect';
+
 /**
  * Schema unico do evento, compartilhado pelo cliente e por /api/enviar.
  *
@@ -43,7 +45,16 @@ export const eventFieldsSchema = z.object({
     .optional()
     .or(z.literal('')),
 
-  email: z.string().email('E-mail inválido.').optional().or(z.literal('')),
+  // Aceita e-mail valido OU um SHA-256 de 64 hex ja pronto (formato que a
+  // propria Meta documenta). Sem isto, colar um payload ja hasheado era
+  // barrado aqui com uma mensagem que nao dizia o que realmente aconteceu.
+  email: z
+    .string()
+    .refine((v) => !v || z.string().email().safeParse(v).success || jaEhSha256(v), {
+      message: 'Informe um e-mail válido ou um hash SHA-256 de 64 caracteres.',
+    })
+    .optional()
+    .or(z.literal('')),
 
   phone: z
     .string()

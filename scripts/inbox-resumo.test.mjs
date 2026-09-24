@@ -215,9 +215,9 @@ console.log('\n  Resumo do Painel de eventos\n');
   ok(periodoValido('90') === 90, 'texto "90" vira 90');
   ok(periodoValido('hoje') === 'hoje', 'texto "hoje" passa inteiro');
   ok(periodoValido('ontem') === 'ontem', 'texto "ontem" passa inteiro');
-  ok(periodoValido('abc') === 30, 'lixo cai no padrao de 30');
-  ok(periodoValido(null) === 30, 'ausente cai no padrao de 30');
-  ok(periodoValido(15) === 30, 'valor fora dos cinco tambem cai em 30');
+  ok(periodoValido('abc') === 'hoje', 'lixo cai no padrao de hoje');
+  ok(periodoValido(null) === 'hoje', 'ausente cai no padrao de hoje');
+  ok(periodoValido(15) === 'hoje', 'valor fora dos cinco tambem cai em hoje');
 }
 
 /* ---------------- 13. Hoje e Ontem sao dia de calendario ---------------- */
@@ -294,7 +294,7 @@ console.log('\n  Resumo do Painel de eventos\n');
   const trocado = periodoValido(null, '2026-09-10', '2026-09-01');
   ok(
     trocado.de === '2026-09-01' && trocado.ate === '2026-09-10',
-    'ordem invertida e desentortada em vez de virar o padrao de 30'
+    'ordem invertida e desentortada em vez de virar o padrao de hoje'
   );
 
   ok(
@@ -302,11 +302,11 @@ console.log('\n  Resumo do Painel de eventos\n');
     'as datas mandam mais que o ?dias= que ficou para tras'
   );
   ok(periodoValido('7', '2026-09-01', null) === 7, 'uma data so nao faz intervalo: vale o ?dias=');
-  ok(periodoValido(null, '2026-09-01') === 30, 'uma data so e sem dias cai no padrao de 30');
-  ok(periodoValido(null, '2026-02-30', '2026-03-01') === 30, '🔴 30 de fevereiro nao existe: cai no padrao');
-  ok(periodoValido(null, '2026-13-01', '2026-13-02') === 30, 'mes 13 nao existe: cai no padrao');
-  ok(periodoValido(null, '01/09/2026', '10/09/2026') === 30, 'formato brasileiro na URL nao passa');
-  ok(periodoValido(null, "2026-09-01'; DROP", '2026-09-10') === 30, 'lixo com aspas nao vira data');
+  ok(periodoValido(null, '2026-09-01') === 'hoje', 'uma data so e sem dias cai no padrao de hoje');
+  ok(periodoValido(null, '2026-02-30', '2026-03-01') === 'hoje', '🔴 30 de fevereiro nao existe: cai no padrao');
+  ok(periodoValido(null, '2026-13-01', '2026-13-02') === 'hoje', 'mes 13 nao existe: cai no padrao');
+  ok(periodoValido(null, '01/09/2026', '10/09/2026') === 'hoje', 'formato brasileiro na URL nao passa');
+  ok(periodoValido(null, "2026-09-01'; DROP", '2026-09-10') === 'hoje', 'lixo com aspas nao vira data');
 }
 
 /* ---------------- 16. A amostra pode ser menor que a janela ---------------- */

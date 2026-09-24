@@ -177,7 +177,7 @@ export function dataIsoValida(bruto: unknown): bruto is string {
 
 /**
  * O período pedido na URL: `?dias=` para os cinco fixos, `?de=&ate=` para o
- * livre. Qualquer coisa fora disso cai em 30.
+ * livre. Qualquer coisa fora disso cai em "hoje".
  *
  * As duas datas mandam mais que `dias` quando ambas são válidas — quem
  * preencheu o calendário está pedindo aquele intervalo, e não o botão que
@@ -187,12 +187,12 @@ export function periodoValido(bruto: unknown, de?: unknown, ate?: unknown): Peri
   if (dataIsoValida(de) && dataIsoValida(ate)) {
     // Ordem invertida é engano óbvio de quem preencheu, e as duas datas dizem
     // sem ambiguidade qual intervalo a pessoa quer ver. Trocar é entregar o
-    // pedido; cair no padrão de 30 dias seria devolver outro número sem avisar.
+    // pedido; cair no padrão de "hoje" seria devolver outro número sem avisar.
     return de <= ate ? { de, ate } : { de: ate, ate: de };
   }
   if (bruto === 'hoje' || bruto === 'ontem') return bruto;
   const n = Number(bruto);
-  return (PERIODOS as readonly unknown[]).includes(n) ? (n as Periodo) : 30;
+  return (PERIODOS as readonly unknown[]).includes(n) ? (n as Periodo) : 'hoje';
 }
 
 const DIA_MS = 24 * 60 * 60 * 1000;

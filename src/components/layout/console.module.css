@@ -219,106 +219,6 @@
   margin-bottom: 1.5rem;
 }
 
-/* Fundo de area (plano de imagens, secoes 4.1, 6.1, 7.1, 8.1 e 9.1).
-   "Imagem aqui e apoio, nunca o centro" — por isso ela entra como camada de
-   fundo do cabecalho e nao como cartao proprio: nenhuma tela ganha um bloco
-   novo, so a faixa que ja existe deixa de ser lisa.
-
-   O `scaleX(-1)` nao e enfeite. As cinco fotos foram feitas com o objeto nos
-   40% da ESQUERDA e o resto vazio, porque o plano supunha texto a direita. O
-   cabecalho do console faz o contrario — titulo e descricao moram a esquerda.
-   Espelhar poe o objeto do lado que esta vago e custa so inverter a direcao da
-   luz, que numa camada a 40% de opacidade ninguem le como erro.
-
-   A mascara e uma ELIPSE e nao um degrade lateral. Um degrade so na horizontal
-   deixava as bordas de cima, de baixo e do fim da caixa cortadas em reta, e o
-   carvao da foto (um fio mais claro que o fundo da pagina) desenhava um
-   retangulo visivel em volta da imagem — exatamente a "assinatura de IA" que o
-   v4 passou a fase 3a apagando. A elipse apaga nos quatro lados.
-
-   Ela e escrita no espaco LOCAL, antes do espelho: fica sobre o objeto, que no
-   arquivo esta a esquerda. Depois do scaleX, o que sobrou aparece a direita e o
-   texto continua sobre fundo limpo — e por isso o portao de contraste continua
-   medindo o que media antes.
-
-   Os raios estao em PIXEL e nao em porcentagem, e a imagem tem largura fixa
-   (340px) em vez de altura relativa. Porcentagem e medida contra a caixa, que
-   muda de largura com a janela e de altura quando o titulo quebra em duas
-   linhas — a elipse acompanhava e em certas larguras encostava na borda da
-   caixa, devolvendo o retangulo. Com raio fixo sobre imagem fixa, o desenho e o
-   mesmo em 390 e em 1440. So o raio VERTICAL fica em 50%: ele precisa morrer
-   exatamente no topo e na base da caixa, seja qual for a altura dela.
-
-   E os 2.5rem de `background-position` sao o respiro que separa o objeto da
-   borda da caixa. Colado nela, o corte reto voltava pelo outro lado.
-
-   `z-index: -1` com `isolation: isolate` no pai: a camada desce para tras do
-   conteudo do cabecalho sem atravessar para tras da pagina. */
-.pageHeader::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset-block: -1.75rem;
-  inset-inline: -1rem;
-  background-image: var(--fundo-da-area, none);
-  background-repeat: no-repeat;
-  background-position: 2.5rem center;
-  background-size: 340px auto;
-  opacity: 0.34;
-  transform: scaleX(-1);
-  mask-image: radial-gradient(ellipse 125px 50% at 145px 50%, black 0 30%, transparent 100%);
-  pointer-events: none;
-}
-
-/* Cabecalho COM acao: o botao mora exatamente onde a imagem cai. Empurrar o
-   objeto para dentro e mais barato que mover o botao — a barra de acoes e a
-   mesma peca em todo o console e nao vai mudar de lugar por causa de um fundo.
-   Hoje so `/` (Disparo manual) tem acao; o `:has` existe para que a proxima
-   tela que ganhar um botao ja nasca certa, sem ninguem lembrar desta regra. */
-.pageHeader:has(.pageHeaderActions)::before {
-  background-position: 10rem center;
-  mask-image: radial-gradient(ellipse 125px 50% at 265px 50%, black 0 30%, transparent 100%);
-}
-
-/* Abaixo de 48rem a camada SAI, e nao encolhe. A imagem e medida em pixel fixo
-   de proposito (ver o bloco de cima); numa tela de 390 o objeto ocuparia dois
-   tercos da largura e cairia atras do titulo, que e a linha que o operador le
-   para saber se esta na tela certa. Fundo decorativo nao disputa espaco com
-   ela — no estreito a faixa volta a ser lisa e nada se perde. */
-@media (max-width: 48rem) {
-  .pageHeader::before {
-    content: none;
-  }
-}
-
-/* Sem imagem de area, sem camada — `background-image: none` ainda pintaria a
-   caixa transparente, mas o `::before` continuaria criando uma camada a toa em
-   toda tela que nao esta nesta lista (Guia, Integracoes, Empresa...). */
-.page:not([data-area='painel']):not([data-area='pixels']):not([data-area='instalacao']):not([data-area='manual']):not([data-area='automatico'])
-  .pageHeader::before {
-  content: none;
-}
-
-.page[data-area='painel'] {
-  --fundo-da-area: url('/brand/secoes/painel.webp');
-}
-
-.page[data-area='pixels'] {
-  --fundo-da-area: url('/brand/secoes/pixels.webp');
-}
-
-.page[data-area='instalacao'] {
-  --fundo-da-area: url('/brand/secoes/instalacao.webp');
-}
-
-.page[data-area='manual'] {
-  --fundo-da-area: url('/brand/secoes/manual.webp');
-}
-
-.page[data-area='automatico'] {
-  --fundo-da-area: url('/brand/secoes/automatico.webp');
-}
-
 .pageHeaderLead {
   min-width: 0;
   flex: 1 1 22rem;
@@ -366,7 +266,13 @@
 .pageDescription {
   max-width: 40rem;
   margin-top: 0.375rem;
-  color: var(--fg-muted);
+  /* Tarefa 6 do plano v5 (tabela de contraste): --fg-muted aqui era o mesmo
+     cinza apagado do corpo de texto secundario em toda a tela — a descricao
+     do cabecalho e a PRIMEIRA frase que decide se o operador esta na pagina
+     certa, entao ela merece o contraste de corpo, nao o de nota de rodape.
+     Ela e usada por `ConsolePageHeader.tsx` em todas as paginas do console:
+     a troca vale para as ~10 rotas que a compartilham, nao so /instalacao. */
+  color: var(--fg-body);
   font-size: var(--text-body);
   line-height: 1.55;
 }
