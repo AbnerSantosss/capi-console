@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Plus, Save, Search, ShieldAlert, Trash2, Zap } from '@/components/ui/icones';
+import { Plus, RotateCcw, Save, Search, ShieldAlert, Trash2, Zap } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Field, Callout, StatusDot } from '@/components/common/primitives';
 import { SeletorDePixel } from '@/components/pixels/SeletorDePixel';
-import { useBrandStore } from '@/stores/useBrandStore';
+import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
@@ -37,22 +39,56 @@ import { cn } from '@/lib/utils';
 import type { ModoRegra, RegraRoteamento } from '@/lib/config-store';
 
 const MODOS: { valor: ModoRegra; rotulo: string; ajuda: string }[] = [
-  { valor: 'auto', rotulo: 'Automático', ajuda: 'Dispara sozinho, sem revisão humana.' },
-  { valor: 'fila', rotulo: 'Fila', ajuda: 'Fica na caixa de entrada esperando um clique.' },
+  { valor: 'auto', rotulo: 'Automático', ajuda: 'Vai sozinho para a Meta, sem revisão humana.' },
+  { valor: 'fila', rotulo: 'Fila', ajuda: 'Fica na Fila esperando um clique.' },
   { valor: 'ignorar', rotulo: 'Ignorar', ajuda: 'Nunca vai para a Meta.' },
 ];
 
 const NOMES_CATALOGO = Object.keys(MAPA_EVENTOS_ORIGEM);
 
+type TomDoEstado = 'success' | 'warning' | 'danger' | 'neutral';
+
+/**
+ * V7: o Switch de envio automático de UM Pixel, dito em palavra na regra.
+ *
+ * É a segunda trava do envio automático (a primeira é a regra em Automático):
+ * só `autoDisparo === true` conta como ligado — nunca `!!`, `?? true` ou
+ * `!== false`, a mesma regra do servidor. Sem token nada sai, esteja o Switch
+ * como estiver, e a tela diz isso em vez de "Ligado".
+ */
+function estadoDoSwitch(m: MarcaPublica | undefined): { tom: TomDoEstado; texto: string } {
+  if (!m) return { tom: 'neutral', texto: 'Pixel não encontrado nesta empresa' };
+  if (!m.temToken) return { tom: 'danger', texto: 'Sem token — nada sai' };
+  return m.autoDisparo === true
+    ? { tom: 'success', texto: 'Ligado' }
+    : { tom: 'warning', texto: 'Desligado — vai para a Fila' };
+}
+
+/** Os Pixels que a regra usa, com a mesma leitura do servidor (`regraApontaPara`). */
+function pixelsDaRegra(r: RegraRoteamento): string[] {
+  return r.marcas.length ? r.marcas : ['default'];
+}
+
 export function RulesSection({
   regras,
   onChange,
   onSalvar,
+  onDescartar,
+  sujas,
   salvando,
 }: {
+  /**
+   * O rascunho que a tela mostra: o `regrasRascunho` da `IntegrationsPage`
+   * (C5). Nada daqui vai ao disco sem "Salvar regras".
+   */
   regras: RegraRoteamento[];
   onChange: (regras: RegraRoteamento[]) => void;
+  /** O único caminho que grava regras (C5, T10). */
   onSalvar: (regras: RegraRoteamento[]) => Promise<void>;
+  /** Volta ao que está gravado, sem reler o disco. */
+  onDescartar: () => void;
+  /** Há regra alterada que ainda não foi salva. */
+  sujas: boolean;
   salvando: boolean;
 }) {
   // A lista vem do store, nunca de uma leitura propria desta tela (IA-R8):
@@ -65,8 +101,13 @@ export function RulesSection({
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<'todas' | ModoRegra | 'desativadas'>('todas');
   const [abertas, setAbertas] = useState<string[]>([]);
+  // V7: o link para ligar ou desligar o Pixel vai para a aba Pixels DA
+  // empresa do endereço. Fora de `/e/<slug>` (rota antiga), a `/pixels`
+  // redireciona.
+  const params = useParams<{ slug?: string }>();
+  const abaPixels = params?.slug ? `/e/${params.slug}/pixels` : '/pixels';
 
-  const trocar = (i: number, mudanca: Partial<RegraRoteamento>) => {
+  const trocar =(i: number, mudanca: Partial<RegraRoteamento>) => {
     const novas = [...regras];
     novas[i] = { ...novas[i], ...mudanca };
     onChange(novas);
@@ -171,15 +212,15 @@ export function RulesSection({
     <div className="flex flex-col gap-4">
       {autoEmProducao.length > 0 ? (
         <Callout tone="danger" icon={Zap} title="Há regras automáticas em PRODUÇÃO">
-          {autoEmProducao.map((r) => r.eventoOrigem).join(', ')} dispara
+          {autoEmProducao.map((r) => r.eventoOrigem).join(', ')} envia
           {autoEmProducao.length > 1 ? 'm' : ''} para a Meta sem revisão e{' '}
           <strong>entra nas métricas reais</strong> da campanha. Para testar sem
-          afetar as métricas, preencha o Código de teste da marca.
+          afetar as métricas, preencha o Código de teste do Pixel.
         </Callout>
       ) : (
         <Callout tone="warning" icon={ShieldAlert}>
           O modo <strong>Automático</strong> envia para a Meta sem revisão humana.
-          Ligue somente depois de validar no Test Events. Marcas com Código de
+          Ligue somente depois de validar no Test Events. Pixels com Código de
           teste preenchido não entram nas métricas reais.
         </Callout>
       )}
@@ -223,10 +264,22 @@ export function RulesSection({
             <Plus className="size-4" aria-hidden />
             Adicionar regra
           </Button>
-          <Button onClick={salvar} disabled={salvando}>
+          {/* C5 (T10): com regra alterada, o botão vira o destaque da barra e o
+              aviso diz que nada foi gravado ainda — os "Salvar" das outras
+              abas não levam regras junto. */}
+          <Button variant={sujas ? 'default' : 'outline'} onClick={salvar} disabled={salvando}>
             <Save className="size-4" aria-hidden />
             {salvando ? 'Salvando…' : 'Salvar regras'}
           </Button>
+          {sujas && (
+            <>
+              <Button variant="ghost" onClick={onDescartar} disabled={salvando}>
+                <RotateCcw className="size-4" aria-hidden />
+                Descartar alterações
+              </Button>
+              <StatusDot tone="warning">Regras alteradas, não salvas</StatusDot>
+            </>
+          )}
           <span className="text-caption text-fg-muted">
             {visiveis.length} de {regras.length} regra{regras.length === 1 ? '' : 's'}
           </span>
@@ -240,7 +293,7 @@ export function RulesSection({
         regras.length === 0 ? (
           <EstadoVazio
             icone={Zap}
-            titulo="Nenhuma regra de roteamento"
+            titulo="Nenhuma regra ainda"
             motivo="Sem regra, todo webhook que chega fica parado na fila esperando um clique. Uma regra diz qual evento da plataforma vira qual evento da Meta, e se ele sai sozinho."
             acao={
               <Button variant="outline" onClick={adicionar}>
@@ -289,6 +342,12 @@ export function RulesSection({
               : par
                 ? par.descricao
                 : 'Sem evento da Meta escolhido: nada seria enviado.';
+          // V7: o estado das duas travas já no cabeçalho, sem abrir a regra.
+          const pixelsDestaRegra = pixelsDaRegra(r);
+          const pixelsLigados = pixelsDestaRegra.filter((id) => {
+            const m = marcaPorId.get(id);
+            return Boolean(m?.temToken) && m?.autoDisparo === true;
+          }).length;
 
           return (
             <AccordionItem
@@ -325,6 +384,20 @@ export function RulesSection({
                     <Badge className="w-fit">
                       {MODOS.find((m) => m.valor === r.modo)?.rotulo}
                     </Badge>
+                    {r.modo === 'auto' && r.ativo &&
+                      (pixelsLigados === pixelsDestaRegra.length ? (
+                        <StatusDot tone="success">
+                          {pixelsDestaRegra.length === 1 ? 'Pixel ligado' : 'Pixels ligados'}: sai sozinho
+                        </StatusDot>
+                      ) : pixelsLigados === 0 ? (
+                        <StatusDot tone="warning">
+                          {pixelsDestaRegra.length === 1 ? 'Pixel desligado' : 'Pixels desligados'}: vai para a Fila
+                        </StatusDot>
+                      ) : (
+                        <StatusDot tone="warning">
+                          {pixelsLigados} de {pixelsDestaRegra.length} Pixels ligados
+                        </StatusDot>
+                      ))}
                   </span>
                   <span className="text-caption font-normal text-fg-muted">{explicacao}</span>
                 </span>
@@ -467,6 +540,48 @@ export function RulesSection({
                     valor={r.marcas}
                     onChange={(ids) => trocar(i, { marcas: ids })}
                   />
+                )}
+
+                {/* V7: as DUAS travas do envio automático, juntas e em
+                    palavra — a regra (aqui) e o Switch de cada Pixel (na aba
+                    Pixels). Quem olha só a regra achava que "Automático"
+                    bastava. */}
+                {r.modo === 'auto' && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface-1 p-3">
+                    <p className="text-label font-semibold text-fg-strong">
+                      Só sai sozinho quando as duas estão ligadas
+                    </p>
+                    <p className="text-caption text-fg-muted">
+                      A regra em Automático e o envio automático do Pixel. Se uma
+                      delas estiver desligada, o evento fica na Fila esperando você.
+                    </p>
+                    <ul className="flex flex-col gap-1.5">
+                      <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-caption text-fg-body">Esta regra</span>
+                        <StatusDot tone={r.ativo ? 'success' : 'warning'}>
+                          {r.ativo ? 'Ligada, em Automático' : 'Desativada — nada sai'}
+                        </StatusDot>
+                      </li>
+                      {pixelsDaRegra(r).map((id) => {
+                        const m = marcaPorId.get(id);
+                        const estado = estadoDoSwitch(m);
+                        return (
+                          <li key={id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-caption text-fg-body">
+                              Pixel {m?.nome ?? id}
+                            </span>
+                            <StatusDot tone={estado.tom}>{estado.texto}</StatusDot>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <Link
+                      href={abaPixels}
+                      className="self-start text-caption font-medium text-tinta-texto underline-offset-4 hover:underline"
+                    >
+                      Ligar ou desligar o Pixel em Pixels
+                    </Link>
+                  </div>
                 )}
               </div>
               </AccordionContent>

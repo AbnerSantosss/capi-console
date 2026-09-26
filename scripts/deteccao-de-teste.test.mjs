@@ -20,6 +20,7 @@
  *  1. Evento comum não é teste nem suspeito
  *  2. Lista do operador: e-mail exato, nome por conter, acento e caixa
  *  3. Padrão conhecido: domínio de exemplo, evt_preview, cupom de centavos
+ *  3-B. A explicação diz QUAL padrão bateu (C12, D13); a régua fica igual
  *  4. Suspeita por e-mail repetido: só compra, só a partir do limite
  *  5. Suspeito NÃO é teste — a distinção que impede o descarte silencioso
  *  6. limiteDeCompras: padrão, piso de 2 e lixo
@@ -28,9 +29,8 @@
  * Uso: npm run test:deteccao-teste
  */
 
-const { avaliarTeste, padraoConhecido, limiteDeCompras, COMPRAS_PARA_SUSPEITAR } = await import(
-  new URL('../src/lib/deteccao-de-teste.ts', import.meta.url).href
-);
+const { avaliarTeste, padraoConhecido, qualPadraoConhecido, limiteDeCompras, COMPRAS_PARA_SUSPEITAR } =
+  await import(new URL('../src/lib/deteccao-de-teste.ts', import.meta.url).href);
 
 let falhas = 0;
 const ok = (cond, texto, detalhe = '') => {
@@ -98,6 +98,161 @@ console.log('\n  Detecção de lead de teste\n');
 
   const v = avaliarTeste({ email: 'qa@example.com' });
   ok(v.ehTeste === true && v.motivo === 'padrao-conhecido', 'padrao conhecido vira veredicto de teste');
+}
+
+/* ---------------- 3-B. A explicação diz qual padrão bateu (C12, D13) ---------------- */
+{
+  // D13: a régua fica como está; só a frase muda. Antes ela dizia "(domínio de
+  // exemplo, evt_preview ou cupom de centavos)" para TUDO, inclusive para o
+  // "jairo", que é o que mais pega — e o operador ficava sem saber por que uma
+  // venda tinha virado teste.
+  const temQual = typeof qualPadraoConhecido === 'function';
+  ok(temQual, 'qualPadraoConhecido existe e e exportada');
+  const qual = (ev) => (temQual ? qualPadraoConhecido(ev) : undefined);
+  const frase = (ev) => String(avaliarTeste(ev).explicacao ?? '');
+
+  // O caso que mais pega: o e-mail com o padrao da equipe.
+  const jairo = frase({ email: 'jairo.silva@x.com' });
+  ok(jairo.includes('jairo'), '🔴 e-mail com "jairo": a frase cita o jairo', JSON.stringify(jairo));
+  ok(jairo.includes('padrão da equipe de testes'), 'e-mail com "jairo": a frase diz que e o padrao da equipe', JSON.stringify(jairo));
+  ok(jairo.includes('e-mail'), 'e-mail com "jairo": a frase diz que foi pelo e-mail', JSON.stringify(jairo));
+  // A frase vai para a tela e para a caixa de entrada: o e-mail inteiro do
+  // comprador nao pode sair nela.
+  ok(!jairo.includes('jairo.silva@x.com') && !jairo.includes('silva'), '🔴 a frase nao repete o e-mail do comprador', JSON.stringify(jairo));
+
+  // O mesmo padrao pelo nome, em pedacos.
+  const jairoNome = frase({ email: 'cliente@gmail.com', firstName: 'Jairo', lastName: 'Silva' });
+  ok(jairoNome.includes('jairo') && jairoNome.includes('nome'), 'nome com "jairo": a frase diz que foi pelo nome', JSON.stringify(jairoNome));
+  ok(!jairoNome.includes('Silva') && !jairoNome.includes('silva'), 'a frase nao repete o nome do comprador', JSON.stringify(jairoNome));
+
+  const exemplo = frase({ email: 'lead@example.com' });
+  ok(exemplo.includes('domínio de exemplo'), 'lead@example.com: a frase diz "domínio de exemplo"', JSON.stringify(exemplo));
+  ok(exemplo.includes('@example.com'), 'lead@example.com: a frase diz qual dominio', JSON.stringify(exemplo));
+  ok(!exemplo.includes('lead@'), 'lead@example.com: a frase nao repete o e-mail inteiro', JSON.stringify(exemplo));
+
+  const centavos = frase({ email: 'cliente@gmail.com', valor: 0.05 });
+  ok(centavos.includes('centavos'), 'valor 0.05: a frase diz "centavos"', JSON.stringify(centavos));
+  ok(centavos.includes('R$ 0,05'), 'valor 0.05: a frase diz o valor em reais', JSON.stringify(centavos));
+
+  const preview = frase({ eventId: 'evt_preview_123' });
+  ok(preview.includes('evt_preview'), 'evt_preview: a frase cita evt_preview', JSON.stringify(preview));
+
+  const prefixo = frase({ email: 'teste@dominioreal.com.br' });
+  ok(prefixo.includes('"teste@"'), 'teste@: a frase diz qual comeco de e-mail', JSON.stringify(prefixo));
+  const testador = frase({ email: 'testador@dominioreal.com.br' });
+  ok(testador.includes('"testador@"'), 'testador@: a frase diz qual comeco de e-mail', JSON.stringify(testador));
+
+  const convidado = frase({ nome: 'Lead Convidado' });
+  ok(convidado.includes('lead convidado'), 'nome "Lead Convidado": a frase cita o nome de teste', JSON.stringify(convidado));
+  const simulacao = frase({ nome: 'Simulação Teste Checkout' });
+  ok(simulacao.includes('simulação teste'), 'nome "Simulação Teste": a frase cita o nome de teste', JSON.stringify(simulacao));
+
+  // Formato: sempre o mesmo comeco e o mesmo fim, e nunca mais a frase generica.
+  for (const [rotulo, f] of [
+    ['jairo', jairo],
+    ['jairo pelo nome', jairoNome],
+    ['example.com', exemplo],
+    ['centavos', centavos],
+    ['evt_preview', preview],
+    ['teste@', prefixo],
+    ['testador@', testador],
+    ['lead convidado', convidado],
+    ['simulacao teste', simulacao],
+  ]) {
+    ok(
+      f.startsWith('Padrão de teste conhecido: ') && f.endsWith('. Nada é enviado à Meta.'),
+      `formato da frase (${rotulo})`,
+      JSON.stringify(f)
+    );
+    ok(!f.includes('evt_preview ou cupom de centavos'), `a frase generica antiga sumiu (${rotulo})`, JSON.stringify(f));
+  }
+
+  // qualPadraoConhecido: texto quando bate, null quando nao bate.
+  ok(typeof qual({ email: 'jairo@gmail.com' }) === 'string', 'qualPadraoConhecido devolve texto quando bate');
+  for (const caso of [
+    { email: 'cliente@gmail.com', valor: 497 },
+    { email: 'cliente@gmail.com', valor: 0 },
+    { email: 'cliente@gmail.com', valor: 1 },
+    { valor: -5 },
+    {},
+  ]) {
+    ok(qual(caso) === null, 'qualPadraoConhecido devolve null quando nada bate', JSON.stringify(caso));
+  }
+
+  // Mesma ordem de antes: quando dois padroes batem, vale o primeiro da regua
+  // (evt_preview > dominio > comeco/jairo no e-mail > nome > valor).
+  const dois = frase({ eventId: 'evt_preview_1', email: 'x@example.com', valor: 0.01 });
+  ok(dois.includes('evt_preview') && !dois.includes('domínio'), 'dois padroes: vale o primeiro da regua', JSON.stringify(dois));
+  const emailENome = frase({ email: 'y@example.org', nome: 'Jairo' });
+  ok(emailENome.includes('@example.org') && !emailENome.includes('jairo'), 'e-mail antes do nome, como sempre foi', JSON.stringify(emailENome));
+
+  // 🔴 A regua NAO mudou (D13): a copia da funcao de antes, aqui dentro, tem
+  // que concordar com `padraoConhecido` e com `qualPadraoConhecido` em todos os
+  // casos — os que batem, os que nao batem e os podres.
+  const achatarAntigo = (v) =>
+    typeof v !== 'string' ? '' : v.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  const reguaAntiga = (ev) => {
+    const email = achatarAntigo(ev.email);
+    const nome = achatarAntigo(ev.nome || `${ev.firstName ?? ''} ${ev.lastName ?? ''}`);
+    const valor = Number(ev.valor ?? 0);
+    if (typeof ev.eventId === 'string' && /^evt_preview/i.test(ev.eventId)) return true;
+    if (/@(example\.com|exemplo\.com\.br|example\.org|test\.com)$/.test(email)) return true;
+    if (email.startsWith('teste@') || email.startsWith('testador@') || email.includes('jairo')) return true;
+    if (nome.includes('jairo') || nome === 'lead convidado' || nome.includes('simulacao teste')) return true;
+    if (Number.isFinite(valor) && valor > 0 && valor <= 0.1) return true;
+    return false;
+  };
+  const bateria = [
+    { email: 'alguem@example.com' },
+    { email: 'a@exemplo.com.br' },
+    { email: 'a@example.org' },
+    { email: 'a@test.com' },
+    { email: 'a@test.com.br' },
+    { email: 'a@example.com.br' },
+    { eventId: 'evt_preview_123' },
+    { eventId: 'EVT_PREVIEW' },
+    { eventId: 'evt_real_1' },
+    { email: 'teste@dominioreal.com.br' },
+    { email: 'meuteste@dominio.com' },
+    { email: 'testador@x.com' },
+    { email: 'JAIRO.silva@x.com' },
+    { email: 'x@jairo.com.br' },
+    { nome: 'Jairo Silva' },
+    { nome: 'JÁIRO' },
+    { firstName: 'Jairo', lastName: 'Silva' },
+    { nome: 'Lead Convidado' },
+    { nome: 'Lead Convidado Extra' },
+    { nome: 'Simulação Teste' },
+    { nome: 'simulacao teste 2' },
+    { valor: 0.01 },
+    { valor: 0.1 },
+    { valor: 0.11 },
+    { valor: 0 },
+    { valor: -5 },
+    { valor: 'quinhentos' },
+    { email: 'cliente@gmail.com', nome: 'Maria Souza', valor: 497 },
+    {},
+    { email: null },
+    { email: 12345 },
+    { nome: {} },
+    { eventId: [] },
+  ];
+  for (const caso of bateria) {
+    const antes = reguaAntiga(caso);
+    let lancou = false;
+    let agora;
+    let texto;
+    try {
+      agora = padraoConhecido(caso);
+      texto = qual(caso);
+    } catch {
+      lancou = true;
+    }
+    ok(!lancou, 'regua: entrada nao lanca', JSON.stringify(caso));
+    ok(agora === antes, '🔴 padraoConhecido continua dando o mesmo resultado de antes', JSON.stringify(caso));
+    ok((texto !== null && texto !== undefined) === antes, 'qualPadraoConhecido bate exatamente onde a regua antiga batia', JSON.stringify(caso));
+    ok(avaliarTeste(caso).ehTeste === antes, 'avaliarTeste (sem lista) marca teste nos mesmos casos de antes', JSON.stringify(caso));
+  }
 }
 
 /* ---------------- 4. Suspeita por e-mail repetido ---------------- */

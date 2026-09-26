@@ -18,6 +18,16 @@
  *      descarta Pixel de outra empresa, grava o motivo no item e nunca envia;
  *      para a empresa padrão o resultado é o mesmo de antes
  *   E  `ipDoVisitante` prefere CF-Connecting-IP ao X-Forwarded-For (F8)
+ *   F  POST /api/enviar (o "Enviar" do formulário, C3: D16, T4): o Pixel tem
+ *      que existir E ser da empresa ativa — id inexistente ou Pixel de outra
+ *      empresa é 404, sem cair no primeiro Pixel da lista; aba e navegador em
+ *      empresas diferentes é 409; marca sem Pixel ID ou token é 400, sem
+ *      recorrer ao .env. Em toda recusa, nenhuma chamada sai
+ *   G  envio em MODO TESTE não bloqueia o envio real (C8, D12): a venda que
+ *      saiu só com o Pixel em teste (`test_event_code`) SAI de novo quando o
+ *      Pixel vai para produção — pelo "Enviar" do formulário e pelo "Disparar
+ *      agora" da caixa —, a linha do log grava `modoTeste`, e o segundo envio
+ *      REAL continua recusado como duplicado
  *
  * 🔴 Nenhuma rede. O `fetch` global é trocado por um falso ANTES de qualquer
  * import de src/: ele só anota a URL (o corpo leva o access_token, e não é
@@ -40,7 +50,12 @@ import { fileURLToPath } from 'node:url';
 const GRAPH = /^https:\/\/graph\.facebook\.com\/[^/]+\/([^/]+)\/events$/;
 /** Só a URL de cada chamada. O corpo leva o access_token: não é guardado nem impresso. */
 const chamadas = [];
-const fetchFalso = async (entrada) => {
+/**
+ * Um booleano por chamada, na mesma ordem de `chamadas`: o corpo levou
+ * `test_event_code`? Só o sim/não sai do corpo — nada dele é guardado (G, C8).
+ */
+const comCodigoDeTeste = [];
+const fetchFalso = async (entrada, init) => {
   const url =
     typeof entrada === 'string'
       ? entrada
@@ -48,6 +63,14 @@ const fetchFalso = async (entrada) => {
         ? entrada.href
         : String(entrada?.url ?? '');
   chamadas.push(url);
+  let levouCodigo = false;
+  try {
+    const c = JSON.parse(typeof init?.body === 'string' ? init.body : '{}');
+    levouCodigo = typeof c?.test_event_code === 'string' && c.test_event_code.length > 0;
+  } catch {
+    /* corpo que não é JSON: fica false */
+  }
+  comCodigoDeTeste.push(levouCodigo);
   if (!GRAPH.test(url)) throw new Error('rede bloqueada pelo teste');
   return new Response(JSON.stringify({ events_received: 1, fbtrace_id: 'falso-local' }), {
     status: 200,
@@ -119,6 +142,7 @@ const { dispararItem } = await import(new URL('../src/lib/auto-dispatch.ts', imp
 const rotaDisparar = await import(
   new URL('../src/app/api/inbox/disparar/route.ts', import.meta.url).href
 );
+const rotaEnviar = await import(new URL('../src/app/api/enviar/route.ts', import.meta.url).href);
 const { ipDoVisitante } = await import(new URL('../src/lib/tag-handler.ts', import.meta.url).href);
 
 let falhas = 0;
@@ -308,6 +332,20 @@ console.log('\n  A. POST /api/inbox/disparar');
     'A6: o espelho — item da empresa padrão não vai para o Pixel da B',
     `status=${r.status}`
   );
+}
+{
+  // R2 da C10: o item da sonda ("Testar" da plataforma) nunca sai por clique,
+  // nem com o Pixel da própria empresa, nem sem `marcas` (recuo da regra).
+  const item = await novoItem('emp_b', { testePlataforma: true });
+  const antes = chamadas.length;
+  const comPixel = await disparar({ id: item.id, marcas: ['pixel_b'] }, 'emp_b');
+  const semPixel = await disparar({ id: item.id }, 'emp_b');
+  ok(
+    comPixel.status === 409 && semPixel.status === 409 && chamadas.length === antes,
+    '🔴 A7: item testePlataforma → 409 com e sem marcas, e ZERO chamadas',
+    `status=${comPixel.status}/${semPixel.status} chamadas=${chamadas.length - antes}`
+  );
+  ok(/Testar/.test(comPixel.corpo.erro ?? ''), 'A7: a mensagem diz que é o teste do botão "Testar"');
 }
 
 /* ---------------- B. Item da B com o Pixel da própria B segue ---------------- */
@@ -539,6 +577,351 @@ console.log('\n  E. ipDoVisitante (F8)');
   );
 }
 
+/* ---------------- F. POST /api/enviar: Pixel existe e é da empresa ativa (C3) ---------------- */
+
+console.log('\n  F. POST /api/enviar (C3)');
+
+/**
+ * Empresa A com dois Pixels falsos: um completo e um sem Pixel ID (só token).
+ * Gravados pelo `salvarMarca` de verdade, na pasta temporária, DEPOIS das
+ * seções A–E — a montagem delas não muda.
+ */
+const PIXEL_A = '333333333333333';
+/** Pixel "do .env" deste teste: falso, e só existe durante o caso F6. */
+const PIXEL_DO_ENV = '999999999999999';
+await registro.salvarEmpresa({ id: 'emp_a', nome: 'Empresa A' });
+await cfgStore.criarIntegracoesDaEmpresa({ id: 'emp_a', slug: 'empresa-a' });
+await cfgStore.salvarMarca({
+  id: 'pixel_a',
+  nome: 'Pixel da empresa A (falso)',
+  pixelId: PIXEL_A,
+  accessToken: 'token-falso-da-a',
+  testCode: '',
+  empresaId: 'emp_a',
+});
+await cfgStore.salvarMarca({
+  id: 'pixel_a_sem_id',
+  nome: 'Pixel da empresa A sem ID (falso)',
+  pixelId: '',
+  accessToken: 'token-falso-da-a-sem-id',
+  testCode: '',
+  empresaId: 'emp_a',
+});
+await cfgStore.salvarMarca({
+  id: 'pixel_a_sem_token',
+  nome: 'Pixel da empresa A sem token (falso)',
+  pixelId: '444444444444444',
+  accessToken: '',
+  testCode: '',
+  empresaId: 'emp_a',
+});
+{
+  const daA = (await cfgStore.listarMarcas('emp_a')).map((m) => m.id).sort();
+  ok(
+    daA.join(',') === 'pixel_a,pixel_a_sem_id,pixel_a_sem_token',
+    'montagem F: a empresa A tem os três Pixels dela',
+    `[${daA.join(', ')}]`
+  );
+}
+
+let seqEnvio = 0;
+/**
+ * O corpo que `useDisparo.ts` monta: evento com cara de venda real (e-mail e
+ * pedido fora de todo padrão de teste) e ids únicos, para o dedup nunca ser o
+ * motivo de uma recusa aqui.
+ */
+function corpoDoFormulario(brandId) {
+  seqEnvio += 1;
+  const evento = {
+    event_name: 'Purchase',
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: `evt_c3_${seqEnvio}_${Date.now()}`,
+    event_source_url: 'https://loja-ficticia.invalid/obrigado',
+    action_source: 'website',
+    user: {
+      email: `formulario${seqEnvio}@loja-ficticia.invalid`,
+      firstName: 'Comprador',
+      lastName: `Formulario ${seqEnvio}`,
+    },
+    custom: { value: 49.9, currency: 'BRL', orderId: `pedido-c3-${seqEnvio}` },
+  };
+  return brandId === undefined ? { event: evento } : { brandId, event: evento };
+}
+
+/** O botão "Enviar": POST na rota de verdade, com header e cookie de empresa opcionais. */
+async function enviar(corpo, { header, cookieEmpresa } = {}) {
+  exigirFetchFalso();
+  const headers = {
+    cookie: cookieEmpresa ? `${COOKIE}; capi_empresa=${cookieEmpresa}` : COOKIE,
+    'content-type': 'application/json',
+  };
+  if (header) headers['x-empresa-id'] = header;
+  const res = await rotaEnviar.POST(
+    new NextRequest('http://localhost:3333/api/enviar', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(corpo),
+    })
+  );
+  return { status: res.status, corpo: await res.json() };
+}
+
+const textoDoErro = (corpo) => [corpo?.erro, ...(corpo?.erros ?? [])].filter(Boolean).join(' · ');
+
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('nao-existe'));
+  ok(
+    r.status === 404,
+    '🔴 F1: brandId que não existe → 404 (antes caía no primeiro Pixel da lista e enviava)',
+    `status=${r.status}`
+  );
+  ok(chamadas.length === antes, '🔴 F1: ZERO chamadas ao envio', `chamadas=${chamadas.length - antes}`);
+  ok(
+    /não existe ou não é da empresa ativa/.test(textoDoErro(r.corpo)),
+    'F1: a mensagem manda recarregar e escolher o Pixel de novo',
+    textoDoErro(r.corpo)
+  );
+}
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('pixel_b'), { header: 'emp_a' });
+  ok(
+    r.status === 404 && chamadas.length === antes,
+    '🔴 F2: Pixel da empresa B com a empresa A ativa → 404 e nada sai',
+    `status=${r.status} chamadas=${chamadas.length - antes}`
+  );
+}
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('default'), { header: 'emp_b' });
+  ok(
+    r.status === 404 && chamadas.length === antes,
+    '🔴 F3: o Pixel do dono ("default") com a empresa B ativa → 404 e nada sai',
+    `status=${r.status} chamadas=${chamadas.length - antes}`
+  );
+}
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('pixel_a'), { header: 'emp_a', cookieEmpresa: 'emp_b' });
+  ok(
+    r.status === 409 && chamadas.length === antes,
+    '🔴 F4: aba na A (header) e navegador na B (cookie) → 409 e nada sai',
+    `status=${r.status} chamadas=${chamadas.length - antes}`
+  );
+  ok(
+    /Recarregue a página antes de enviar/.test(textoDoErro(r.corpo)),
+    'F4: a mensagem do 409 fala em enviar e manda recarregar',
+    textoDoErro(r.corpo)
+  );
+}
+{
+  const antes = chamadas.length;
+  const semCampo = await enviar(corpoDoFormulario(undefined));
+  const vazio = await enviar(corpoDoFormulario('   '));
+  ok(
+    semCampo.status === 400 &&
+      vazio.status === 400 &&
+      /Escolha o Pixel/.test(textoDoErro(semCampo.corpo)) &&
+      /Escolha o Pixel/.test(textoDoErro(vazio.corpo)) &&
+      chamadas.length === antes,
+    '🔴 F5: sem brandId (ou só espaços) → 400 "Escolha o Pixel." e nada sai (antes virava "default")',
+    `status=${semCampo.status}/${vazio.status} chamadas=${chamadas.length - antes}`
+  );
+}
+{
+  // Sem recuo para o .env: a marca da A sem Pixel ID não pega o PIXEL_ID do
+  // ambiente. O valor é falso e só existe dentro deste bloco; o ACCESS_TOKEN
+  // continua fora do ambiente o teste inteiro.
+  process.env.PIXEL_ID = PIXEL_DO_ENV;
+  let semId;
+  const antes = chamadas.length;
+  try {
+    semId = await enviar(corpoDoFormulario('pixel_a_sem_id'), { header: 'emp_a' });
+  } finally {
+    delete process.env.PIXEL_ID;
+  }
+  ok(
+    semId.status === 400 && chamadas.length === antes,
+    '🔴 F6: marca da A sem Pixel ID → 400 e nada sai, mesmo com PIXEL_ID no ambiente (antes ia para o Pixel do .env)',
+    `status=${semId.status} chamadas=${chamadas.length - antes}`
+  );
+  const antesDoToken = chamadas.length;
+  const semToken = await enviar(corpoDoFormulario('pixel_a_sem_token'), { header: 'emp_a' });
+  ok(
+    semToken.status === 400 && chamadas.length === antesDoToken,
+    'F6: marca da A sem token → 400 e nada sai',
+    `status=${semToken.status} chamadas=${chamadas.length - antesDoToken}`
+  );
+  const fonteEnviar = fs.readFileSync(
+    fileURLToPath(new URL('../src/app/api/enviar/route.ts', import.meta.url)),
+    'utf8'
+  );
+  ok(
+    !/process\.env\.(PIXEL_ID|ACCESS_TOKEN)/.test(fonteEnviar) && !/\bacharMarca\(/.test(fonteEnviar),
+    '🔴 F6: a rota não lê PIXEL_ID/ACCESS_TOKEN do ambiente nem usa acharMarca (que cai no primeiro Pixel)'
+  );
+}
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('pixel_a'), { header: 'emp_a', cookieEmpresa: 'emp_a' });
+  const novas = chamadas.slice(antes);
+  ok(
+    r.status === 200 && r.corpo.httpStatus === 200 && r.corpo.resposta?.events_received === 1,
+    '🔴 F7: caso feliz — Pixel da A com a A ativa (header = cookie) → 200 e a Meta falsa confirma',
+    `status=${r.status}`
+  );
+  ok(
+    novas.length === 1 && pixelDe(novas[0]) === PIXEL_A,
+    'F7: exatamente uma chamada, e para o Pixel da A',
+    `pixels=[${novas.map(pixelDe).join(', ')}]`
+  );
+}
+{
+  const antes = chamadas.length;
+  const r = await enviar(corpoDoFormulario('default'));
+  const novas = chamadas.slice(antes);
+  ok(
+    r.status === 200 && novas.length === 1 && pixelDe(novas[0]) === PIXEL_DONO,
+    'F8: controle — empresa padrão (sem header nem cookie) + "default" → 200, uma chamada para o Pixel do dono',
+    `status=${r.status} pixels=[${novas.map(pixelDe).join(', ')}]`
+  );
+}
+
+/* ---------------- G. Envio em modo teste não bloqueia o envio real (C8, D12) ---------------- */
+
+console.log('\n  G. Modo teste fora do dedup (C8)');
+
+/**
+ * Um quarto Pixel falso, da empresa A, que começa EM MODO TESTE (código de
+ * teste falso). O cenário do roteiro do dono: a venda foi enviada só com o
+ * Pixel em teste — cai em "Eventos de teste" da Meta e não conta — e depois o
+ * Pixel vai para produção. A venda tem que poder sair de verdade.
+ */
+const PIXEL_A_TESTE = '666666666666666';
+const ARQ_DISPAROS = path.join(tmp, 'logs', 'disparos.jsonl');
+await cfgStore.salvarMarca({
+  id: 'pixel_a_teste',
+  nome: 'Pixel da empresa A em teste (falso)',
+  pixelId: PIXEL_A_TESTE,
+  accessToken: 'token-falso-da-a-teste',
+  testCode: 'TEST_FALSO_C8',
+  empresaId: 'emp_a',
+});
+/** Liga (com código) ou tira (string vazia) o modo teste, pelo `salvarMarca` de verdade. */
+const modoTesteDoPixel = (codigo) => cfgStore.salvarMarca({ id: 'pixel_a_teste', testCode: codigo });
+/** `modoTeste` de cada linha do log deste Pixel, na ordem em que foram gravadas. */
+function modoTesteNoLog() {
+  let txt = '';
+  try {
+    txt = fs.readFileSync(ARQ_DISPAROS, 'utf8');
+  } catch {
+    /* ainda sem log */
+  }
+  return txt
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    })
+    .filter((l) => l && l.pixelId === PIXEL_A_TESTE)
+    .map((l) => l.modoTeste);
+}
+const OPCOES_A = { header: 'emp_a', cookieEmpresa: 'emp_a' };
+
+// G1–G4: o "Enviar" do formulário, o MESMO evento (mesmo event_id e pedido) três vezes.
+{
+  const corpo = corpoDoFormulario('pixel_a_teste');
+
+  const antes = chamadas.length;
+  const emTeste = await enviar(corpo, OPCOES_A);
+  ok(
+    emTeste.status === 200 &&
+      chamadas.length === antes + 1 &&
+      pixelDe(chamadas[antes]) === PIXEL_A_TESTE &&
+      comCodigoDeTeste[antes] === true,
+    'G1: Pixel em modo teste → 200, uma chamada, e o corpo leva test_event_code',
+    `status=${emTeste.status} chamadas=${chamadas.length - antes}`
+  );
+
+  await modoTesteDoPixel('');
+  const antesReal = chamadas.length;
+  const real = await enviar(corpo, OPCOES_A);
+  ok(
+    real.status === 200 && chamadas.length === antesReal + 1 && comCodigoDeTeste[antesReal] === false,
+    '🔴 G2: o Pixel foi para produção e a MESMA venda sai de verdade (antes: 409 "já aceito" por causa do envio de teste)',
+    `status=${real.status} ${textoDoErro(real.corpo)}`
+  );
+
+  const antesDup = chamadas.length;
+  const dup = await enviar(corpo, OPCOES_A);
+  ok(
+    dup.status === 409 && dup.corpo?.duplicado === true && chamadas.length === antesDup,
+    'G3: controle — o segundo envio REAL é recusado como duplicado e nada sai',
+    `status=${dup.status} chamadas=${chamadas.length - antesDup}`
+  );
+
+  const noLog = modoTesteNoLog();
+  ok(
+    noLog.length === 2 && noLog[0] === true && noLog[1] === false,
+    '🔴 G4: o log grava modoTeste — true no envio de teste, false no real',
+    `modoTeste=[${noLog.map(String).join(', ')}]`
+  );
+}
+
+// G5–G8: o "Disparar agora" da caixa (rota → dispararItem → jaEnviado), o MESMO item três vezes.
+{
+  await modoTesteDoPixel('TEST_FALSO_C8');
+  const item = await novoItem('emp_a');
+  const linhasAntes = modoTesteNoLog().length;
+
+  const antes = chamadas.length;
+  const emTeste = await disparar({ id: item.id, marcas: ['pixel_a_teste'] }, 'emp_a');
+  const r1 = emTeste.corpo.resultados?.[0];
+  ok(
+    emTeste.status === 200 &&
+      r1?.status === 'enviado' &&
+      r1?.modoTeste === true &&
+      chamadas.length === antes + 1 &&
+      comCodigoDeTeste[antes] === true,
+    'G5: "Disparar agora" com o Pixel em teste → "enviado" em modo teste',
+    `status=${emTeste.status} [${resumo(emTeste.corpo.resultados)}]`
+  );
+
+  await modoTesteDoPixel('');
+  const antesReal = chamadas.length;
+  const real = await disparar({ id: item.id, marcas: ['pixel_a_teste'] }, 'emp_a');
+  const r2 = real.corpo.resultados?.[0];
+  ok(
+    real.status === 200 &&
+      r2?.status === 'enviado' &&
+      r2?.modoTeste === false &&
+      chamadas.length === antesReal + 1 &&
+      comCodigoDeTeste[antesReal] === false,
+    '🔴 G6: Pixel em produção → o MESMO item sai de verdade (antes: "duplicado" por causa do envio de teste)',
+    `[${resumo(real.corpo.resultados)}]`
+  );
+
+  const antesDup = chamadas.length;
+  const dup = await disparar({ id: item.id, marcas: ['pixel_a_teste'] }, 'emp_a');
+  ok(
+    dup.corpo.resultados?.[0]?.status === 'duplicado' && chamadas.length === antesDup,
+    'G7: controle — o segundo disparo REAL do item é "duplicado" e nada sai',
+    `[${resumo(dup.corpo.resultados)}]`
+  );
+
+  const noLog = modoTesteNoLog().slice(linhasAntes);
+  ok(
+    noLog.length === 2 && noLog[0] === true && noLog[1] === false,
+    '🔴 G8: o log do dispararItem grava modoTeste — true no teste, false no real',
+    `modoTeste=[${noLog.map(String).join(', ')}]`
+  );
+}
+
 /* ---------------- Fim: nada fora da Graph API falsa ---------------- */
 
 ok(
@@ -547,8 +930,8 @@ ok(
   `chamadas=${chamadas.length}`
 );
 ok(
-  chamadas.every((u) => [PIXEL_DONO, PIXEL_B].includes(pixelDe(u))),
-  'toda chamada foi para um dos dois Pixels falsos deste teste'
+  chamadas.every((u) => [PIXEL_DONO, PIXEL_B, PIXEL_A, PIXEL_A_TESTE].includes(pixelDe(u))),
+  'toda chamada foi para um dos quatro Pixels falsos deste teste (nenhuma para o PIXEL_ID do ambiente)'
 );
 
 // Deixa assentar o que ficou sem `await` (o relay do dispatch) antes de apagar o diretório.
@@ -556,7 +939,7 @@ await new Promise((r) => setTimeout(r, 50));
 
 console.log(
   falhas === 0
-    ? '\n  Disparo por empresa trancado: Pixel de outra empresa não recebe nem pela rota, nem pelo automático; IP vem da Cloudflare.\n'
+    ? '\n  Disparo por empresa trancado: Pixel de outra empresa não recebe nem pela rota, nem pelo automático, nem pelo Enviar; IP vem da Cloudflare; envio em modo teste não bloqueia o real.\n'
     : `\n  ${falhas} falha(s).\n`
 );
 encerrar(falhas === 0 ? 0 : 1);

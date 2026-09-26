@@ -4,6 +4,12 @@
    voltarem). Dialog, select e tooltip renderizam em portal, FORA do .shell:
    enquanto os tokens moravam aqui, toda camada flutuante do produto tinha
    uma cor diferente do resto da tela. */
+/* A casca. Abaixo de `lg` (64rem) e uma coluna so: cabecalho, abas e pagina,
+   e as empresas abrem na gaveta. A partir de `lg` vira grade de duas colunas
+   (V3 do v7): a lateral de empresas com 15.5rem (248px, a medida do desenho)
+   e o `.content` com o resto. O `.background` e absoluto e nao ocupa celula
+   da grade; a lateral e o conteudo tem coluna e linha escritas, para que
+   nenhum outro filho mude a grade de lugar. */
 .shell {
   position: relative;
   isolation: isolate;
@@ -21,6 +27,63 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* A coluna fixa das empresas (`LateralDeEmpresas`). Abaixo de `lg` ela
+   continua montada, porque e dona do ouvinte de outra aba e dos dialogos,
+   mas nao aparece: quem mostra as empresas ali e a gaveta. `display` mora
+   aqui, e nao numa classe `hidden lg:flex`, porque esta regra fica fora das
+   camadas do Tailwind e venceria a utilitaria de qualquer jeito.
+
+   A partir de `lg` ela e `sticky` na altura da janela: a pagina rola e as
+   empresas ficam. Sticky pede `align-self: start`; esticada na linha da
+   grade, ela teria a altura da pagina e nao teria para onde grudar. O
+   `overflow-x: clip` do `.shell` nao cria rolagem, entao nao atrapalha. */
+.lateralFixa {
+  display: none;
+}
+
+/* A gaveta de empresas (`GavetaDeEmpresas`), abaixo de `lg`. E o painel do
+   `Dialog` de `ui/dialog.tsx`, que nasce centralizado; estas regras o
+   encostam na esquerda, na altura inteira da janela. Elas ficam fora das
+   camadas do Tailwind, entao vencem as utilitarias do painel (centro,
+   largura, raio, espacamento) sem `!important`.
+
+   A entrada troca o zoom do dialogo por um deslize da esquerda, pelas
+   variaveis que a animacao de entrada e de saida ja le. Com
+   `prefers-reduced-motion`, a regra global de `globals.css` zera a duracao. */
+.gaveta {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: min(20rem, calc(100% - 3rem));
+  max-width: none;
+  height: 100dvh;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+  translate: none;
+  --tw-enter-scale: 1;
+  --tw-exit-scale: 1;
+  --tw-enter-translate-x: -100%;
+  --tw-exit-translate-x: -100%;
+  --tw-animation-duration: 180ms;
+}
+
+/* As 7 abas da empresa (`AbasDaEmpresa`), logo abaixo do cabecalho. Mesma
+   largura e mesmo respiro lateral da `.page`, para a aba e o titulo da
+   pagina comecarem na mesma linha vertical. */
+.abasDaEmpresa {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--container-pagina);
+  min-width: 0;
+  padding-top: 0.5rem;
+  padding-inline: 1rem;
 }
 
 .background {
@@ -56,92 +119,106 @@
   content: '';
 }
 
-/* O video de fundo, em laco.
+/* O fundo principal do design do dono (v7, tarefa V1): a imagem parada que
+   entrou no lugar do video em laco. O `<picture>` esta em ConsoleBackground.
 
-   Entrou por pedido do dono, depois da FASE 3b ter tirado a grade, a teia e as
-   radiais de tinta. Ele contraria aquela regra de frente: placa de circuito e
-   forma reconhecivel, e o material e azul. O que o segura no lugar de fundo,
-   em vez de virar desenho, sao os tres numeros abaixo.
+   `position: fixed`, e nao `absolute`: o `.background` cobre a casca INTEIRA,
+   e a casca cresce com a pagina. Com `absolute`, uma pagina de 3000px esticava
+   a imagem de 1024px em quase 3x e so mostrava a faixa da direita dela. Fixa,
+   ela ocupa a janela, como no desenho do dono, e o conteudo rola por cima. Nada
+   entre ela e a raiz tem `transform`, `filter` ou `contain`, entao o bloco de
+   contencao e a propria janela, e o `overflow: hidden` do `.background` nao a
+   corta. Ela continua dentro do contexto de empilhamento do `.background`
+   (`z-index: 0`), atras do `.content`. Quem der `transform`, `filter`,
+   `contain`, `perspective` ou `will-change` a `.shell`, `.background` ou a um
+   ancestral deles (a grade da lateral e da V3) muda o bloco de contencao: a
+   imagem passa a ser medida por esse elemento e volta a esticar e a ser cortada.
+   Hoje o `.shell` so tem `isolation` e `overflow-x: clip`, que nao contam.
 
-   1. `opacity: 0.18`. Acima disso as trilhas passam a competir com o texto do
-      Painel — que e numero pequeno sobre superficie grande, o caso mais fragil
-      de contraste do produto. Abaixo de 0.12 o video some e a pagina so ficou
-      1,9 MB mais pesada a toa.
+   `cover` com `right top` e o enquadramento do desenho: o brilho da imagem
+   mora no canto de cima a direita, e e ele que tem de sobrar quando a janela
+   corta. A imagem e opaca, entao o degrade do `.background::before` so aparece
+   enquanto ela carrega.
 
-   2. O veu do `::after`. Opacidade sozinha clareia a tela inteira por igual,
-      inclusive atras dos blocos de dado. O veu devolve `--surface-0` solido
-      dos 55% para baixo, que e onde ficam as tabelas e as listas; o movimento
-      sobra no alto, atras do cabecalho, que e area de titulo.
-
-   3. `object-fit: cover`. O arquivo tem proporcao fixa e a janela nao —
-      `cover` corta, `fill` deformaria a trilha, e trilha deformada e a unica
-      coisa que denuncia um fundo esticado.
-
-   O laco e vai-e-volta (o ffmpeg concatenou a peca com ela mesma ao contrario)
-   porque o original abre quase preto e fecha cheio: em laco simples dava um
-   pulo a cada 10s. Por isso os arquivos tem 20s e nao 10s.
-
-   Fica ABAIXO do `.noise` na arvore, entao o grao cai por cima do video — e o
-   que tira dele o brilho de renderizacao e o deixa no mesmo material do resto
-   da tela. */
-.fundoVideo {
-  pointer-events: none;
-  position: absolute;
+   O veu do `::after` (`--surface-0` a 85%) e o numero que segura a leitura. A
+   imagem tem brilhos de menta quase puros (luminancia 0.77) espalhados pela
+   metade da direita, de cima a baixo, e o console poe texto direto sobre o
+   fundo: titulo e descricao da pagina e o que ficar fora de cartao. Medido
+   sobre os 4000 pixels mais claros de cada arquivo, com o grao por cima no pior
+   caso (papel a 255, soft-light a 14%), o pior ponto a 85% da `--fg-strong`
+   10.71, `--fg-body` 7.05 e `--fg-muted` 4.75. A 80% o mudo cai para 4.05, e a
+   55% (o numero que a pesquisa trazia, medido num ponto azul e nao no brilho
+   de menta) o corpo da 2.74 e o mudo 1.84. Quem quiser a imagem mais viva
+   mede de novo antes: o piso de 4.5 nao desce; o veu e que sobe ou fica. */
+.fundoPrincipal {
+  position: fixed;
   inset: 0;
-  opacity: 0.18;
+  display: block;
 }
 
-.fundoVideo::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 0, var(--surface-0) 55%);
-  content: '';
-}
-
-.fundoVideo video {
+.fundoPrincipal img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: right top;
 }
 
-/* A peca deitada e a padrao; a em pe so existe no retrato estreito. O corte e
-   o mesmo 48rem do resto do arquivo. `display: none` nao e so estetica aqui:
-   e o que impede o telefone de baixar a peca de desktop, porque video oculto
-   com `preload="none"` nao abre conexao. */
-.fundoVideoMobile {
-  display: none;
+.fundoPrincipal::after {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface-0) 85%, transparent);
+  content: '';
 }
 
-@media (max-width: 48rem) {
-  .fundoVideoDesktop {
-    display: none;
-  }
+/* O fundo da lateral de empresas. A classe nasce aqui, e quem a usa e a
+   lateral da V3. Mesmo `cover`, ancorado em `left center`, que e onde o
+   desenho da lateral se concentra, e o mesmo veu de 85%, pelo mesmo motivo:
+   a imagem da lateral tambem tem brilho de menta quase puro em toda a altura.
+   Medido nos quatro arquivos, o pior ponto a 85% da `--fg-strong` 10.65,
+   `--fg-body` 7.01 e `--fg-muted` 4.72 com o grao por cima, e 5.28 no mudo
+   sem ele (a lateral fica na grade da casca, POR CIMA do `.background`, com
+   fundo opaco, fora do alcance do `.noise`; a gaveta fica no portal do
+   dialogo, tambem fora). A 55% que o plano trazia, o corpo daria 2.69 e o
+   mudo 1.81.
 
-  .fundoVideoMobile {
-    display: block;
-  }
+   Duas declaracoes de `background-image` de proposito: a primeira, so com o
+   WebP 1x, e a reserva de quem nao le `image-set()`; a segunda deixa o
+   navegador escolher AVIF ou WebP e 1x ou 2x. */
+.lateral {
+  background-color: var(--surface-0);
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--surface-0) 85%, transparent),
+      color-mix(in srgb, var(--surface-0) 85%, transparent)
+    ),
+    url('/brand/fundo/lateral.webp');
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--surface-0) 85%, transparent),
+      color-mix(in srgb, var(--surface-0) 85%, transparent)
+    ),
+    image-set(
+      url('/brand/fundo/lateral.avif') type('image/avif') 1x,
+      url('/brand/fundo/lateral@2x.avif') type('image/avif') 2x,
+      url('/brand/fundo/lateral.webp') type('image/webp') 1x,
+      url('/brand/fundo/lateral@2x.webp') type('image/webp') 2x
+    );
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-size: cover;
 }
 
-/* Quem pediu menos movimento recebe a mesma imagem, parada. Nao e o fundo
-   antigo de volta: seria uma segunda identidade visual para a mesma tela. O
-   quadro e o do meio do laco (o estado cheio), servido como imagem de 45 KB
-   em vez dos 1,9 MB de video, e os videos saem da arvore de renderizacao. */
-@media (prefers-reduced-motion: reduce) {
-  .fundoVideo video {
-    display: none;
-  }
-
-  .fundoVideo {
-    background-image: url('/brand/fundo/console-desktop.jpg');
-    background-position: center;
-    background-size: cover;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) and (max-width: 48rem) {
-  .fundoVideo {
-    background-image: url('/brand/fundo/console-mobile.jpg');
-  }
+/* O painel translucido: a superficie dos cartoes que ficam sobre a imagem
+   (V3, V5, V7 e V8 usam). O `--surface-painel` e o `--surface-1` a 92%, e a
+   opacidade so entra por esse token, nunca por `bg-surface-1/95` em
+   componente. O gate compoe o pior caso de verdade, sobre branco puro, e
+   mede o texto em cima: `--fg-strong` 11.87, `--fg-body` 7.82 e `--fg-muted`
+   5.27. Sobre `--surface-0` da 15.18, 9.99 e 6.73. A borda sutil contra essa
+   composicao da 1.68 (piso de filete 1.5). */
+.painel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-painel);
 }
 
 /* Grao fino. A UNICA camada desenhada que sobrou, e ela e textura, nao
@@ -183,19 +260,19 @@
   mix-blend-mode: soft-light;
 }
 
-/* A casca da pagina. A largura e o respiro lateral sao tokens, nao numeros:
-   --container-pagina acompanha o zoom de texto do usuario, e o fundo reservado
-   e a altura real da barra de abas mais a area segura do aparelho — os 104px
-   cravados de antes erravam nos dois sentidos, sobrando no desktop e faltando
-   no iPhone. `padding-block` e `padding-inline` ficam SEPARADOS de proposito:
-   um `padding` de tres valores numa media query zeraria a lateral. */
+/* A casca da pagina. A largura e um token, nao um numero:
+   --container-pagina acompanha o zoom de texto do usuario. As medidas do
+   desenho (V3 do v7): margem de 1rem abaixo de `lg` e de 1.375rem x 1.5rem
+   (22 x 24px) a partir dele. A reserva que ficava embaixo para a barra fixa
+   de abas saiu junto com ela; sobra so a area segura do aparelho.
+   `padding-block` e `padding-inline` ficam SEPARADOS de proposito: um
+   `padding` de tres valores numa media query zeraria a lateral. */
 .page {
   margin-inline: auto;
   width: 100%;
   max-width: var(--container-pagina);
   min-width: 0;
-  padding-block: 1.5rem
-    calc(var(--altura-barra-abas) + env(safe-area-inset-bottom) + 1.5rem);
+  padding-block: 1rem calc(env(safe-area-inset-bottom) + 1rem);
   padding-inline: 1rem;
 }
 
@@ -302,10 +379,11 @@
    prometia "efeito imediato" e nao fazia nada. O piso agora e estrutural
    (DS-4.9 + DS-4.10, globals.css), e a densidade voltou a funcionar. */
 
+/* Vãos de 16px (1rem), o teto da spec de 12–16px (R2 da V9, herdada da V3). */
 .mainGrid {
   display: grid;
   min-width: 0;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .workColumn,
@@ -313,13 +391,13 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .guideGrid {
   display: grid;
   min-width: 0;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .guideArticle {
@@ -327,34 +405,226 @@
   max-width: 47.5rem;
 }
 
+/* A faixa das abas (`AbasDaEmpresa`) e das vistas de Eventos
+   (`SeletorDeVista`). Quando as abas nao cabem, a faixa rola na horizontal
+   com o dedo ou com a roda, e nenhuma aba some.
+
+   O respiro de 0.25rem com margem negativa do mesmo tamanho existe para o
+   anel de foco: `overflow-x: auto` obriga o `overflow-y` a cortar tambem, e o
+   anel (2px mais 2px de afastamento) da primeira aba e o de cima de todas
+   ficavam cortados na borda. O respiro ocupa o mesmo lugar que a margem
+   devolve, entao a faixa nao anda na tela. `scroll-padding-inline` faz a aba
+   que recebe foco pelo teclado parar 1.5rem antes da borda, fora da sombra.
+
+   A sombra de borda diz "tem mais aba para o lado": a faixa some aos poucos
+   nos 1.5rem da ponta que ainda tem conteudo escondido. Ela e uma mascara (so
+   transparencia), e nao uma cor pintada por cima, porque a faixa fica sobre a
+   imagem do fundo e qualquer cor chapada apareceria como uma mancha. Quem
+   escolhe que ponta apaga e a propria rolagem (`animation-timeline: scroll`):
+   no comeco so a direita apaga, no fim so a esquerda, no meio as duas. Sem
+   nada para rolar, a linha do tempo fica inativa e a faixa aparece inteira.
+   Navegador sem linha do tempo de rolagem fica com a rolagem sem a sombra,
+   que e o que havia antes. A mascara usa `--surface-0` so pela opacidade:
+   em mascara, a cor nao aparece. */
 .tabsViewport {
   min-width: 0;
-  max-width: 100%;
+  max-width: calc(100% + 0.5rem);
+  margin: -0.25rem -0.25rem 0;
+  padding: 0.25rem 0.25rem 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 1.5rem;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
-@media (min-width: 40rem) {
-  .page {
-    padding-inline: 1.5rem;
+@supports (animation-timeline: scroll()) {
+  .tabsViewport {
+    animation: sombraDaFaixa linear both;
+    animation-timeline: scroll(self inline);
   }
 }
 
+@keyframes sombraDaFaixa {
+  0% {
+    mask-image: linear-gradient(
+      to right,
+      var(--surface-0) calc(100% - 1.5rem),
+      transparent
+    );
+  }
+
+  2%,
+  98% {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      var(--surface-0) 1.5rem,
+      var(--surface-0) calc(100% - 1.5rem),
+      transparent
+    );
+  }
+
+  100% {
+    mask-image: linear-gradient(to right, transparent, var(--surface-0) 1.5rem);
+  }
+}
+
+/* Tabela larga dentro de painel (V9): a tabela rola DENTRO do painel, e a
+   pagina nunca ganha rolagem lateral. Quem usa: a atividade recente da Visao
+   geral, a lista de `/empresas` e o registro de DNS do cartao de dominio. */
+.rolagemDoPainel {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Os 5 indicadores da Visao geral (V9): `repeat(4, 1fr) 1.17fr` com 10px de
+   vao, como no desenho do dono, que tem o cartao do Valor um pouco mais largo.
+
+   A grade responde a largura DO BLOCO (container query), e nao a da janela:
+   a lateral de empresas come 15.5rem a partir de `lg`, entao a 1024px sobram
+   uns 780px, e cinco colunas ali davam cartoes de 133px com o numero cortado.
+   Pela largura do bloco: 1 coluna abaixo de 40rem (a 375px o bloco tem
+   343px), 2 colunas a partir dela (a 768px e a 1024px, e o Valor ocupa a
+   linha inteira), e as 5 a partir de 60rem (a 1280, 1440 e 1536px o bloco tem
+   984, 1144 e 1240px). Abaixo de 60rem o cartao ficaria com menos de 150px de
+   miolo, e um numero de sete digitos passaria da borda. O bloco `@container`
+   e o `<section>` que envolve a lista. */
+.gradeKpis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+}
+
+.gradeKpis > *,
+.gradeTresDois > * {
+  min-width: 0;
+}
+
+@container (min-width: 40rem) {
+  .gradeKpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpiValor {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (min-width: 60rem) {
+  .gradeKpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.17fr);
+  }
+
+  .kpiValor {
+    grid-column: auto;
+  }
+}
+
+/* Funil e receita, atividade e qualidade (V9): `3fr 2fr` a partir de `lg`,
+   uma coluna embaixo dela. `minmax(0, ...)` e o `min-width: 0` dos filhos
+   deixam o painel encolher em vez de empurrar a pagina para o lado. */
+.gradeTresDois {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+/* O anel de foco da casca (V9): ciano (`--border-focus`) na lateral, na
+   gaveta, nas abas da empresa e no botao que abre a gaveta. Esses lugares
+   ficam fora de qualquer `data-area`, e o anel ciano e o mesmo em todos eles:
+   com a tinta da area, o operador via uma cor na lateral e outra nas abas.
+   Medido: 5.41 no pior ponto da lateral (imagem com o veu de 85%), 5.44 no
+   pior ponto do fundo principal, 7.63 sobre `--surface-1`; o piso e 3. A
+   regra fica fora das camadas do Tailwind, entao vence o
+   `focus-visible:outline-tinta-texto` que as abas trazem de `ui/tabs.tsx`. */
+.lateral :focus-visible,
+.abasDaEmpresa :focus-visible,
+.focoCiano:focus-visible {
+  outline-color: var(--border-focus);
+}
+
+/* "Pular para o conteudo" (V9): o primeiro Tab da pagina. Fica fora da tela
+   ate receber foco e entao aparece no canto de cima, por cima do cabecalho.
+   Quem o aciona vai direto ao `<main>`, sem passar pela lista de empresas. */
+.pularParaConteudo {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 60;
+  min-height: var(--spacing-control-lg);
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--fg-strong);
+  font-weight: 600;
+  translate: 0 calc(-100% - 1rem);
+}
+
+.pularParaConteudo:focus {
+  translate: none;
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* O `<main>` recebe o foco do "Pular para o conteudo" com `tabindex=-1`. O
+   anel em volta da pagina inteira nao diz nada a ninguem; o leitor de tela ja
+   anuncia a regiao. */
+.page[tabindex='-1']:focus {
+  outline: none;
+}
+
+/* Alvo de toque de quem nao tem lateral (V9): o botao das empresas no
+   cabecalho. A altura de 48px sob `pointer: coarse` mora la embaixo. */
+.alvoDeToque {
+  touch-action: manipulation;
+}
+
 @media (min-width: 64rem) {
+  .shell {
+    display: grid;
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+  }
+
+  .content {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .lateralFixa {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    height: 100dvh;
+    flex-direction: column;
+    grid-row: 1;
+    grid-column: 1;
+    align-self: start;
+    border-right: 1px solid var(--border-subtle);
+  }
+
   .page {
-    padding-inline: 2rem;
+    padding-block: 1.375rem calc(env(safe-area-inset-bottom) + 1.375rem);
+    padding-inline: 1.5rem;
+  }
+
+  .abasDaEmpresa {
+    padding-top: 0.75rem;
+    padding-inline: 1.5rem;
   }
 
   .guideGrid {
     grid-template-columns: 13.75rem minmax(0, 1fr);
   }
-}
 
-/* Acima de 80rem a barra de abas nao existe mais (ela e `xl:hidden`), entao a
-   pagina para de reservar o fundo dela. */
-@media (min-width: 80rem) {
-  .page {
-    padding-bottom: 4rem;
+  .gradeTresDois {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
 
@@ -372,7 +642,48 @@
   }
 }
 
-/* Nao ha mais `@media (prefers-reduced-motion)` neste arquivo, e isso e o
-   resultado certo: o fundo deixou de ter animacao alguma para desligar. O
-   `@keyframes background-drift` (a deriva da grade) e o `@media (max-width)`
-   que escondia a rede SVG no celular sairam junto com o que eles governavam. */
+/* Alvos de toque (V9): 48px de altura em quem aponta com o dedo. So sob
+   `pointer: coarse`, porque no mouse a lateral fica com a densidade do
+   desenho. Vale para todo link e botao da lateral e da gaveta (empresas, o
+   lapis, Nova empresa, Ajuda, Preferencias, Sair, o fechar da gaveta), para as
+   abas e as vistas (`[role='tab']`) e para o botao das empresas no cabecalho
+   (`.alvoDeToque`). `min-height` vence a `height` das classes (`h-10`,
+   `size-9`) sem trocar a classe de ninguem. Botao de icone ganha 48px de
+   largura tambem. */
+@media (pointer: coarse) {
+  .lateral a,
+  .lateral button,
+  .tabsViewport [role='tab'],
+  .alvoDeToque {
+    min-height: 3rem;
+  }
+
+  .lateral button {
+    min-width: 3rem;
+  }
+}
+
+/* Movimento (V9). A regra global de `globals.css` ja zera duracao de
+   animacao e de transicao com `!important` para quem pediu menos movimento;
+   estas regras dizem o mesmo no lugar em que o movimento mora, para ninguem
+   precisar adivinhar: a gaveta entra sem deslizar, a lateral e as abas trocam
+   de cor sem transicao e a faixa das abas rola sem animacao. A sombra de borda
+   da faixa (`sombraDaFaixa`) nao e movimento: ela acompanha a rolagem que o
+   proprio operador faz, e continua. O fundo deixou de ter animacao alguma
+   desde a FASE 3b (a deriva da grade e a rede SVG sairam). */
+@media (prefers-reduced-motion: reduce) {
+  .gaveta {
+    --tw-animation-duration: 0s;
+  }
+
+  .lateral *,
+  .abasDaEmpresa *,
+  .alvoDeToque {
+    transition: none;
+  }
+
+  .tabsViewport,
+  .rolagemDoPainel {
+    scroll-behavior: auto;
+  }
+}

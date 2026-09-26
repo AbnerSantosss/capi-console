@@ -7,18 +7,20 @@ import s from "./button.module.css"
 
 /**
  * Alturas: sm=30 (toolbar densa) · default=36 · lg=42 (ação principal).
- * Raio 8px, um só, para toda a família. Os valores são os da página de
- * referência visual aprovada (wiki/assets/ux-v3/referencia-visual.html).
+ * Raio `rounded-botao`, um só para toda a família: 9px no console (v7, o
+ * design do dono) e 8px no login, que continua como no P0 — o valor muda pelo
+ * bloco de tokens do login em `globals.css`, não aqui.
  *
- * O primário é papel chapado: fundo quase branco, texto quase preto. É o
- * elemento de maior luminosidade da tela, então é o que o olho acha primeiro,
- * sem precisar de matiz — nada de rampa vertical e nada de brilho varrendo.
+ * O primário é chapado, na cor `--papel`: no console, o azul de ação com
+ * texto branco; no login, o papel claro do P0 com texto quase preto. Nada de
+ * rampa vertical e nada de brilho varrendo.
  *
- * O que o CSS utilitário não escreve (as listras do estado ocupado e o disco
- * que gira) mora em `button.module.css`, ao lado.
+ * O que o CSS utilitário não escreve (as listras do estado ocupado, o disco
+ * que gira e os estados desabilitado e de foco do console) mora em
+ * `button.module.css`, ao lado.
  */
 const buttonVariants = cva(
-  "group/button relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto active:translate-y-px disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-botao border border-transparent bg-clip-padding font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto active:translate-y-px disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

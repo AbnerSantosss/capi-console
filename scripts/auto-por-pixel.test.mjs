@@ -25,13 +25,19 @@
  *   T10  duas marcas, uma ligada e outra desligada, mesma regra `auto`
  *        -> uma em `auto`, a outra em `fila`  (a parte OFFLINE do T10; o
  *           fechamento ponta a ponta com a Meta exige autorização do dono)
+ *   C10  sonda do "Testar" numa regra com um Pixel em teste e outro em
+ *        produção -> só o Pixel com código de teste entra na decisão da
+ *        sonda; o de produção fica fora de `modoPorMarca`, `motivoFila` e
+ *        `marcasAuto` (D2 do pacote de correção)
  *   C26  nenhuma leitura de `autoDisparo` fora de `=== true`
  *   C28  `publicarMarca` normaliza o campo para booleano de verdade
  *   MIG-4 o repositório não embarca marca nenhuma (`config/` é gitignored),
  *         e o estado local do operador é apenas relatado — ver a seção
  *
  * Roda num diretório temporário (nunca toca `config/` nem `logs/` de verdade),
- * sem rede e sem disparar evento nenhum para a Meta.
+ * sem rede e sem disparar evento nenhum para a Meta. O `fetch` global é trocado
+ * por um falso antes de qualquer import de src/: ele lança sempre, e o fim da
+ * suíte reprova se alguém tiver chamado.
  *
  * Uso: npm run test:auto-pixel
  */
@@ -42,6 +48,27 @@ import { fileURLToPath } from 'node:url';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.dirname(AQUI);
+
+/* ---------------- Rede trancada, antes de qualquer import de src/ ---------------- */
+// Esta suíte só decide, não dispara: nada aqui deveria nem TENTAR sair. Se algo
+// tentar, o fetch falso anota a URL (só a URL, nada do corpo) e LANÇA — em
+// graph.facebook.com, em api.cloudflare.com e em qualquer outra — e o fim da
+// suíte reprova. O ACCESS_TOKEN lá embaixo é de mentira e é do T6/T8; com a rede
+// trancada, nem ele nem nada tem como chegar à Meta.
+const chamadasDeRede = [];
+const fetchFalso = async (entrada) => {
+  const url =
+    typeof entrada === 'string'
+      ? entrada
+      : entrada instanceof URL
+        ? entrada.href
+        : String(entrada?.url ?? '');
+  chamadasDeRede.push(url);
+  if (/graph\.facebook\.com/i.test(url)) throw new Error('graph.facebook.com bloqueado pelo teste');
+  if (/api\.cloudflare\.com/i.test(url)) throw new Error('api.cloudflare.com bloqueado pelo teste');
+  throw new Error('rede bloqueada pelo teste');
+};
+globalThis.fetch = fetchFalso;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'capi-auto-pixel-'));
 fs.mkdirSync(path.join(tmp, 'config'), { recursive: true });
@@ -82,6 +109,21 @@ const limparMarcas = () => {
 };
 
 const PIXEL = { pixelId: '1234567890', accessToken: 'EAAtoken-falso-de-teste' };
+
+/**
+ * O filtro da sonda (C10, D2): de uma lista de destinos, só os Pixels com
+ * código de teste. É o MESMO filtro que o `webhook-handler.ts` usa em
+ * `marcasEmTeste`; ele mora em `modo-por-marca.ts` para esta suíte conseguir
+ * chamá-lo, porque o handler inteiro não carrega sob
+ * `--conditions=react-server`.
+ *
+ * Antes da correção o filtro não existia e o handler mandava a lista INTEIRA
+ * da regra para `decisaoDaSonda`. O `(ids) => [...ids]` reproduz exatamente
+ * isso, e é por isso que os `ok(...)` do bloco C10 falham no código antigo em
+ * vez de derrubar a suíte.
+ */
+const soMarcasEmTeste =
+  typeof motor.soMarcasEmTeste === 'function' ? motor.soMarcasEmTeste : (ids) => [...ids];
 
 console.log('\n  A trava do Pixel — disparo automático por Pixel (FASE 6)\n');
 
@@ -263,12 +305,116 @@ ok(
   'T10: id desconhecido não cai no fallback da primeira marca — fica desligado'
 );
 
-// A sonda de conexão passa por FORA da trava, de propósito (ver decisaoDaSonda).
-const sonda = motor.decisaoDaSonda(['desligada']);
+// A sonda de conexão passa por FORA da trava do Pixel, de propósito (ver
+// decisaoDaSonda): o Pixel com o automático DESLIGADO recebe a sonda, desde que
+// esteja em modo teste. Na chamada nova (C10) só entra em `decisaoDaSonda` quem
+// passou pelo filtro de código de teste, do mesmo jeito que no handler.
+semearMarcas([
+  { id: 'ligada', nome: 'Pixel ligado', pixelId: '111', accessToken: 'EAAa', autoDisparo: true },
+  { id: 'desligada', nome: 'Pixel desligado', pixelId: '222', accessToken: 'EAAb', testCode: 'TEST22222' },
+]);
+const sondaNoDesligado = motor.decisaoDaSonda(
+  soMarcasEmTeste(['desligada'], await store.listarMarcas())
+);
 ok(
-  sonda.marcasAuto.length === 1 && sonda.modoPorMarca.desligada === 'auto',
+  sondaNoDesligado.marcasAuto.length === 1 && sondaNoDesligado.modoPorMarca.desligada === 'auto',
   'T10: a sonda do botão "Testar" não passa pela trava do Pixel',
-  'ela só roda com test_event_code e nunca vira conversão'
+  'ela só vai a Pixel com test_event_code e nunca vira conversão'
+);
+
+/* ================================================================== */
+/* C10 (D2) — a sonda do "Testar" só vai aos Pixels em modo teste      */
+/* ================================================================== */
+console.log('\n  -- C10 (D2): sonda numa regra com um Pixel em teste e outro em produção --');
+
+// O caso do D2: a regra do `ping` aponta para dois Pixels, e só um tem código
+// de teste. O de produção está até com o automático LIGADO, para provar que o
+// que o tira da sonda é a falta do código de teste, e não o switch.
+semearMarcas([
+  { id: 'emTeste', nome: 'Pixel em teste', pixelId: '333', accessToken: 'EAAc', testCode: 'TEST33333' },
+  { id: 'producao', nome: 'Pixel em produção', pixelId: '444', accessToken: 'EAAd', testCode: '', autoDisparo: true },
+]);
+const cadastroC10 = await store.listarMarcas();
+const alvosDaSonda = soMarcasEmTeste(['emTeste', 'producao'], cadastroC10);
+const sonda = motor.decisaoDaSonda(alvosDaSonda);
+
+ok(
+  alvosDaSonda.length === 1 && alvosDaSonda[0] === 'emTeste',
+  '🔴 C10: dos dois Pixels da regra, só o que tem código de teste vira alvo da sonda',
+  `alvos: ${alvosDaSonda.join(',') || '(nenhum)'}`
+);
+ok(
+  sonda.marcasAuto.length === 1 && sonda.marcasAuto[0] === 'emTeste',
+  '🔴 C10: a sonda sai só para o Pixel em modo teste',
+  `marcasAuto: ${sonda.marcasAuto.join(',') || '(vazia)'}`
+);
+ok(
+  sonda.modoPorMarca.emTeste === 'auto',
+  'C10: controle — o Pixel em teste recebe a sonda (sem ligar o automático dele)'
+);
+ok(
+  !('producao' in sonda.modoPorMarca),
+  '🔴 C10: o Pixel de produção fica FORA do `modoPorMarca` do item da sonda',
+  JSON.stringify(sonda.modoPorMarca)
+);
+ok(
+  !('producao' in sonda.motivoFila),
+  'C10: e fora do `motivoFila`: a sonda não fica na fila do Pixel de produção',
+  JSON.stringify(sonda.motivoFila)
+);
+
+// Código de teste só com espaços não é código: a mesma leitura `?.trim()` de sempre.
+semearMarcas([
+  { id: 'emTeste', nome: 'Pixel em teste', pixelId: '333', accessToken: 'EAAc', testCode: 'TEST33333' },
+  { id: 'producao', nome: 'Pixel em produção', pixelId: '444', accessToken: 'EAAd', testCode: '   ' },
+]);
+const comEspacos = soMarcasEmTeste(['emTeste', 'producao'], await store.listarMarcas());
+ok(
+  comEspacos.length === 1 && comEspacos[0] === 'emTeste',
+  '🔴 C10: código de teste só com espaços não põe o Pixel de produção na sonda',
+  `alvos: ${comEspacos.join(',') || '(nenhum)'}`
+);
+
+// Id que não está no cadastro não vira alvo (sem o fallback de `acharMarca`
+// para a primeira marca da lista).
+const comDesconhecido = soMarcasEmTeste(['inexistente', 'emTeste'], cadastroC10);
+ok(
+  comDesconhecido.length === 1 && comDesconhecido[0] === 'emTeste',
+  '🔴 C10: id desconhecido na regra não recebe a sonda',
+  `alvos: ${comDesconhecido.join(',') || '(nenhum)'}`
+);
+
+// Nenhum Pixel em teste: nenhum alvo. E a decisão vazia não inventa o `default`,
+// que pode ser justamente o Pixel de produção.
+const semTeste = soMarcasEmTeste(['producao'], cadastroC10);
+ok(semTeste.length === 0, '🔴 C10: regra só com Pixel de produção não tem alvo de sonda', `alvos: ${semTeste.join(',') || '(nenhum)'}`);
+const decisaoVazia = motor.decisaoDaSonda([]);
+ok(
+  decisaoVazia.marcasAuto.length === 0 &&
+    Object.keys(decisaoVazia.modoPorMarca).length === 0 &&
+    Object.keys(decisaoVazia.motivoFila).length === 0,
+  '🔴 C10: `decisaoDaSonda([])` devolve decisão vazia, sem cair no `default`',
+  JSON.stringify(decisaoVazia)
+);
+
+// O handler usa o filtro. Prova estática, porque o `webhook-handler.ts` não
+// carrega sob `--conditions=react-server` (o comportamento está provado acima,
+// no mesmo filtro que ele chama).
+ok(
+  /const emTeste = testePlataforma \? await marcasEmTeste\(marcas\) : \[\];/.test(fonteWebhook),
+  '🔴 C10: o handler lê quais destinos da regra estão em teste (e só lê quando é teste da plataforma)'
+);
+ok(
+  /const sonda = testePlataforma && emTeste\.length > 0;/.test(fonteWebhook),
+  '🔴 C10: a sonda liga quando a plataforma testou e há pelo menos um Pixel em teste'
+);
+ok(
+  /\?\s*decisaoDaSonda\(emTeste\)/.test(fonteWebhook) && !/decisaoDaSonda\(marcas\)/.test(fonteWebhook),
+  '🔴 C10: `decisaoDaSonda` recebe só os Pixels em teste, nunca a lista inteira da regra'
+);
+ok(
+  /soMarcasEmTeste\(ids, /.test(fonteWebhook) && !/algumaMarcaEmTeste|ids\.some\(/.test(fonteWebhook),
+  '🔴 C10: `marcasEmTeste` do handler usa o mesmo filtro desta suíte; a pergunta "alguma marca?" saiu'
 );
 
 /* ================================================================== */
@@ -461,7 +607,9 @@ const gitignore = (() => {
     return '';
   }
 })();
-const configIgnorado = /^\s*config\/?\s*$/m.test(gitignore);
+// `/config/` (só o da raiz) desde o 2º deploy de 26/09: `config/` sem a barra
+// escondia também `src/app/api/config/route.ts`, que precisa ir para o git.
+const configIgnorado = /^\s*\/?config\/?\s*$/m.test(gitignore);
 
 ok(
   configIgnorado,
@@ -488,6 +636,21 @@ if (fs.existsSync(marcasReais)) {
 } else {
   ok(true, 'MIG-4: não há config/marcas.json local — a marca do `.env` já nasce desligada (T8)');
 }
+
+/* ================================================================== */
+/* Rede — nada tentou sair                                             */
+/* ================================================================== */
+console.log('\n  -- Rede: nenhuma chamada --');
+
+ok(
+  globalThis.fetch === fetchFalso,
+  'Rede: o fetch falso continua no lugar até o fim (ninguém o trocou no meio)'
+);
+ok(
+  chamadasDeRede.length === 0,
+  '🔴 Rede: nenhuma chamada de fetch na suíte inteira (nem à Meta, nem à Cloudflare)',
+  chamadasDeRede.length ? `${chamadasDeRede.length} chamada(s)` : ''
+);
 
 /* ================================================================== */
 

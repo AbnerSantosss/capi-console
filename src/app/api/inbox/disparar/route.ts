@@ -8,7 +8,7 @@ import {
   listarMarcas,
   empresaDaMarca,
 } from '@/lib/config-store';
-import { empresaDaRequisicao } from '@/lib/empresa-ativa';
+import { empresaParaEscrita } from '@/lib/empresa-ativa';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { exigirSessao } from '@/lib/sessao';
 import { ehNomePadraoMeta } from '@/lib/meta-events';
@@ -29,7 +29,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
-    const empresaId = await empresaDaRequisicao(request);
+    // T6 (C1): aba e navegador em empresas diferentes → 409 antes de ler o
+    // corpo, e nada sai. Evento enviado da empresa errada não volta atrás.
+    const empresaId = await empresaParaEscrita(request, 'enviar');
     const body = (await request.json()) as { id?: string; marcas?: string[]; eventoMeta?: string };
     const item = await acharEntrada(String(body.id || ''));
     // Defesa em profundidade do disparo em lote: a tela ja so mostra itens da
@@ -37,6 +39,19 @@ export async function POST(request: NextRequest) {
     // pode virar evento. 404 — e nao 403 — para nao revelar que o item existe.
     if (!item || (item.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) {
       return NextResponse.json({ erro: 'Entrada não encontrada.' }, { status: 404 });
+    }
+    // R2 da C10: o "Testar" da plataforma (ping) não vira evento por clique.
+    // A tela já tira o botão (`podeDisparar`, InboxList.tsx); isto fecha a porta
+    // para curl e script: sem `marcas`, o recuo em `regra.marcas` levaria a
+    // sonda ao Pixel de produção. A sonda automática já foi (ou não) na chegada.
+    if (item.testePlataforma || item.classificacao === 'teste-plataforma') {
+      return NextResponse.json(
+        {
+          erro:
+            'Este é o teste do botão "Testar" da plataforma: ele não vai para a Meta por aqui. Nada foi enviado.',
+        },
+        { status: 409 }
+      );
     }
 
     const r = parseWebhook(JSON.stringify(item.payload));

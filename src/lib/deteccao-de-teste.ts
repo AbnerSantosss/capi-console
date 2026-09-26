@@ -38,7 +38,11 @@ export type MotivoDeTeste =
   | 'email-cadastrado'
   /** O nome está na lista de testes cadastrada pelo operador. */
   | 'nome-cadastrado'
-  /** Padrão conhecido: @example.com, evt_preview…, cupom de centavos. */
+  /**
+   * Padrão conhecido: @example.com, evt_preview…, cupom de centavos, o "jairo"
+   * da equipe, nome de teste. A `explicacao` diz qual deles bateu
+   * (`qualPadraoConhecido`).
+   */
   | 'padrao-conhecido'
   /** O mesmo e-mail em várias compras — ninguém compra o mesmo curso 4 vezes. */
   | 'email-repetido';
@@ -139,23 +143,58 @@ export interface EventoSuspeitavel {
 
 const DOMINIOS_DE_TESTE = /@(example\.com|exemplo\.com\.br|example\.org|test\.com)$/;
 
+/** `0.05` → `R$ 0,05`. Só para a frase da tela; a régua compara o número cru. */
+function emReais(valor: number): string {
+  // Abaixo de um centavo o `toFixed(2)` daria "R$ 0,00", que parece valor zero
+  // — e zero é justamente o que a régua NÃO marca.
+  if (valor < 0.01) return 'menos de R$ 0,01';
+  return `R$ ${valor.toFixed(2).replace('.', ',')}`;
+}
+
 /**
- * O padrão conhecido da plataforma e da equipe — a régua que `ehTesteInterno`
- * de `parser.ts` sempre aplicou, isolada aqui para ter um lugar só.
+ * QUAL padrão conhecido da plataforma e da equipe este evento casou, em
+ * palavras de tela — ou `null` quando nenhum casou. É a régua que
+ * `ehTesteInterno` de `parser.ts` sempre aplicou, isolada aqui para ter um
+ * lugar só.
  *
- * 🔴 `parser.ts` continua sendo o dono da função `ehTesteInterno` e nada foi
+ * 🔴 A régua é a mesma de antes (D13, mantida pelo dono em D6): mesmas
+ * condições, na mesma ordem. O que mudou é só que ela agora diz qual das
+ * condições bateu — antes a tela mostrava "(domínio de exemplo, evt_preview ou
+ * cupom de centavos)" para tudo, inclusive para o "jairo", que é o que mais
+ * pega. Quando duas condições batem, vale a primeira, como sempre valeu.
+ *
+ * 🔴 A frase nunca repete o e-mail nem o nome do comprador: ela é gravada no
+ * item da caixa e mostrada na tela. Só o PEDAÇO que casou (o domínio de
+ * exemplo, o "jairo", o nome de teste) aparece.
+ *
+ * `parser.ts` continua sendo o dono da função `ehTesteInterno` e nada foi
  * removido de lá: o webhook ainda a chama, e ela é o piso desta decisão.
  */
-export function padraoConhecido(ev: EventoSuspeitavel): boolean {
+export function qualPadraoConhecido(ev: EventoSuspeitavel): string | null {
   const email = achatar(ev.email);
   const nome = achatar(ev.nome || `${ev.firstName ?? ''} ${ev.lastName ?? ''}`);
   const valor = Number(ev.valor ?? 0);
-  if (typeof ev.eventId === 'string' && /^evt_preview/i.test(ev.eventId)) return true;
-  if (DOMINIOS_DE_TESTE.test(email)) return true;
-  if (email.startsWith('teste@') || email.startsWith('testador@') || email.includes('jairo')) return true;
-  if (nome.includes('jairo') || nome === 'lead convidado' || nome.includes('simulacao teste')) return true;
-  if (Number.isFinite(valor) && valor > 0 && valor <= 0.1) return true;
-  return false;
+  if (typeof ev.eventId === 'string' && /^evt_preview/i.test(ev.eventId)) {
+    return 'evento de pré-visualização da plataforma (evt_preview)';
+  }
+  // `DOMINIOS_DE_TESTE` não tem a flag `g`: o `exec` não guarda estado entre chamadas.
+  const dominio = DOMINIOS_DE_TESTE.exec(email);
+  if (dominio) return `e-mail com domínio de exemplo (@${dominio[1]})`;
+  if (email.startsWith('teste@')) return 'e-mail que começa com "teste@"';
+  if (email.startsWith('testador@')) return 'e-mail que começa com "testador@"';
+  if (email.includes('jairo')) return 'e-mail com o padrão da equipe de testes ("jairo")';
+  if (nome.includes('jairo')) return 'nome com o padrão da equipe de testes ("jairo")';
+  if (nome === 'lead convidado') return 'nome de teste ("lead convidado")';
+  if (nome.includes('simulacao teste')) return 'nome de teste ("simulação teste")';
+  if (Number.isFinite(valor) && valor > 0 && valor <= 0.1) {
+    return `valor de centavos (${emReais(valor)}), típico de cupom de teste`;
+  }
+  return null;
+}
+
+/** O evento casa com algum padrão conhecido? Mesma régua de `qualPadraoConhecido`. */
+export function padraoConhecido(ev: EventoSuspeitavel): boolean {
+  return qualPadraoConhecido(ev) !== null;
 }
 
 /**
@@ -189,14 +228,16 @@ export function avaliarTeste(ev: EventoSuspeitavel, lista?: ListaDeTeste): Vered
     };
   }
 
-  // 2. Padrão conhecido — o piso de sempre.
-  if (padraoConhecido(ev)) {
+  // 2. Padrão conhecido — o piso de sempre. A frase diz QUAL padrão bateu:
+  // "padrão de teste" sozinho não deixa o operador entender por que uma venda
+  // virou teste.
+  const padrao = qualPadraoConhecido(ev);
+  if (padrao !== null) {
     return {
       ehTeste: true,
       bloqueiaAutomatico: true,
       motivo: 'padrao-conhecido',
-      explicacao:
-        'Padrão de teste conhecido (domínio de exemplo, evt_preview ou cupom de centavos). Nada é enviado à Meta.',
+      explicacao: `Padrão de teste conhecido: ${padrao}. Nada é enviado à Meta.`,
     };
   }
 
@@ -213,8 +254,8 @@ export function avaliarTeste(ev: EventoSuspeitavel, lista?: ListaDeTeste): Vered
       bloqueiaAutomatico: true,
       motivo: 'email-repetido',
       explicacao:
-        `Este e-mail já aparece em ${compras} compras — comprador real compra uma vez. ` +
-        'O evento fica na fila esperando você conferir; nada saiu sozinho.',
+        `Este e-mail já aparece em ${compras} compras. ` +
+        'O envio automático ficou em espera para você conferir; a venda continua na fila e pode ser enviada.',
     };
   }
 

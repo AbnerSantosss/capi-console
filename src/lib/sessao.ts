@@ -1,7 +1,7 @@
 import 'server-only';
 import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
-import { DESTINOS_PERMITIDOS, type DestinoPermitido } from './rotas-console';
+import { DESTINOS_PERMITIDOS, ehEnderecoDeEmpresa, type DestinoPermitido } from './rotas-console';
 
 /**
  * Sessão do console — cookie assinado com HMAC-SHA256 e chave derivada.
@@ -177,15 +177,26 @@ export function verificarSessao(token: string | undefined | null): SessaoValida 
 }
 
 /**
+ * Segmento de ponto (`.` ou `..`), inclusive codificado (`%2e`), no caminho
+ * ainda BRUTO. Precisa ser barrado antes do `new URL`, que normaliza
+ * `/e/../pixels` para `/pixels` e o faria passar pela lista.
+ */
+const RE_SEGMENTO_DE_PONTO = /(^|\/)(?:\.|%2e){1,2}(?=\/|$)/i;
+
+/**
  * Valida o destino de redirecionamento (D5).
  *
  * Só aceita o pathname (nunca search/hash) pertencente a DESTINOS_PERMITIDOS
- * da mesma origem. Qualquer desvio (//evil.com, /\\evil.com, /login, /api/*) retorna '/'.
+ * ou ao padrão fechado `/e/<slug>[/<aba>]` (V2 do v7), da mesma origem.
+ * Qualquer desvio (//evil.com, /\\evil.com, esquema, `..`, maiúscula, ponto no
+ * slug, aba desconhecida, /login, /api/*) retorna '/'.
  */
 export function validarDestino(bruto: string | null | undefined): DestinoPermitido {
   if (!bruto || typeof bruto !== 'string') return '/';
   // Rejeita barras invertidas (evita evasão de host em navegadores)
   if (bruto.includes('\\') || bruto.startsWith('//')) return '/';
+  // Rejeita `.` e `..` como segmento antes que o `new URL` os resolva.
+  if (RE_SEGMENTO_DE_PONTO.test(bruto.split(/[?#]/)[0])) return '/';
 
   try {
     const base = 'http://localhost';
@@ -196,6 +207,7 @@ export function validarDestino(bruto: string | null | undefined): DestinoPermiti
     if ((DESTINOS_PERMITIDOS as readonly string[]).includes(caminho)) {
       return caminho as DestinoPermitido;
     }
+    if (ehEnderecoDeEmpresa(caminho)) return caminho;
     return '/';
   } catch {
     return '/';

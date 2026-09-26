@@ -35,8 +35,10 @@ interface Descricao {
 
 const TELAS: Record<Tela, Descricao> = {
   manual: {
-    titulo: 'Disparo manual',
-    href: '/',
+    titulo: 'Envio manual',
+    // V7: o envio manual mora na aba Eventos de cada empresa; o endereço de
+    // verdade sai de `hrefDoManual(slug)`. Sem empresa, a lista de empresas.
+    href: '/empresas',
     icone: Send,
     tinta: 'var(--tinta-manual)',
     faz: 'Você monta o evento a partir de um pedido real e confere antes de enviar. Um por vez.',
@@ -44,7 +46,7 @@ const TELAS: Record<Tela, Descricao> = {
       'para recuperar uma venda que o Pixel do navegador perdeu, como PIX que só confirmou depois.',
   },
   automatico: {
-    titulo: 'Disparo automático',
+    titulo: 'Envio automático',
     href: '/automatico',
     icone: Workflow,
     tinta: 'var(--tinta-automatico)',
@@ -55,12 +57,24 @@ const TELAS: Record<Tela, Descricao> = {
 
 const ORDEM: Tela[] = ['manual', 'automatico'];
 
+/**
+ * O "Envio manual" da empresa: a vista `manual` da aba Eventos. Sem apelido
+ * (tela fora de `/e/<apelido>/…`), a lista de empresas — o operador escolhe
+ * de qual empresa é o pedido antes de montar o evento.
+ */
+export function hrefDoManual(slug?: string): string {
+  return slug ? `/e/${encodeURIComponent(slug)}/eventos?vista=manual` : '/empresas';
+}
+
 export function ExplicacaoDoDisparo({
   atual,
+  slug,
   className,
 }: {
   /** A tela em que o operador está agora: ela vem marcada, sem link. */
   atual: Tela;
+  /** Apelido da empresa desta tela: leva o cartão "Envio manual" à aba Eventos dela. */
+  slug?: string;
   className?: string;
 }) {
   return (
@@ -82,7 +96,9 @@ export function ExplicacaoDoDisparo({
         {ORDEM.map((tela) => (
           <CartaoDeTela
             key={tela}
-            dados={TELAS[tela]}
+            dados={
+              tela === 'manual' ? { ...TELAS.manual, href: hrefDoManual(slug) } : TELAS[tela]
+            }
             aqui={tela === atual}
           />
         ))}

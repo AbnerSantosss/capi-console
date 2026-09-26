@@ -3,7 +3,7 @@
  *
  * Esta funcao nao usa React, nao le store, nao busca nada: recebe tres fatos e
  * devolve um estado. E de proposito. O estado do Pixel e a frase mais cara de
- * errar do produto — quem le "Disparando sozinho" para de procurar o problema —
+ * errar do produto — quem le "Enviando sozinho" para de procurar o problema —
  * entao ele precisa ser conferivel lendo doze linhas, sem montar componente.
  *
  * A ORDEM DE AVALIACAO E OBRIGATORIA (8.2.3):
@@ -11,7 +11,7 @@
  *   1. !temToken                        -> 🔴 Sem token
  *   2. !autoDisparo                     -> ⚪ So acumulando fila
  *   3. autoDisparo && zero regra 'auto' -> 🟡 Automatico ligado, mas nada acontece
- *   4. autoDisparo && >=1 regra 'auto'  -> 🟢 Disparando sozinho
+ *   4. autoDisparo && >=1 regra 'auto'  -> 🟢 Enviando sozinho
  *
  * 🔴 VENCE TUDO. Um Pixel sem credencial com o interruptor ligado nao esta
  * "disparando sozinho": nao esta disparando nada. Mostrar 🟢 ali seria mentir
@@ -52,17 +52,17 @@ const TEXTO: Record<FaixaDePixel, Omit<EstadoDePixel, 'faixa'>> = {
   },
   'so-fila': {
     rotulo: 'Só acumulando fila',
-    explicacao: 'Disparo automático desligado. Tudo fica esperando você enviar.',
+    explicacao: 'Envio automático desligado. Tudo fica esperando você enviar.',
     tom: 'neutral',
   },
   'ligado-sem-regra': {
     rotulo: 'Automático ligado, mas nada acontece',
     explicacao:
-      'O disparo automático está ligado neste Pixel, mas nenhuma regra está no modo automático. Nada será enviado sozinho.',
+      'O envio automático está ligado neste Pixel, mas nenhuma regra está no modo automático. Nada será enviado sozinho.',
     tom: 'warning',
   },
   disparando: {
-    rotulo: 'Disparando sozinho',
+    rotulo: 'Enviando sozinho',
     explicacao:
       'Eventos que casam com uma regra automática vão para a Meta sem você fazer nada.',
     tom: 'success',

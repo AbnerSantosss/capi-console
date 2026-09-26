@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { lerIntegracoes } from '@/lib/config-store';
 import { empresaDaRequisicao } from '@/lib/empresa-ativa';
+import {
+  BASE_FALLBACK,
+  endpointDoDominio,
+  enderecoProprioPronto,
+} from '@/lib/endereco-da-tag';
 import { exigirSessao } from '@/lib/sessao';
-import { hostDaTag, type DominioTag } from '@/lib/tag-dominios';
+import { hostDaTag } from '@/lib/tag-dominios';
 import { gerarTodasAsTags } from '@/lib/tag-script';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +16,8 @@ export const dynamic = 'force-dynamic';
 /**
  * Gerador das tags prontas, para a aba "Tag do site" do console.
  *
- *   GET /api/tag/gerar?dominio=<id>   -> { endpoint, dominioId, tags: [...] }
+ *   GET /api/tag/gerar?dominio=<id>
+ *     -> { endpoint, dominioId, tags: [...], enderecoProprioPronto }
  *
  * Rota COM sessao, ao contrario do coletor: aqui sai a chave publica junto de
  * cada tag, e nao ha motivo para servir isso a quem nao esta logado.
@@ -20,17 +26,12 @@ export const dynamic = 'force-dynamic';
  * grande e conhece o nucleo inteiro do coletor; arrasta-lo para o bundle do
  * navegador faria toda visita ao console baixar codigo que so o operador usa
  * uma vez, ao cadastrar um dominio.
+ *
+ * V8 do plano v7 (acrescimos de 24/09 05:25 e 08:50): a tag de um dominio com
+ * subdominio so chama o endereco do cliente depois de MEDIDO que ele responde
+ * por este console (`enderecoProprioPronto`, em `lib/endereco-da-tag.ts`).
+ * Antes disso, chama o nosso coletor e continua coletando.
  */
-
-/**
- * Caminho do coletor publico. Uma letra errada aqui nao quebra nada no console:
- * quebra semanas depois, no site do cliente, como uma tag instalada que nunca
- * coletou um evento.
- */
-const CAMINHO_COLETOR = '/api/tag/coletar';
-
-/** Ultimo recurso quando nao ha PUBLIC_BASE_URL nem origem na requisicao. */
-const BASE_FALLBACK = 'http://localhost:3333';
 
 /**
  * Base publica deste console.
@@ -43,31 +44,6 @@ function baseDaRequisicao(request: NextRequest): string {
   const env = String(process.env.PUBLIC_BASE_URL ?? '').trim();
   if (env) return /^https?:\/\//i.test(env) ? env : `https://${env}`;
   return request.nextUrl.origin || BASE_FALLBACK;
-}
-
-/**
- * URL completa do coletor que a tag deste dominio vai chamar.
- *
- * Com subdominio do cliente a tag vira primeira parte e o cookie sobrevive ao
- * ITP; sem ele, cai na nossa base. `hostDaTag` devolve o hostname SEM porta, e
- * por isso a base propria volta como origem inteira: se nao, o console rodando
- * em :3333 geraria tag apontando para a porta 80, que nao responde.
- */
-function endpointDoDominio(dominio: DominioTag | undefined, base: string): string {
-  let origemBase: URL;
-  try {
-    origemBase = new URL(base);
-  } catch {
-    // Base torta no .env nao pode derrubar a tela inteira; a tag sai apontando
-    // para o padrao local e o aviso de localhost aparece no console.
-    origemBase = new URL(BASE_FALLBACK);
-  }
-  if (!dominio) return `${origemBase.origin}${CAMINHO_COLETOR}`;
-  const host = hostDaTag(dominio, base);
-  if (!host || host === origemBase.hostname) {
-    return `${origemBase.origin}${CAMINHO_COLETOR}`;
-  }
-  return `https://${host}${CAMINHO_COLETOR}`;
 }
 
 /**
@@ -96,12 +72,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ erro: 'Domínio não cadastrado.' }, { status: 404 });
     }
 
-    const endpoint = endpointDoDominio(dominio, base);
+    // O endereco proprio so entra na tag depois de MEDIDO: `<sub>.<host>`
+    // respondeu por este console, com HTTPS valido. Com subdominio, `hostDaTag`
+    // devolve `<sub>.<host>`; sem ele, o host da nossa base — e ai nem se
+    // pergunta nada a ninguem.
+    const hostProprio = dominio ? hostDaTag(dominio, base) : '';
+    const nossoHost = dominio ? hostDaTag({ ...dominio, subdominio: undefined }, base) : '';
+    const temSubdominio = Boolean(hostProprio) && hostProprio !== nossoHost;
+    const certificadoPronto = temSubdominio ? await enderecoProprioPronto(hostProprio) : false;
+
+    const endpoint = endpointDoDominio(dominio, base, certificadoPronto);
     // `gerarTodasAsTags` recusa por dentro qualquer evento de dinheiro, entao o
     // catalogo inteiro pode passar: Purchase e Subscribe nunca saem daqui.
     const tags = gerarTodasAsTags(endpoint, tag.chave, undefined, dominio?.host);
 
-    return NextResponse.json({ endpoint, dominioId: dominio?.id ?? null, tags });
+    return NextResponse.json({
+      endpoint,
+      dominioId: dominio?.id ?? null,
+      tags,
+      enderecoProprioPronto: certificadoPronto,
+    });
   } catch (e) {
     if (e instanceof Response) return e;
     // Chave vazia ou endpoint torto chegam aqui como Error do gerador. A

@@ -34,7 +34,10 @@ export type ModoEfetivo = 'auto' | 'fila';
 export type MotivoFila = 'regra-em-fila' | 'auto-do-pixel-desligado' | 'sem-token';
 
 export interface DecisaoPorMarca {
-  /** Modo efetivo de cada marca-alvo. Sempre tem uma entrada por marca pedida. */
+  /**
+   * Modo efetivo de cada marca-alvo. Sempre tem uma entrada por marca pedida.
+   * Na sonda, "pedida" sao so os Pixels em teste (ver `decisaoDaSonda`).
+   */
   modoPorMarca: Record<string, ModoEfetivo>;
   /** So as marcas que ficaram em `fila`, com o porque. */
   motivoFila: Record<string, MotivoFila>;
@@ -126,19 +129,51 @@ export async function resolverModoPorMarca(
 }
 
 /**
+ * Quais destinos estao em MODO TESTE: os que tem `test_event_code` no cadastro.
+ *
+ * E o filtro da sonda do "Testar" (C10, D2 do pacote de correcao). Antes a
+ * pergunta era "ALGUMA marca de destino esta em teste?" e, com um sim, a sonda
+ * ia para TODAS as marcas da regra — inclusive a de producao, onde o `ping`
+ * entraria como evento inventado no dataset que treina as campanhas (regra 1
+ * do CLAUDE.md). Agora a pergunta e "QUAIS estao em teste?", e so elas viram
+ * alvo.
+ *
+ * Pura de proposito: recebe o cadastro ja lido. Quem le o disco e o
+ * `webhook-handler.ts` (`marcasEmTeste`), e este arquivo continua com UMA so
+ * leitura de marcas, a de `resolverModoPorMarca`. Assim o teste chama o mesmo
+ * filtro que o handler usa.
+ *
+ * Id que nao esta no cadastro nao e alvo: aqui tambem nao existe o fallback de
+ * `acharMarca` para a primeira marca da lista. `trim()` porque codigo de teste
+ * so com espacos nao e codigo.
+ */
+export function soMarcasEmTeste(ids: string[], cadastro: Marca[]): string[] {
+  return ids.filter((id) => Boolean(cadastro.find((m) => m.id === id)?.testCode?.trim()));
+}
+
+/**
  * A sonda de conexao NAO passa pela trava do Pixel — e isso e deliberado.
  *
- * O `ping` do botao "Testar" do xWinner so vira evento quando alguma marca de
- * destino tem `test_event_code`, e o que sai e sempre `ViewContent`, nunca uma
- * conversao (`EVENTO_DA_SONDA`, `webhook-handler.ts`). Aplicar a trava aqui
+ * O `ping` do botao "Testar" do xWinner so vai aos Pixels de destino que tem
+ * `test_event_code`, e o que sai e sempre `ViewContent`, nunca uma conversao
+ * (`EVENTO_DA_SONDA`, `webhook-handler.ts`). Aplicar a trava do Switch aqui
  * quebraria um recurso que ja funciona, contra a promessa da FASE 6 de que
  * "nada muda ate alguem clicar no Switch" e contra a proibicao §42 de remover
  * funcionalidade existente. Um teste de conexao nao e disparo automatico de
  * conversao: e o console se identificando para o Gerenciador de Eventos.
+ *
+ * Quem chama passa aqui SO os Pixels em teste, ja filtrados por
+ * `soMarcasEmTeste` (C10, D2). Tudo o que chega vai para `auto`; o Pixel de
+ * producao da mesma regra nao chega, e por isso fica fora da decisao inteira:
+ * sem entrada em `modoPorMarca`, sem `motivoFila`, fora de `marcasAuto`. Ele nao
+ * recebe a sonda e nao a ve na fila. `ModoEfetivo` continua `'auto' | 'fila'`.
+ *
+ * Lista vazia devolve decisao vazia. Aqui NAO existe o recurso ao `default` de
+ * `resolverModoPorMarca`: o `default` pode ser justamente o Pixel de producao.
  */
-export function decisaoDaSonda(marcas: string[]): DecisaoPorMarca {
-  const alvos = marcas.length ? marcas : ['default'];
+export function decisaoDaSonda(marcasEmTeste: string[]): DecisaoPorMarca {
+  const alvos = [...new Set(marcasEmTeste)];
   const modoPorMarca: Record<string, ModoEfetivo> = {};
   for (const id of alvos) modoPorMarca[id] = 'auto';
-  return { modoPorMarca, motivoFila: {}, marcasAuto: [...alvos] };
+  return { modoPorMarca, motivoFila: {}, marcasAuto: alvos };
 }

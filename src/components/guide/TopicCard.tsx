@@ -136,8 +136,8 @@ export function TopicCard({
               title="A ordem existe por um motivo"
               className="mt-4"
             >
-              O passo 5 é a rede de segurança: enquanto o Código de teste da
-              marca estiver preenchido, o disparo automático aparece no Testar
+              O passo 5 é a rede de segurança: enquanto o Código de teste do
+              Pixel estiver preenchido, o envio automático aparece no Testar
               eventos e <strong>não entra nas métricas reais</strong>. Só limpe
               o código depois de ver a compra chegando certa, com fbc e valor.
             </Callout>

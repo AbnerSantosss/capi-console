@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { listarEntradas } from '@/lib/inbox';
+import { inicioDaMemoriaNoTeto, listarEntradas } from '@/lib/inbox';
 import { periodoValido, resumirInbox } from '@/lib/inbox-resumo';
 import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
@@ -21,6 +21,11 @@ const AMOSTRA = 1000;
  *
  * Só leitura, só da empresa da requisição, e NUNCA devolve `payload`: o resumo é
  * contagem, não carrega dado de cliente. Nada aqui dispara evento para a Meta.
+ *
+ * `?comparar=1` acrescenta `resumo.anterior` (a janela anterior, do mesmo
+ * tamanho). A resposta traz o `empresaId` que ESTA rota resolveu: a tela
+ * descarta a resposta que chegar atrasada de outra empresa, do mesmo jeito que
+ * descarta a de outro período.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,11 +33,18 @@ export async function GET(request: NextRequest) {
     const empresaId = await empresaDaRequisicao(request);
     const busca = new URL(request.url).searchParams;
     const periodo = periodoValido(busca.get('dias'), busca.get('de'), busca.get('ate'));
+    const comparar = busca.get('comparar') === '1';
     const itens = await listarEntradas(AMOSTRA, empresaId);
+    // A memória é de TODAS as empresas: no teto, a lista desta pode ser curta
+    // e ainda assim ter perdido os itens antigos (R2 da V4).
+    const memoriaComecaEm = await inicioDaMemoriaNoTeto();
     // `AMOSTRA` entra de novo aqui, agora como teto declarado: é assim que o
     // resumo sabe dizer se a leitura alcançou o começo da janela ou parou antes.
-    const resumo = resumirInbox(itens, new Date().toISOString(), periodo, AMOSTRA);
-    return NextResponse.json({ resumo });
+    const resumo = resumirInbox(itens, new Date().toISOString(), periodo, AMOSTRA, {
+      comparar,
+      memoriaComecaEm,
+    });
+    return NextResponse.json({ resumo, empresaId });
   } catch (e) {
     return erroDeRota(e, 'Não foi possível montar o painel.');
   }

@@ -109,6 +109,59 @@ export async function empresaDaRequisicao(req: NextRequest | Request): Promise<s
 }
 
 /**
+ * A frase do 409 de aba x navegador. `acao` é o verbo do botão que o operador
+ * apertou ("salvar", "enviar"), para a frase falar da coisa que ele fez.
+ */
+export function mensagemAbaDivergente(acao = 'salvar'): string {
+  return `Esta aba está em uma empresa e o navegador em outra. Recarregue a página antes de ${acao}.`;
+}
+
+/**
+ * Empresa ativa de uma chamada que ESCREVE (T6 do pacote de correção, C1).
+ *
+ * `empresaDaRequisicao` deixa o header vencer o cookie sem perguntar nada — o
+ * que está certo para LER, e errado para gravar. Duas abas do console: a aba 1
+ * troca para a empresa B (o cookie, que é do navegador, passa a dizer B); a aba
+ * 2 continua mostrando a A e manda header A. Quem vence é o header, e a aba 2
+ * grava na A achando que está na A — mas o operador acabou de escolher B, e a
+ * próxima tela de servidor que ele abrir vai mostrar a B. Uma das duas pontas
+ * está desatualizada, e o servidor não tem como saber qual: por isso recusa as
+ * duas e pede para recarregar, em vez de adivinhar.
+ *
+ * 🔴 A comparação é dos valores CRUS (só `trim()`), ANTES de
+ * `resolverEmpresaId`. Resolvido, um id de empresa apagada vira `'default'`:
+ * header `emp_apagada` + cookie `default` passariam como "iguais" e a aba presa
+ * numa empresa que não existe mais gravaria na padrão — que é justamente a
+ * empresa do dono, com o webhook que entrega venda hoje.
+ *
+ * Só um dos dois presente (chamada de script sem cookie, página de servidor sem
+ * header) segue como antes: não há o que comparar.
+ *
+ * Lança uma `Response` 409 em JSON, no mesmo molde de `exigirSessao`:
+ * `erroDeRota` e os `catch` das rotas já devolvem `Response` como veio. Não usa
+ * `respostaErro` de propósito — ela puxa `next/server`, e este arquivo é
+ * importado por testes que rodam sob `--conditions=react-server`, onde esse
+ * especificador não resolve.
+ */
+export async function empresaParaEscrita(
+  req: NextRequest | Request,
+  acao = 'salvar'
+): Promise<string> {
+  const doHeader = String(req.headers.get(HEADER_EMPRESA) ?? '').trim();
+  const doCookie = String(cookieDaRequisicao(req) ?? '').trim();
+  if (doHeader && doCookie && doHeader !== doCookie) {
+    throw new Response(JSON.stringify({ erro: mensagemAbaDivergente(acao) }), {
+      status: 409,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+  return empresaDaRequisicao(req);
+}
+
+/**
  * Empresa ativa de uma página de servidor (RSC): cookie → `'default'`.
  *
  * `next/headers` entra por `await import` e não por import estático porque os

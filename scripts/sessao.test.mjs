@@ -92,7 +92,8 @@ ok(credenciaisConferem('admin'.repeat(10), 'senha'.repeat(20)) === false, 'compr
 ok(credenciaisConferem('', '') === false, 'credenciais vazias falham');
 
 /* ---------------- 8. validarDestino ---------------- */
-ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 9, 'DESTINOS_PERMITIDOS possui 9 rotas');
+ok(Array.isArray(DESTINOS_PERMITIDOS) && DESTINOS_PERMITIDOS.length === 10, 'DESTINOS_PERMITIDOS possui 10 rotas');
+ok(validarDestino('/empresas') === '/empresas', 'destino /empresas permitido (V2)');
 ok(validarDestino('/') === '/', 'destino / permitido');
 ok(validarDestino('/painel') === '/painel', 'destino /painel permitido');
 ok(validarDestino('/painel/compras') === '/painel/compras', 'destino /painel/compras permitido');
@@ -125,16 +126,43 @@ ok(validarDestino('') === '/', 'string vazia -> /');
 ok(validarDestino(null) === '/', 'null -> /');
 ok(validarDestino(undefined) === '/', 'undefined -> /');
 
-/* ---------------- 9. DESTINO_INICIAL (D-2') ---------------- */
-// A tela de chegada e o Painel, mas a rede de seguranca de um destino RECUSADO
-// continua sendo `/`. Se alguem trocar o fallback de `validarDestino` por
-// `/painel`, um open redirect barrado passaria a mandar o usuario para outra
-// tela que nao a do disparo manual — e os tres casos acima (barra dupla,
-// javascript:, origem externa) deixariam de provar o que provam.
+/* ---------------- 8b. O padrao fechado /e/<slug>[/<aba>] (V2 do v7) ---------------- */
+ok(validarDestino('/e/gtech') === '/e/gtech', '/e/<slug> (Visao geral) permitido');
+for (const aba of ['dominio', 'fontes', 'pixels', 'eventos', 'regras', 'configuracoes']) {
+  ok(validarDestino(`/e/gtech/${aba}`) === `/e/gtech/${aba}`, `/e/<slug>/${aba} permitido`);
+}
+ok(validarDestino('/e/codigo-vencedor/eventos') === '/e/codigo-vencedor/eventos', 'slug com hifen permitido');
+ok(validarDestino('/e/gtech/eventos?vista=compras') === '/e/gtech/eventos', 'query descartada, pathname do padrao preservado');
+ok(validarDestino('/e/gtech/nada') === '/', 'aba desconhecida -> /');
+ok(validarDestino('/e/gtech/pixels/extra') === '/', 'segmento a mais -> /');
+ok(validarDestino('/e/gtech/') === '/', 'barra no fim -> /');
+ok(validarDestino('/e/') === '/', '/e/ sem slug -> /');
+ok(validarDestino('/e') === '/', '/e sozinho -> /');
+ok(validarDestino('/e//pixels') === '/', 'barra dupla no meio -> /');
+ok(validarDestino('/e/../pixels') === '/', '.. no caminho -> / (antes de o URL normalizar para /pixels)');
+ok(validarDestino('/e/%2e%2e/pixels') === '/', '.. codificado -> /');
+ok(validarDestino('/e/./gtech') === '/', '. como segmento -> /');
+ok(validarDestino('/e/Gtech/pixels') === '/', 'maiuscula no slug -> /');
+ok(validarDestino('/e/g.tech/pixels') === '/', 'ponto no slug -> /');
+ok(validarDestino('/e/g_tech/pixels') === '/', 'sublinhado no slug -> /');
+ok(validarDestino('/e/-gtech/pixels') === '/', 'hifen no inicio do slug -> /');
+ok(validarDestino('/e/gtech/Pixels') === '/', 'maiuscula na aba -> /');
+ok(validarDestino(`/e/${'a'.repeat(41)}`) === '/', 'slug com mais de 40 caracteres -> /');
+ok(validarDestino('/e/gtech%2Fpixels') === '/', 'barra codificada no slug -> /');
+ok(validarDestino('//evil.com/e/gtech') === '/', 'barra dupla com padrao -> /');
+ok(validarDestino('/\\evil.com/e/gtech') === '/', 'barra invertida com padrao -> /');
+ok(validarDestino('https://evil.com/e/gtech') === '/', 'esquema externo com padrao -> /');
+ok(validarDestino('javascript:/e/gtech') === '/', 'esquema javascript com padrao -> /');
+
+/* ---------------- 9. DESTINO_INICIAL (D-2', V2 do v7) ---------------- */
+// Desde a V2 a chegada e `/`, que o proxy manda por 307 para a Visao geral da
+// empresa ativa (`/e/<slug>`). A rede de seguranca de um destino RECUSADO
+// continua sendo `/` — hoje as duas coincidem de proposito: um destino
+// barrado leva a empresa ativa, nunca a uma tela de outra empresa.
 const { DESTINO_INICIAL } = await import(
   new URL('../src/lib/rotas-console.ts', import.meta.url).href
 );
-ok(DESTINO_INICIAL === '/painel', 'quem entra sem pedir tela cai no Painel');
+ok(DESTINO_INICIAL === '/', 'quem entra sem pedir tela cai em / (o proxy leva a /e/<ativa>)');
 ok(
   DESTINOS_PERMITIDOS.includes(DESTINO_INICIAL),
   'a tela de chegada esta na allowlist (senao o proxy faria laco)'

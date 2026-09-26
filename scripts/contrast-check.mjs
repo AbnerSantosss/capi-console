@@ -19,6 +19,19 @@
  * e renumerar aqui quebraria a conversa entre o gate e o documento que o
  * autoriza. Quem le "G9 falhou" tem de achar G9 no plano.
  *
+ * FASE 5 (v7): duas paletas. O primeiro `:root` de globals.css e a paleta do
+ * console (o design do dono: azul-marinho, acao em #0665EF) e o bloco
+ * `:root:not(:has([data-console]))` e a paleta do P0, que so o login le. As
+ * duas sao pintadas de verdade, entao G1, G2 e G3' medem os mesmos pares nas
+ * DUAS, cada uma com o seu `--surface-0`; G4 e G7 aceitam os dois blocos como
+ * lugar de definicao, e so eles; e o `themeColor` e conferido em dois
+ * arquivos: `src/app/layout.tsx` contra o `--surface-0` do login e
+ * `src/app/(console)/layout.tsx` contra o do console. Nenhum piso mudou.
+ * Entraram dois calculos novos, so na paleta do console: o fundo do cartao de
+ * sucesso (`--surface-success`) e o PIOR CASO do painel translucido
+ * (`--surface-painel`, um `color-mix` — composto sobre #FFFFFF e sobre
+ * `--surface-0` antes de medir o texto em cima).
+ *
  * Por que cada regua existe:
  *
  * G1 e G2 sao a norma, e norma nao se afrouxa. Quando um token nao alcanca a
@@ -76,7 +89,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { razao, sobrepor, degrauL } from './lib/cor.mjs';
+import { razao, sobrepor, compor, degrauL } from './lib/cor.mjs';
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ler = (rel) => readFileSync(join(RAIZ, rel), 'utf8');
@@ -108,15 +121,27 @@ function corpoDoBloco(css, abertura) {
   process.exit(1);
 }
 
+/* Dois blocos, duas paletas (FASE 5, v7). `ROOT` continua sendo o PRIMEIRO
+   `:root {` — a paleta do console — e `ROOT_LOGIN` e o bloco que so casa
+   quando a pagina nao tem `[data-console]`, isto e, o login com a paleta do
+   P0. O `indexOf` de `corpoDoBloco` acha a abertura exata; o terceiro `:root {`
+   de globals.css (so `accent-color`) nunca e o primeiro, entao nao confunde. */
 const ROOT = corpoDoBloco(cssGlobal, ':root {');
+const ROOT_LOGIN = corpoDoBloco(cssGlobal, ':root:not(:has([data-console])) {');
 const TEMA_ESTATICO = corpoDoBloco(cssGlobal, '@theme static {');
 
-const tok = (nome) => {
-  const achado = ROOT.texto.match(new RegExp(`--${nome}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
+/** Os blocos onde uma cor pode NASCER (G4 e G7). Qualquer outro lugar reprova. */
+const BLOCOS_DE_DEFINICAO = [ROOT, ROOT_LOGIN];
+const dentroDeUmBloco = (inicioDaLinha) =>
+  BLOCOS_DE_DEFINICAO.some((b) => inicioDaLinha >= b.inicio && inicioDaLinha < b.fim);
+
+const tok = (nome, bloco = ROOT) => {
+  const achado = bloco.texto.match(new RegExp(`--${nome}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
   if (!achado) {
+    const onde = bloco === ROOT_LOGIN ? 'bloco :root:not(:has([data-console])) (login)' : 'primeiro :root (console)';
     console.error(
       `\n  ERRO: o token --${nome} nao existe (ou nao e hex de 6 digitos) no ` +
-        ':root de globals.css.\n  Renomeou, apagou ou converteu para rgba()/oklch()? ' +
+        `${onde} de globals.css.\n  Renomeou, apagou ou converteu para rgba()/oklch()? ` +
         'Este script so calcula contraste de cor opaca em hex —\n  ' +
         'e por isso que DS-0.2 exige hex de 6 digitos. Atualize os dois juntos.\n'
     );
@@ -125,65 +150,111 @@ const tok = (nome) => {
   return achado[1].toUpperCase();
 };
 
-const S0 = tok('surface-0');
-const S1 = tok('surface-1');
-const S2 = tok('surface-2');
-const S3 = tok('surface-3'); // dialog / popover / select / tooltip / paleta
+/**
+ * Le uma paleta inteira de um bloco. Os nomes sao os mesmos nas duas — o que
+ * muda e o valor —, e e isso que deixa o gate medir os mesmos pares nas duas
+ * sem uma linha de caso especial.
+ */
+function paleta(bloco, rotulo) {
+  const t = (nome) => tok(nome, bloco);
+  const p = {
+    rotulo,
+    S0: t('surface-0'),
+    S1: t('surface-1'),
+    S2: t('surface-2'),
+    S3: t('surface-3'), // dialog / popover / select / tooltip / paleta
 
-const LINHA_SUTIL = tok('border-subtle');
-const LINHA_FORTE = tok('border-default');
-const LINHA_CONTROLE = tok('border-control');
-const FOCO = tok('border-focus');
+    LINHA_SUTIL: t('border-subtle'),
+    LINHA_FORTE: t('border-default'),
+    LINHA_CONTROLE: t('border-control'),
+    FOCO: t('border-focus'),
 
-const FG_FORTE = tok('fg-strong');
-const FG_CORPO = tok('fg-body');
-const FG_APAGADO = tok('fg-muted');
-const FG_DESABILITADO = tok('fg-disabled');
+    FG_FORTE: t('fg-strong'),
+    FG_CORPO: t('fg-body'),
+    FG_APAGADO: t('fg-muted'),
+    FG_DESABILITADO: t('fg-disabled'),
 
-/* O papel: a acao primaria do v4. Fundo claro, texto quase preto — o elemento
-   de maior luminosidade da tela, que e o que o olho acha primeiro sem precisar
-   de matiz nenhum. Os tres estados sao medidos porque hover e active tambem
-   carregam texto, e um `active` que escurece demais quebra a leitura no exato
-   instante em que o dedo esta em cima do botao que gasta dinheiro. */
-const PAPEL = tok('papel');
-const PAPEL_HOVER = tok('papel-hover');
-const PAPEL_ATIVO = tok('papel-active');
-const PAPEL_TEXTO = tok('papel-texto');
+    /* O papel: a acao primaria. No P0 (login) e papel claro com texto quase
+       preto; no console (v7) e o azul #0665EF com texto branco. Nos dois casos
+       os tres estados sao medidos porque hover e active tambem carregam texto,
+       e um `active` que perde contraste quebra a leitura no exato instante em
+       que o dedo esta em cima do botao que gasta dinheiro. */
+    PAPEL: t('papel'),
+    PAPEL_HOVER: t('papel-hover'),
+    PAPEL_ATIVO: t('papel-active'),
+    PAPEL_TEXTO: t('papel-texto'),
 
-/* As cinco areas. `--tinta-*` (L 0.80) e o degrau de FUNDO — pintura a 6–16%,
-   filete, regua, icone grande, controle marcado. `--tinta-texto-*` (L 0.875) e
-   o degrau de TEXTO e do anel de foco. Sao dois degraus e nao um porque o que
-   serve de fundo a 16% nao serve de letra a 13px, e vice-versa.
+    /* As cinco areas. `--tinta-*` e o degrau de FUNDO — pintura a 6–16%,
+       filete, regua, icone grande, controle marcado. `--tinta-texto-*` e o
+       degrau de TEXTO e do anel de foco. Sao dois degraus e nao um porque o
+       que serve de fundo a 16% nao serve de letra a 13px, e vice-versa.
 
-   As cinco sao medidas uma a uma, e nao so a do painel: o gate mede o PIOR
-   caso das cinco, porque `[data-area]` troca a tinta por rota e o operador nao
-   escolhe em qual area ele precisa enxergar. */
-const AREAS = ['painel', 'instalacao', 'pixels', 'manual', 'automatico'].map((nome) => ({
-  nome,
-  tinta: tok(`tinta-${nome}`),
-  texto: tok(`tinta-texto-${nome}`),
-}));
+       As cinco sao medidas uma a uma, e nao so a do painel: o gate mede o PIOR
+       caso das cinco, porque `[data-area]` troca a tinta por rota e o operador
+       nao escolhe em qual area ele precisa enxergar. (No console as cinco tem
+       hoje o mesmo valor; continuam medidas uma a uma para o dia em que nao
+       tiverem.) */
+    AREAS: ['painel', 'instalacao', 'pixels', 'manual', 'automatico'].map((nome) => ({
+      nome,
+      tinta: t(`tinta-${nome}`),
+      texto: t(`tinta-texto-${nome}`),
+    })),
 
-const SUCESSO = tok('success');
-const AVISO = tok('warning');
-const ERRO = tok('danger');
+    SUCESSO: t('success'),
+    AVISO: t('warning'),
+    ERRO: t('danger'),
+  };
 
-/* -------------------------------------------------------------------------
-   Compostos que a interface realmente pinta
-   -------------------------------------------------------------------------
-   Cor com alfa nao tem contraste proprio: o que chega ao olho e a mistura com
-   o que esta atras. Medir `--danger` contra `--surface-3` e responder uma
-   pergunta que a tela nunca faz — o que a tela pinta e a caixa de erro a 10%.
-   ------------------------------------------------------------------------- */
+  /* Compostos que a interface realmente pinta. Cor com alfa nao tem contraste
+     proprio: o que chega ao olho e a mistura com o que esta atras. Medir
+     `--danger` contra `--surface-3` e responder uma pergunta que a tela nunca
+     faz — o que a tela pinta e a caixa de erro a 10%. */
+  p.PAGINA_ESCURECIDA = sobrepor('#000000', 0.6, p.S0); // overlay bg-black/60
+  p.CAIXA_ERRO = sobrepor(p.ERRO, 0.1, p.S3); // callout/selo de erro
+  p.CAIXA_AVISO = sobrepor(p.AVISO, 0.1, p.S3);
+  /** Linha ativa de select / paleta de comandos: tinta a 15% sobre o flutuante. */
+  p.selecaoDe = (area) => sobrepor(area.tinta, 0.15, p.S3);
+  /** Caixa da area dentro de um painel: tinta a 16% sobre o painel. */
+  p.caixaDe = (area) => sobrepor(area.tinta, 0.16, p.S1);
+  return p;
+}
 
-const PAGINA_ESCURECIDA = sobrepor('#000000', 0.6, S0); // overlay bg-black/60
-const CAIXA_ERRO = sobrepor(ERRO, 0.1, S3); // callout/selo de erro
-const CAIXA_AVISO = sobrepor(AVISO, 0.1, S3);
+const CONSOLE = paleta(ROOT, 'console');
+const LOGIN = paleta(ROOT_LOGIN, 'login');
+const PALETAS = [CONSOLE, LOGIN];
 
-/** Linha ativa de select / paleta de comandos: tinta a 15% sobre o flutuante. */
-const selecaoDe = (area) => sobrepor(area.tinta, 0.15, S3);
-/** Caixa da area dentro de um painel: tinta a 16% sobre o painel. */
-const caixaDe = (area) => sobrepor(area.tinta, 0.16, S1);
+/* Os dois tokens que so a paleta do console tem (v7).
+
+   `--surface-success` e o fundo do cartao "Valor das compras": hex opaco, a
+   mistura de `--success` a 12% sobre `--surface-1` ja gravada no :root.
+
+   `--surface-painel` e o painel TRANSLUCIDO que deixa a imagem de fundo
+   aparecer: `color-mix(in srgb, var(--surface-1) N%, transparent)`. Ele nao
+   tem cor propria, entao o gate nao le hex dele: le o N% e compoe o PIOR CASO
+   — `surface-1` sobre #FFFFFF, o ponto mais claro que uma imagem poderia ter —
+   e o caso comum, sobre `surface-0`. Se o pior caso reprovar, quem sobe e a
+   opacidade do token, nunca o piso. */
+const SURFACE_SUCESSO = tok('surface-success');
+const PAINEL_MIX = ROOT.texto.match(
+  /--surface-painel:\s*color-mix\(\s*in srgb\s*,\s*var\(--surface-1\)\s+(\d+(?:\.\d+)?)%\s*,\s*transparent\s*\)\s*;/
+);
+if (!PAINEL_MIX) {
+  console.error(
+    '\n  ERRO: --surface-painel nao e `color-mix(in srgb, var(--surface-1) N%, transparent)` ' +
+      'no primeiro :root de globals.css.\n  O gate calcula o pior caso do painel translucido ' +
+      'a partir desse N; mudou a forma do token, mude este script junto.\n'
+  );
+  process.exit(1);
+}
+const PAINEL_ALFA = Number(PAINEL_MIX[1]) / 100;
+const PAINEL_SOBRE_BRANCO = compor(CONSOLE.S1, '#FFFFFF', PAINEL_ALFA);
+const PAINEL_SOBRE_S0 = compor(CONSOLE.S1, CONSOLE.S0, PAINEL_ALFA);
+
+/* Cada `themeColor` contra a paleta da tela que ele colore (G7). */
+const THEME_COLORS = [
+  ['src/app/layout.tsx', LOGIN],
+  ['src/app/(console)/layout.tsx', CONSOLE],
+];
 
 const TEXTO = 4.5; // SC 1.4.3 texto normal
 const LIMITE = 3.0; // SC 1.4.11 limite de componente / texto grande
@@ -329,8 +400,9 @@ function verificarTokensForaDoRoot() {
       const inicioDaLinha = deslocamento;
       deslocamento += linha.length + 1;
       if (!TOKENS_DE_COR.some((re) => re.test(linha))) return;
-      const dentroDoRoot =
-        rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim;
+      // Os dois blocos de definicao (FASE 5): o primeiro :root (console) e o
+      // :root:not(:has([data-console])) (login). Fora deles, reprova.
+      const dentroDoRoot = rel === GLOBALS && dentroDeUmBloco(inicioDaLinha);
       if (dentroDoRoot) return;
       problemas.push([
         `${rel}:${i + 1}`,
@@ -498,10 +570,10 @@ function verificarHexLiteral() {
       const inicioDaLinha = deslocamento;
       deslocamento += linha.length + 1;
 
-      // O :root de globals.css e o unico lugar do produto onde um literal de
+      // Os dois blocos de definicao de globals.css (o primeiro :root, do
+      // console, e o do login) sao o unico lugar do produto onde um literal de
       // cor e a definicao, e nao uma copia.
-      const naRaiz =
-        rel === GLOBALS && inicioDaLinha >= ROOT.inicio && inicioDaLinha < ROOT.fim;
+      const naRaiz = rel === GLOBALS && dentroDeUmBloco(inicioDaLinha);
       if (naRaiz) return;
       // DS-1.5: os seis matizes do Guia. Excecao nomeada e auditada.
       if (/--hue\s*:/.test(linha)) return;
@@ -527,17 +599,28 @@ function verificarHexLiteral() {
 
   // themeColor e metadado: nao aceita var(). Entao em vez de dispensa-lo do
   // G7, conferimos que ele repete exatamente --surface-0 — e a cor da barra
-  // do navegador, e ela emendar com o fundo da aplicacao e o ponto.
-  const layout = ler('src/app/layout.tsx');
-  const achado = layout.match(/themeColor:\s*'(#[0-9a-fA-F]{6})'/);
-  if (!achado) {
-    problemas.push(['src/app/layout.tsx', 'themeColor ausente', `use '${S0.toLowerCase()}'`]);
-  } else if (achado[1].toUpperCase() !== S0) {
-    problemas.push([
-      'src/app/layout.tsx',
-      `themeColor ${achado[1]} != --surface-0 ${S0}`,
-      `use '${S0.toLowerCase()}'`,
-    ]);
+  // do navegador, e ela emendar com o fundo da aplicacao e o ponto. Desde a
+  // FASE 5 sao dois: a raiz vale para o login (paleta do P0) e o layout do
+  // console a substitui nas rotas do console (Next junta o `viewport` do
+  // segmento raiz ate o mais interno e troca as chaves repetidas).
+  for (const [arquivo, p] of THEME_COLORS) {
+    let conteudo;
+    try {
+      conteudo = ler(arquivo);
+    } catch {
+      problemas.push([arquivo, '(arquivo nao encontrado)', `exporte themeColor '${p.S0}'`]);
+      continue;
+    }
+    const achado = conteudo.match(/themeColor:\s*'(#[0-9a-fA-F]{6})'/);
+    if (!achado) {
+      problemas.push([arquivo, 'themeColor ausente', `use '${p.S0}' (--surface-0 do ${p.rotulo})`]);
+    } else if (achado[1].toUpperCase() !== p.S0) {
+      problemas.push([
+        arquivo,
+        `themeColor ${achado[1]} != --surface-0 do ${p.rotulo} ${p.S0}`,
+        `use '${p.S0}'`,
+      ]);
+    }
   }
 
   return problemas;
@@ -653,198 +736,260 @@ function verificarTokensMortos() {
    Pares medidos — G1 e G2
    ------------------------------------------------------------------------- */
 
-/** Uma linha por area, com o nome da area na frente. */
-const porArea = (rotulo, frente, fundo, alvo) =>
-  AREAS.map((a) => [`${rotulo} · ${a.nome}`, frente(a), fundo(a), alvo]);
+/**
+ * Os pares de G1, G2 e G3' de UMA paleta (FASE 5). Os mesmos pares valem
+ * para as duas — o console e o login pintam os mesmos componentes com
+ * valores diferentes —, entao a lista e escrita uma vez e aplicada a cada
+ * paleta; so os tokens que existem apenas no console (`--surface-success` e o
+ * painel translucido) entram a parte, em `paresSoDoConsole`.
+ */
+function paresDe(p) {
+  const {
+    S0,
+    S1,
+    S2,
+    S3,
+    LINHA_CONTROLE,
+    FOCO,
+    FG_FORTE,
+    FG_CORPO,
+    FG_APAGADO,
+    PAPEL,
+    PAPEL_HOVER,
+    PAPEL_ATIVO,
+    PAPEL_TEXTO,
+    AREAS,
+    SUCESSO,
+    AVISO,
+    ERRO,
+    PAGINA_ESCURECIDA,
+    CAIXA_ERRO,
+    CAIXA_AVISO,
+    selecaoDe,
+    caixaDe,
+  } = p;
 
-const G1 = [
-  [
-    'Base — texto sobre as superficies da pagina',
-    [
-      ['texto forte sobre app', FG_FORTE, S0, TEXTO],
-      ['texto forte sobre painel', FG_FORTE, S1, TEXTO],
-      ['texto forte sobre input', FG_FORTE, S2, TEXTO],
-      ['texto corpo sobre app', FG_CORPO, S0, TEXTO],
-      ['texto corpo sobre painel', FG_CORPO, S1, TEXTO],
-      ['texto corpo sobre input', FG_CORPO, S2, TEXTO],
-      ['helper sobre app', FG_APAGADO, S0, TEXTO],
-      ['helper sobre painel', FG_APAGADO, S1, TEXTO],
-      ['helper sobre input', FG_APAGADO, S2, TEXTO],
-      ['sucesso sobre painel', SUCESSO, S1, TEXTO],
-      ['aviso sobre painel', AVISO, S1, TEXTO],
-      ['erro sobre painel', ERRO, S1, TEXTO],
-      ['erro sobre input', ERRO, S2, TEXTO],
-    ],
-  ],
-  [
-    // O que o operador le em cada area. Cinco linhas por superficie porque a
-    // tinta troca por rota e ninguem escolhe em que area precisa enxergar.
-    'Tinta da area — texto sobre painel',
-    porArea(
-      'tinta-texto sobre painel',
-      (a) => a.texto,
-      () => S1,
-      TEXTO
-    ),
-  ],
-  [
-    'Tinta da area — texto sobre input',
-    porArea(
-      'tinta-texto sobre input',
-      (a) => a.texto,
-      () => S2,
-      TEXTO
-    ),
-  ],
-  [
-    'Tinta da area — texto sobre a camada flutuante',
-    porArea(
-      'tinta-texto sobre modal',
-      (a) => a.texto,
-      () => S3,
-      TEXTO
-    ),
-  ],
-  [
-    // A acao primaria do v4 e uma inversao: papel claro, letra quase preta.
-    // Os tres estados carregam texto, entao os tres sao medidos — um `active`
-    // que escurece demais quebra a leitura no instante do clique.
-    'Papel — a acao primaria (fundo claro, texto escuro)',
-    [
-      ['texto sobre o papel', PAPEL_TEXTO, PAPEL, TEXTO],
-      ['texto sobre o papel em hover', PAPEL_TEXTO, PAPEL_HOVER, TEXTO],
-      ['texto sobre o papel pressionado', PAPEL_TEXTO, PAPEL_ATIVO, TEXTO],
-    ],
-  ],
-  [
-    'Camada flutuante — texto sobre a superficie de modal/popover',
-    [
-      ['titulo sobre modal', FG_FORTE, S3, TEXTO],
-      ['texto corpo sobre modal', FG_CORPO, S3, TEXTO],
-      ['descricao/helper sobre modal', FG_APAGADO, S3, TEXTO],
-      ['sucesso sobre modal', SUCESSO, S3, TEXTO],
-      ['aviso sobre modal', AVISO, S3, TEXTO],
-      ['erro sobre modal', ERRO, S3, TEXTO],
-    ],
-  ],
-  [
-    // Caixas empilhadas: cartao, input e rodape de acoes sao mais escuros que
-    // o modal. O fill nao delimita (1.13); quem delimita e a borda de controle
-    // medida no G2.
-    'Dentro do modal — caixas empilhadas sobre a superficie flutuante',
-    [
-      ['texto forte sobre cartao no modal', FG_FORTE, S2, TEXTO],
-      ['texto corpo sobre cartao no modal', FG_CORPO, S2, TEXTO],
-      ['helper sobre rodape do modal', FG_APAGADO, S2, TEXTO],
-      ['erro sobre caixa de erro no modal', ERRO, CAIXA_ERRO, TEXTO],
-      ['aviso sobre caixa de aviso no modal', AVISO, CAIXA_AVISO, TEXTO],
-    ],
-  ],
-  [
-    // A pintura da area. `bg-tinta/15` na linha ativa do select e da paleta,
-    // `bg-tinta/16` na caixa de destaque dentro de um painel. Nao se mede a
-    // tinta contra o fundo: mede-se o que sobra depois da mistura.
-    'Pintura da area — texto sobre a tinta diluida',
-    [
-      ...porArea('forte sobre linha ativa', () => FG_FORTE, selecaoDe, TEXTO),
-      ...porArea('tinta-texto sobre linha ativa', (a) => a.texto, selecaoDe, TEXTO),
-      ...porArea('tinta-texto sobre caixa da area', (a) => a.texto, caixaDe, TEXTO),
-    ],
-  ],
-  [
-    // A tinta CHEIA so aparece em controle marcado (checkbox, switch, pastilha
-    // de etapa) — e ela e clara, L 0.80. Por isso o glifo inverte para
-    // `surface-0` em vez de continuar branco: branco sobre a tinta daria ~1.7
-    // e o estado sumiria dentro do proprio controle.
-    'Tinta cheia — o glifo do controle marcado inverte',
-    porArea(
-      'surface-0 sobre a tinta',
-      () => S0,
-      (a) => a.tinta,
-      TEXTO
-    ),
-  ],
-];
+  /** Uma linha por area, com o nome da area na frente. */
+  const porArea = (rotulo, frente, fundo, alvo) =>
+    AREAS.map((a) => [`${rotulo} · ${a.nome}`, frente(a), fundo(a), alvo]);
 
-const G2 = [
-  [
-    'Limites de componente (SC 1.4.11) — a borda de controle',
+  const G1 = [
     [
-      ['borda de controle sobre app', LINHA_CONTROLE, S0, LIMITE],
-      ['borda de controle sobre painel', LINHA_CONTROLE, S1, LIMITE],
-      ['borda de controle sobre input', LINHA_CONTROLE, S2, LIMITE],
-      ['borda de controle sobre modal', LINHA_CONTROLE, S3, LIMITE],
-      // Borda externa do modal contra a pagina ja escurecida pelo overlay.
-      ['borda do modal sobre pagina escurecida', LINHA_CONTROLE, PAGINA_ESCURECIDA, LIMITE],
-      ['regua do rodape sobre rodape do modal', LINHA_CONTROLE, S2, LIMITE],
+      'Base — texto sobre as superficies da pagina',
+      [
+        ['texto forte sobre app', FG_FORTE, S0, TEXTO],
+        ['texto forte sobre painel', FG_FORTE, S1, TEXTO],
+        ['texto forte sobre input', FG_FORTE, S2, TEXTO],
+        ['texto corpo sobre app', FG_CORPO, S0, TEXTO],
+        ['texto corpo sobre painel', FG_CORPO, S1, TEXTO],
+        ['texto corpo sobre input', FG_CORPO, S2, TEXTO],
+        ['helper sobre app', FG_APAGADO, S0, TEXTO],
+        ['helper sobre painel', FG_APAGADO, S1, TEXTO],
+        ['helper sobre input', FG_APAGADO, S2, TEXTO],
+        ['sucesso sobre painel', SUCESSO, S1, TEXTO],
+        ['aviso sobre painel', AVISO, S1, TEXTO],
+        ['erro sobre painel', ERRO, S1, TEXTO],
+        ['erro sobre input', ERRO, S2, TEXTO],
+      ],
     ],
-  ],
-  [
-    // O anel NEUTRO serve a casca que fica fora de qualquer `data-area`:
-    // cabecalho e login. Dentro de uma area o anel vira a tinta — o grupo
-    // seguinte.
-    'Anel de foco neutro — casca fora de qualquer area',
     [
-      ['anel neutro sobre painel', FOCO, S1, LIMITE],
-      ['anel neutro sobre input', FOCO, S2, LIMITE],
-      ['anel neutro sobre modal', FOCO, S3, LIMITE],
-    ],
-  ],
-  [
-    // A regra `[data-area] :focus-visible` troca a cor do anel por rota. Se
-    // uma das cinco tintas nao alcancar 3:1 sobre uma das superficies, existe
-    // uma tela em que o foco do teclado fica invisivel — e foi exatamente esse
-    // o risco 7.5 do plano. As quinze combinacoes sao medidas por isso.
-    'Anel de foco por area — as cinco tintas sobre as tres superficies',
-    [
-      ...porArea(
-        'anel sobre painel',
+      // O que o operador le em cada area. Cinco linhas por superficie porque a
+      // tinta troca por rota e ninguem escolhe em que area precisa enxergar.
+      'Tinta da area — texto sobre painel',
+      porArea(
+        'tinta-texto sobre painel',
         (a) => a.texto,
         () => S1,
-        LIMITE
+        TEXTO
       ),
-      ...porArea(
-        'anel sobre input',
+    ],
+    [
+      'Tinta da area — texto sobre input',
+      porArea(
+        'tinta-texto sobre input',
         (a) => a.texto,
         () => S2,
-        LIMITE
-      ),
-      ...porArea(
-        'anel sobre modal',
-        (a) => a.texto,
-        () => S3,
-        LIMITE
+        TEXTO
       ),
     ],
-  ],
-  [
-    // A barra de 2px da linha ativa e o que cumpre 1.4.11 no select e na
-    // paleta: nenhum preenchimento escuro chega a 3:1 sobre o flutuante, entao
-    // quem delimita e a barra — inclusive contra o proprio fill que ela
-    // acompanha.
-    'Barra da linha ativa — o que delimita quando o fill nao delimita',
     [
-      ...porArea(
-        'barra sobre modal',
+      'Tinta da area — texto sobre a camada flutuante',
+      porArea(
+        'tinta-texto sobre modal',
         (a) => a.texto,
         () => S3,
-        LIMITE
+        TEXTO
       ),
-      ...porArea('barra sobre o proprio fill', (a) => a.texto, selecaoDe, LIMITE),
     ],
-  ],
-];
+    [
+      // A acao primaria. No login (P0) e papel claro com letra quase preta; no
+      // console (v7) e o azul #0665EF com letra branca. Os tres estados carregam
+      // texto, entao os tres sao medidos — um `active` que perde contraste
+      // quebra a leitura no instante do clique. Nao ha par com a TINTA como
+      // letra: #0665EF como texto sobre o escuro daria 3.69.
+      'Papel — a acao primaria (fundo e texto do botao principal)',
+      [
+        ['texto sobre o papel', PAPEL_TEXTO, PAPEL, TEXTO],
+        ['texto sobre o papel em hover', PAPEL_TEXTO, PAPEL_HOVER, TEXTO],
+        ['texto sobre o papel pressionado', PAPEL_TEXTO, PAPEL_ATIVO, TEXTO],
+      ],
+    ],
+    [
+      'Camada flutuante — texto sobre a superficie de modal/popover',
+      [
+        ['titulo sobre modal', FG_FORTE, S3, TEXTO],
+        ['texto corpo sobre modal', FG_CORPO, S3, TEXTO],
+        ['descricao/helper sobre modal', FG_APAGADO, S3, TEXTO],
+        ['sucesso sobre modal', SUCESSO, S3, TEXTO],
+        ['aviso sobre modal', AVISO, S3, TEXTO],
+        ['erro sobre modal', ERRO, S3, TEXTO],
+      ],
+    ],
+    [
+      // Caixas empilhadas: cartao, input e rodape de acoes sao mais escuros que
+      // o modal. O fill nao delimita (1.13); quem delimita e a borda de controle
+      // medida no G2.
+      'Dentro do modal — caixas empilhadas sobre a superficie flutuante',
+      [
+        ['texto forte sobre cartao no modal', FG_FORTE, S2, TEXTO],
+        ['texto corpo sobre cartao no modal', FG_CORPO, S2, TEXTO],
+        ['helper sobre rodape do modal', FG_APAGADO, S2, TEXTO],
+        ['erro sobre caixa de erro no modal', ERRO, CAIXA_ERRO, TEXTO],
+        ['aviso sobre caixa de aviso no modal', AVISO, CAIXA_AVISO, TEXTO],
+      ],
+    ],
+    [
+      // A pintura da area. `bg-tinta/15` na linha ativa do select e da paleta,
+      // `bg-tinta/16` na caixa de destaque dentro de um painel. Nao se mede a
+      // tinta contra o fundo: mede-se o que sobra depois da mistura.
+      'Pintura da area — texto sobre a tinta diluida',
+      [
+        ...porArea('forte sobre linha ativa', () => FG_FORTE, selecaoDe, TEXTO),
+        ...porArea('tinta-texto sobre linha ativa', (a) => a.texto, selecaoDe, TEXTO),
+        ...porArea('tinta-texto sobre caixa da area', (a) => a.texto, caixaDe, TEXTO),
+      ],
+    ],
+    [
+      // A tinta CHEIA so aparece em controle marcado (checkbox, switch, pastilha
+      // de etapa), e o que se pinta sobre ela e `--papel-texto` — "o que se
+      // escreve sobre a acao": o glifo do checkbox e o polegar do switch. A
+      // tinta pode ser CLARA (P0, L 0.80: o papel-texto e quase preto) ou ESCURA
+      // (console, #0665EF: o papel-texto e branco), e por isso o par e medido
+      // nas duas paletas, com o mesmo piso de texto. Ate o v6 o glifo era
+      // `surface-0`, que servia a tinta clara e daria 3.69 sobre o azul do
+      // console — o estado sumiria dentro do proprio controle.
+      'Tinta cheia — o glifo do controle marcado inverte',
+      porArea(
+        'papel-texto sobre a tinta',
+        () => PAPEL_TEXTO,
+        (a) => a.tinta,
+        TEXTO
+      ),
+    ],
+  ];
 
-/* -------------------------------------------------------------------------
-   G3' — separacao de superficie: borda OU degrau
-   ------------------------------------------------------------------------- */
+  const G2 = [
+    [
+      'Limites de componente (SC 1.4.11) — a borda de controle',
+      [
+        ['borda de controle sobre app', LINHA_CONTROLE, S0, LIMITE],
+        ['borda de controle sobre painel', LINHA_CONTROLE, S1, LIMITE],
+        ['borda de controle sobre input', LINHA_CONTROLE, S2, LIMITE],
+        ['borda de controle sobre modal', LINHA_CONTROLE, S3, LIMITE],
+        // Borda externa do modal contra a pagina ja escurecida pelo overlay.
+        ['borda do modal sobre pagina escurecida', LINHA_CONTROLE, PAGINA_ESCURECIDA, LIMITE],
+        ['regua do rodape sobre rodape do modal', LINHA_CONTROLE, S2, LIMITE],
+      ],
+    ],
+    [
+      // O anel NEUTRO serve a casca que fica fora de qualquer `data-area`:
+      // cabecalho e login. Dentro de uma area o anel vira a tinta — o grupo
+      // seguinte.
+      'Anel de foco neutro — casca fora de qualquer area',
+      [
+        ['anel neutro sobre painel', FOCO, S1, LIMITE],
+        ['anel neutro sobre input', FOCO, S2, LIMITE],
+        ['anel neutro sobre modal', FOCO, S3, LIMITE],
+      ],
+    ],
+    [
+      // A regra `[data-area] :focus-visible` troca a cor do anel por rota. Se
+      // uma das cinco tintas nao alcancar 3:1 sobre uma das superficies, existe
+      // uma tela em que o foco do teclado fica invisivel — e foi exatamente esse
+      // o risco 7.5 do plano. As quinze combinacoes sao medidas por isso.
+      'Anel de foco por area — as cinco tintas sobre as tres superficies',
+      [
+        ...porArea(
+          'anel sobre painel',
+          (a) => a.texto,
+          () => S1,
+          LIMITE
+        ),
+        ...porArea(
+          'anel sobre input',
+          (a) => a.texto,
+          () => S2,
+          LIMITE
+        ),
+        ...porArea(
+          'anel sobre modal',
+          (a) => a.texto,
+          () => S3,
+          LIMITE
+        ),
+      ],
+    ],
+    [
+      // A barra de 2px da linha ativa e o que cumpre 1.4.11 no select e na
+      // paleta: nenhum preenchimento escuro chega a 3:1 sobre o flutuante, entao
+      // quem delimita e a barra — inclusive contra o proprio fill que ela
+      // acompanha.
+      'Barra da linha ativa — o que delimita quando o fill nao delimita',
+      [
+        ...porArea(
+          'barra sobre modal',
+          (a) => a.texto,
+          () => S3,
+          LIMITE
+        ),
+        ...porArea('barra sobre o proprio fill', (a) => a.texto, selecaoDe, LIMITE),
+      ],
+    ],
+  ];
 
-const SEPARACOES = [
-  ['painel dentro do app', S1, S0],
-  ['input dentro do painel', S2, S1],
-  ['flutuante dentro do input', S3, S2],
-  ['input/cartao dentro do app', S2, S0],
-];
+  /* -------------------------------------------------------------------------
+     G3' — separacao de superficie: borda OU degrau
+     ------------------------------------------------------------------------- */
+
+  const SEPARACOES = [
+    ['painel dentro do app', S1, S0],
+    ['input dentro do painel', S2, S1],
+    ['flutuante dentro do input', S3, S2],
+    ['input/cartao dentro do app', S2, S0],
+  ];
+
+  return { G1, G2, SEPARACOES };
+}
+
+/**
+ * O que so a paleta do console tem (v7). O cartao "Valor das compras" pinta
+ * texto forte, texto de corpo e o proprio verde sobre `--surface-success`.
+ */
+function paresSoDoConsole(p) {
+  return [
+    [
+      'Cartao de sucesso — texto sobre --surface-success (v7)',
+      [
+        ['texto forte sobre cartao de sucesso', p.FG_FORTE, SURFACE_SUCESSO, TEXTO],
+        ['texto corpo sobre cartao de sucesso', p.FG_CORPO, SURFACE_SUCESSO, TEXTO],
+        ['sucesso sobre cartao de sucesso', p.SUCESSO, SURFACE_SUCESSO, TEXTO],
+      ],
+    ],
+  ];
+}
+
+const PARES = new Map(PALETAS.map((p) => [p, paresDe(p)]));
+PARES.get(CONSOLE).G1.push(...paresSoDoConsole(CONSOLE));
 
 /* -------------------------------------------------------------------------
    Saida
@@ -852,8 +997,11 @@ const SEPARACOES = [
 
 const veredito = {};
 const largura = Math.max(
-  ...[...G1, ...G2].flatMap(([, casos]) => casos.map(([n]) => n.length)),
-  ...SEPARACOES.map(([n]) => n.length)
+  ...[...PARES.values()].flatMap(({ G1, G2, SEPARACOES }) => [
+    ...[...G1, ...G2].flatMap(([, casos]) => casos.map(([n]) => n.length)),
+    ...SEPARACOES.map(([n]) => n.length),
+  ]),
+  'filete sobre painel translucido'.length
 );
 
 function rodarPares(id, titulo, blocos) {
@@ -891,85 +1039,143 @@ function rodarLista(id, titulo, problemas, resumoOk) {
 }
 
 console.log('\n  Portao visual — Meta CAPI Console');
-console.log(`  superficies  app ${S0}  painel ${S1}  elevado ${S2}  flutuante ${S3}`);
-console.log(`  bordas       sutil ${LINHA_SUTIL}  padrao ${LINHA_FORTE}  controle ${LINHA_CONTROLE}`);
-console.log(`  papel        ${PAPEL} com texto ${PAPEL_TEXTO}  (a acao primaria)`);
-console.log(`  tintas       ${AREAS.map((a) => `${a.nome} ${a.tinta}`).join('  ')}`);
-console.log(`  fonte unica  ${GLOBALS} :root  —  ${CSS_DO_PRODUTO.length} arquivos CSS auditados`);
+for (const p of PALETAS) {
+  const bloco = p === LOGIN ? ':root:not(:has([data-console]))' : 'primeiro :root';
+  console.log(`\n  paleta do ${p.rotulo} (${bloco})`);
+  console.log(`  superficies  app ${p.S0}  painel ${p.S1}  elevado ${p.S2}  flutuante ${p.S3}`);
+  console.log(
+    `  bordas       sutil ${p.LINHA_SUTIL}  padrao ${p.LINHA_FORTE}  controle ${p.LINHA_CONTROLE}  foco ${p.FOCO}`
+  );
+  console.log(`  papel        ${p.PAPEL} com texto ${p.PAPEL_TEXTO}  (a acao primaria)`);
+  console.log(`  tintas       ${p.AREAS.map((a) => `${a.nome} ${a.tinta}`).join('  ')}`);
+}
+console.log(`\n  fonte unica  ${GLOBALS} (2 blocos)  —  ${CSS_DO_PRODUTO.length} arquivos CSS auditados`);
 
-rodarPares('G1', 'Contraste de texto (SC 1.4.3)', G1);
+/** Acrescenta a paleta ao subtitulo de cada grupo: "(console)" / "(login)". */
+const rotular = (blocos, p) => blocos.map(([sub, casos]) => [`${sub} (${p.rotulo})`, casos]);
 
-// --fg-disabled so pode existir enquanto ornamento. Se um dia ele cruzar 4.5
-// sobre o modal, deixou de ser "desabilitado" e virou mais um cinza de texto.
-// Esta e a UNICA linha do gate em que passar e falhar.
-const disabledOk = razao(FG_DESABILITADO, S3) < TEXTO;
-if (!disabledOk) veredito.G1 = false;
-console.log(
-  `    ${disabledOk ? 'OK   ' : 'FALHA'} fg-disabled sobre o modal ${razao(
-    FG_DESABILITADO,
-    S3
-  ).toFixed(2)}:1 — ornamento, nunca conteudo`
-);
+for (const p of PALETAS) {
+  rodarPares('G1', `Contraste de texto (SC 1.4.3) — paleta do ${p.rotulo}`, rotular(PARES.get(p).G1, p));
 
-rodarPares('G2', 'Contraste de borda de controle e de foco (SC 1.4.11)', G2);
+  // --fg-disabled so pode existir enquanto ornamento. Se um dia ele cruzar 4.5
+  // sobre o modal, deixou de ser "desabilitado" e virou mais um cinza de texto.
+  // Esta e a UNICA linha do gate em que passar e falhar.
+  const r = razao(p.FG_DESABILITADO, p.S3);
+  const disabledOk = r < TEXTO;
+  if (!disabledOk) veredito.G1 = false;
+  console.log(
+    `    ${disabledOk ? 'OK   ' : 'FALHA'} fg-disabled sobre o modal (${p.rotulo}) ${r.toFixed(
+      2
+    )}:1 — ornamento, nunca conteudo`
+  );
 
-/* G3' — cada superficie precisa de UMA das duas provas. */
-console.log("\n  G3' — Separacao de superficie (borda >= 3:1 OU degrau de L >= 0.04)");
-console.log('    A escada do v4 e feita de degraus medidos, e nao de bordas desenhadas');
+  if (p === CONSOLE) medirPainelTranslucido();
+}
+
+/* O painel translucido (v7, so no console). Duas linhas, cada uma com o hex
+   composto e as tres razoes: o pior caso (sobre #FFFFFF) fica VISIVEL no log
+   para ninguem "arredondar" a opacidade do token sem ver o efeito. */
+function medirPainelTranslucido() {
+  console.log(
+    `    Painel translucido — --surface-painel = surface-1 a ${Math.round(
+      PAINEL_ALFA * 100
+    )}% (console)`
+  );
+  let painelOk = true;
+  for (const [nome, composto] of [
+    ['sobre #FFFFFF', PAINEL_SOBRE_BRANCO],
+    ['sobre surface-0', PAINEL_SOBRE_S0],
+  ]) {
+    const medidas = [
+      ['fg-strong', CONSOLE.FG_FORTE],
+      ['fg-body', CONSOLE.FG_CORPO],
+      ['fg-muted', CONSOLE.FG_APAGADO],
+    ].map(([rotulo, cor]) => [rotulo, razao(cor, composto)]);
+    const passou = medidas.every(([, r]) => r >= TEXTO);
+    if (!passou) painelOk = false;
+    console.log(
+      `    ${passou ? 'OK   ' : 'FALHA'} ${`painel ${nome}`.padEnd(largura)}  = ${composto}  ` +
+        medidas.map(([rotulo, r]) => `${rotulo} ${r.toFixed(2)}:1`).join('  ') +
+        `  (min ${TEXTO.toFixed(1)})`
+    );
+  }
+  if (!painelOk) veredito.G1 = false;
+}
+
+for (const p of PALETAS) {
+  rodarPares(
+    'G2',
+    `Contraste de borda de controle e de foco (SC 1.4.11) — paleta do ${p.rotulo}`,
+    rotular(PARES.get(p).G2, p)
+  );
+}
+
+/* G3' — cada superficie precisa de UMA das duas provas, nas duas paletas. */
 let g3Ok = true;
-for (const [nome, dentro, fora] of SEPARACOES) {
-  const dL = degrauL(dentro, fora);
-  const borda = razao(LINHA_FORTE, fora);
-  const porDegrau = dL >= DEGRAU;
-  const porBorda = borda >= LIMITE;
-  const passou = porDegrau || porBorda;
-  if (!passou) g3Ok = false;
-  const prova = porDegrau ? 'degrau' : porBorda ? 'borda' : 'NENHUMA';
+for (const p of PALETAS) {
   console.log(
-    `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  dL ${dL.toFixed(
-      3
-    )}  borda ${borda.toFixed(2)}:1  — passa por ${prova}`
+    `\n  G3' — Separacao de superficie (borda >= 3:1 OU degrau de L >= 0.04) — paleta do ${p.rotulo}`
+  );
+  console.log('    A escada e feita de degraus medidos, e nao de bordas desenhadas');
+  for (const [nome, dentro, fora] of PARES.get(p).SEPARACOES) {
+    const dL = degrauL(dentro, fora);
+    const borda = razao(p.LINHA_FORTE, fora);
+    const porDegrau = dL >= DEGRAU;
+    const porBorda = borda >= LIMITE;
+    const passou = porDegrau || porBorda;
+    if (!passou) g3Ok = false;
+    const prova = porDegrau ? 'degrau' : porBorda ? 'borda' : 'NENHUMA';
+    console.log(
+      `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  dL ${dL.toFixed(
+        3
+      )}  borda ${borda.toFixed(2)}:1  — passa por ${prova}`
+    );
+  }
+
+  /* O filete interno. Piso proprio (1.5), e o comentario do cabecalho explica
+     por que isso nao e um 3:1 negociado para baixo. No console o filete
+     tambem e medido contra o painel translucido composto sobre surface-0 —
+     e a borda que os paineis sobre a imagem de fundo desenham. */
+  console.log('    Filete interno — divisoria dentro de superficie ja delimitada');
+  const filetes = [
+    ['filete sobre o app', p.S0],
+    ['filete sobre painel', p.S1],
+  ];
+  if (p === CONSOLE) filetes.push(['filete sobre painel translucido', PAINEL_SOBRE_S0]);
+  for (const [nome, fundo] of filetes) {
+    const r = razao(p.LINHA_SUTIL, fundo);
+    const passou = r >= FILETE;
+    if (!passou) g3Ok = false;
+    console.log(
+      `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  ${r
+        .toFixed(2)
+        .padStart(5)}:1  (min ${FILETE.toFixed(1)})`
+    );
+  }
+
+  // Ordem: sutil < forte < controle. Se alguem inverter a escala, os
+  // comentarios de globals.css passam a mentir e a regra "limite usa
+  // --border-control" perde o sentido.
+  const escalaOk =
+    razao(p.LINHA_CONTROLE, p.S3) > razao(p.LINHA_FORTE, p.S3) &&
+    razao(p.LINHA_FORTE, p.S3) > razao(p.LINHA_SUTIL, p.S3);
+  if (!escalaOk) g3Ok = false;
+  console.log(
+    `    ${escalaOk ? 'OK   ' : 'FALHA'} escala sutil ${razao(p.LINHA_SUTIL, p.S3).toFixed(2)}` +
+      ` < padrao ${razao(p.LINHA_FORTE, p.S3).toFixed(2)}` +
+      ` < controle ${razao(p.LINHA_CONTROLE, p.S3).toFixed(2)} (sobre o modal)`
   );
 }
-
-/* O filete interno. Piso proprio (1.5), e o comentario acima explica por que
-   isso nao e um 3:1 negociado para baixo. */
-console.log('    Filete interno — divisoria dentro de superficie ja delimitada');
-for (const [nome, fundo] of [
-  ['filete sobre o app', S0],
-  ['filete sobre painel', S1],
-]) {
-  const r = razao(LINHA_SUTIL, fundo);
-  const passou = r >= FILETE;
-  if (!passou) g3Ok = false;
-  console.log(
-    `    ${passou ? 'OK   ' : 'FALHA'} ${nome.padEnd(largura)}  ${r
-      .toFixed(2)
-      .padStart(5)}:1  (min ${FILETE.toFixed(1)})`
-  );
-}
-
-// Ordem: sutil < forte < controle. Se alguem inverter a escala, os comentarios
-// de globals.css passam a mentir e a regra "limite usa --border-control" perde
-// o sentido.
-const escalaOk =
-  razao(LINHA_CONTROLE, S3) > razao(LINHA_FORTE, S3) &&
-  razao(LINHA_FORTE, S3) > razao(LINHA_SUTIL, S3);
-if (!escalaOk) g3Ok = false;
-console.log(
-  `    ${escalaOk ? 'OK   ' : 'FALHA'} escala sutil ${razao(LINHA_SUTIL, S3).toFixed(2)}` +
-    ` < padrao ${razao(LINHA_FORTE, S3).toFixed(2)}` +
-    ` < controle ${razao(LINHA_CONTROLE, S3).toFixed(2)} (sobre o modal)`
-);
 veredito["G3'"] = g3Ok;
 
 rodarLista(
   'G4',
-  'Token de cor definido fora do :root (DS-0.1)',
+  'Token de cor definido fora dos dois blocos de definicao (DS-0.1)',
   verificarTokensForaDoRoot(),
   'nenhuma redefinicao de --surface-*/--border-*/--fg-*/--papel*/--tinta-texto-* ' +
-    `nos ${CSS_DO_PRODUTO.length} arquivos CSS (os apelidos --tinta/--tinta-texto ` +
-    'trocam por area, de proposito)'
+    `nos ${CSS_DO_PRODUTO.length} arquivos CSS fora do primeiro :root (console) e do ` +
+    ':root:not(:has([data-console])) (login) — os apelidos --tinta/--tinta-texto ' +
+    'trocam por area, de proposito'
 );
 
 rodarLista(
@@ -990,10 +1196,12 @@ rodarLista(
 
 rodarLista(
   'G7',
-  'Literal de cor fora do :root (hex, rgb, hsl, oklch...)',
+  'Literal de cor fora dos dois blocos de definicao (hex, rgb, hsl, oklch...)',
   verificarHexLiteral(),
   `nenhum literal cromatico solto — so branco e preto puros em rgb(); ` +
-    `themeColor == --surface-0 (${S0})`
+    THEME_COLORS.map(
+      ([arquivo, p]) => `${arquivo} themeColor == --surface-0 do ${p.rotulo} (${p.S0})`
+    ).join('; ')
 );
 
 rodarLista(

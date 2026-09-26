@@ -20,18 +20,44 @@ import {
 } from '@/components/ui/icones';
 
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { slugDoEndereco } from '@/lib/empresa-do-endereco';
+
+/**
+ * O formulário do envio manual está na tela? Desde a V2 (v7) ele mora em
+ * `/e/<slug>/eventos?vista=manual`, e não mais em `/`: quem diz é a seção de
+ * origem, que só ele monta. Lido no momento de abrir a paleta, no navegador.
+ */
+function formularioNaTela(): boolean {
+  return typeof document !== 'undefined' && Boolean(document.getElementById('secao-origem'));
+}
 
 /**
  * Paleta de comandos (Ctrl+K / Cmd+K).
  *
  * Deliberadamente NAO expoe "disparar": a acao que gasta dinheiro real fica
  * so no botao primario, que passa pela confirmacao de producao.
+ *
+ * V2 (v7): "Ir para" leva às abas da empresa DA TELA (`/e/<slug>/<aba>`): a
+ * do endereço quando há uma, a ativa do store fora de `/e/`. Enquanto o store
+ * ainda não leu as empresas, cai no endereço antigo, que o proxy resolve com
+ * 307 para a empresa ativa.
  */
 export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void }) {
   const [aberta, setAberta] = useState(false);
+  const [noFormulario, setNoFormulario] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const naRaiz = pathname === '/';
+  const slugDaAtiva = useEmpresaStore(
+    (s) => s.empresas.find((e) => e.id === s.empresaAtivaId)?.slug
+  );
+  const slugDaTela = slugDoEndereco(pathname) ?? slugDaAtiva;
+
+  /** A aba da empresa da tela; sem empresa conhecida, o endereço antigo. */
+  const irPara = (aba: string, enderecoAntigo: string) => {
+    fechar();
+    router.push(slugDaTela ? `/e/${encodeURIComponent(slugDaTela)}${aba}` : enderecoAntigo);
+  };
 
   const reset = useEventStore((s) => s.reset);
   const setField = useEventStore((s) => s.setField);
@@ -41,11 +67,15 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
     const porTeclado = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
+        setNoFormulario(formularioNaTela());
         setAberta((v) => !v);
       }
       if (e.key === 'Escape') setAberta(false);
     };
-    const porEvento = () => setAberta(true);
+    const porEvento = () => {
+      setNoFormulario(formularioNaTela());
+      setAberta(true);
+    };
 
     document.addEventListener('keydown', porTeclado);
     window.addEventListener('capi:abrir-paleta', porEvento);
@@ -85,7 +115,7 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
             Nenhum comando encontrado.
           </Command.Empty>
 
-          {naRaiz && (
+          {noFormulario && (
             <Command.Group
               heading="Formulário"
               className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
@@ -170,24 +200,35 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
                 (D-2') e a mesma primeira posicao que ele ocupa na navegacao:
                 quem digita ⌘K sem saber onde olhar deve cair no numero, nao
                 numa tela de trabalho. */}
-            <Item icone={Gauge} onSelect={() => { fechar(); router.push('/painel'); }}>
+            <Item icone={Gauge} onSelect={() => irPara('/eventos', '/painel')}>
               Painel de eventos (o que chegou e de onde veio)
             </Item>
             {/* Depois dele vem a primeira tela do fluxo: sem webhook e sem tag
                 nao ha o que disparar, nem manual nem automatico. A tomada
                 (`Plug`) e dela; o automatico ficou com o fluxo (`Workflow`),
-                que e o que ele virou depois que o recebimento saiu de la. */}
-            <Item icone={Plug} onSelect={() => { fechar(); router.push('/instalacao'); }}>
-              Instalação (webhook e tag do site)
+                que e o que ele virou depois que o recebimento saiu de la.
+                V2: os rótulos dizem o nome da aba para onde levam. */}
+            <Item icone={Plug} onSelect={() => irPara('/fontes', '/instalacao')}>
+              Fontes (webhook e tag do site)
             </Item>
-            <Item icone={Target} onSelect={() => { fechar(); onAbrirMarcas(); }}>
+            <Item
+              icone={Target}
+              onSelect={() => {
+                if (slugDaTela) {
+                  irPara('/pixels', '/pixels');
+                } else {
+                  fechar();
+                  onAbrirMarcas();
+                }
+              }}
+            >
               Pixel e token
             </Item>
             <Item
               icone={Inbox}
               onSelect={() => {
-                fechar();
-                if (naRaiz) {
+                if (noFormulario) {
+                  fechar();
                   document
                     .getElementById('secao-origem')
                     ?.scrollIntoView({
@@ -196,14 +237,14 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
                         : 'smooth',
                     });
                 } else {
-                  router.push('/automatico?aba=inbox');
+                  irPara('/eventos?vista=fila', '/automatico?aba=inbox');
                 }
               }}
             >
-              Caixa de entrada
+              Fila
             </Item>
-            <Item icone={Workflow} onSelect={() => { fechar(); router.push('/automatico'); }}>
-              Disparo automático (regras e retornos)
+            <Item icone={Workflow} onSelect={() => irPara('/regras', '/automatico')}>
+              Regras (envio automático e repasse)
             </Item>
             <Item icone={BookOpen} onSelect={() => { fechar(); router.push('/guia'); }}>
               Guia

@@ -366,6 +366,22 @@ export async function acharEmpresa(id: string): Promise<Empresa | undefined> {
 }
 
 /**
+ * Uma empresa pelo slug do endereço (`/e/<slug>`), ou `undefined` (V2 do v7).
+ *
+ * Comparação EXATA: `/e/Gtech` não acha `gtech`. O slug gravado já passou por
+ * `erroDoRotulo` (minúsculas, dígitos e hífen), então um endereço com
+ * maiúscula é outro endereço — e responde 404, não a empresa "parecida".
+ * Mesma regra de `acharEmpresa`: quem decide o que fazer com o desconhecido é
+ * quem chama (o layout de `/e/[slug]` responde `notFound()`).
+ */
+export async function acharEmpresaPorSlug(slug: string): Promise<Empresa | undefined> {
+  const procurado = typeof slug === 'string' ? slug : '';
+  if (!procurado) return undefined;
+  const todas = await lerRegistro();
+  return todas.find((e) => e.slug === procurado);
+}
+
+/**
  * Cria ou atualiza uma empresa.
  *
  * B2-a/B2-b: a LEITURA acontece DENTRO da fila. Ler fora e gravar dentro

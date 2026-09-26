@@ -11,17 +11,22 @@
    `:root` (G7) e todo tamanho de letra vem da escala nomeada (G6).
    ========================================================================= */
 
-/* --- Primário: papel chapado ------------------------------------------- */
+/* --- Primário: chapado na cor do papel ---------------------------------- */
 
-/* Sem rampa vertical, sem halo colorido e sem brilho de passada: o primário é
-   a superfície de maior luminosidade da tela, e é isso — não um matiz — que
-   faz o olho achá-lo primeiro. O relevo interno do projeto
-   (`--realce-interno`, um branco a 7%) foi pensado para superfície escura;
-   por cima do papel ele não aparece, então o botão fica chapado de verdade.
+/* Sem rampa vertical, sem halo colorido e sem brilho de passada. A cor vem
+   de `--papel`: no console (v7) é o azul de ação com texto branco; no login
+   continua o papel claro do P0 com texto quase preto. O relevo interno do
+   projeto (`--realce-interno`) não entra aqui, então o botão fica chapado de
+   verdade nas duas paletas.
 
    `background-color` e não o atalho `background`: o estado ocupado pinta as
    listras em `background-image`, e o atalho no `:hover` apagaria as listras
-   no meio do trabalho. */
+   no meio do trabalho.
+
+   Os quatro estados (spec do dono, v7): `:hover` → `--papel-hover`,
+   `:active` → `--papel-active`, `:disabled` e `:focus-visible` logo abaixo.
+   Nenhum estado muda tamanho nem posição: nada de deslocamento, margem ou
+   preenchimento nos blocos de estado. */
 .primario {
   background-color: var(--papel);
   color: var(--papel-texto);
@@ -35,6 +40,43 @@
   background-color: var(--papel-active);
 }
 
+/* Desabilitado e foco, só no console. O seletor começa em
+   `:root:has([data-console])` — a casca do console marca o `div.shell` com
+   `data-console` — para valer também nos botões dentro de modal e popover,
+   que moram fora da casca (portal). No login a casca não existe, a regra não
+   casa, e o botão desabilitado continua como no P0 (o papel a 45% de
+   opacidade das classes utilitárias de `button.tsx`).
+
+   Desabilitado: texto `--fg-disabled` sobre `--surface-2`, sem a borda azul,
+   com `cursor: not-allowed`. `opacity: 1` e `pointer-events: auto` desfazem o
+   `disabled:opacity-45 disabled:pointer-events-none` das utilitárias (o CSS
+   deste módulo não tem camada, então vence as utilitárias do Tailwind), e o
+   cursor só aparece com os eventos de ponteiro ligados; o botão nativo
+   desabilitado continua sem disparar clique. `:not([data-ocupado])` deixa as
+   listras do estado ocupado ganharem, porque "Disparar N" fica desabilitado
+   enquanto trabalha. `--fg-disabled` é ornamento, nunca conteúdo: o gate
+   exige que ele fique ABAIXO de 4.5 sobre o modal (G1).
+
+   Foco: anel em `--border-focus` (ciano) na casca; dentro de uma
+   `[data-area]` o anel volta à tinta da área, como no resto do produto. Só a
+   cor muda — largura e afastamento continuam os das utilitárias. */
+:global(:root:has([data-console])) .primario:disabled:not([data-ocupado]) {
+  background-color: var(--surface-2);
+  border-color: transparent;
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+:global(:root:has([data-console])) .primario:focus-visible {
+  outline-color: var(--border-focus);
+}
+
+:global(:root:has([data-console])) :global([data-area]) .primario:focus-visible {
+  outline-color: var(--tinta-texto);
+}
+
 /* --- Ocupado: as listras andando -------------------------------------- */
 
 /* Vale para "Disparar N", "Salvar regras", "Enviar para a Meta". O seletor
@@ -42,9 +84,10 @@
    trabalho. `opacity`/`pointer-events` voltam ao normal para o botão poder
    continuar `disabled` (nada de clique duplo) sem apagar as listras.
 
-   As listras agora são claras (papel), então o rótulo e o disco recebem
-   `--papel-texto` aqui: o primário já vinha escrito assim, mas um `ocupado`
-   pedido em `outline`/`secondary`/`ghost` traria texto claro e sumiria. */
+   As listras são do papel (claras no login, azuis no console), então o
+   rótulo e o disco recebem `--papel-texto` aqui: o primário já vinha escrito
+   assim, mas um `ocupado` pedido em `outline`/`secondary`/`ghost` traria o
+   texto da superfície e poderia sumir sobre as listras. */
 .ocupado,
 .ocupado:hover,
 .ocupado:active,

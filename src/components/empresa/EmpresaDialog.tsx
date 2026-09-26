@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from '@/components/ui/icones';
+import { AlertTriangle, Eye, EyeOff, KeyRound, ShieldCheck } from '@/components/ui/icones';
 
 import {
   useEmpresaStore,
@@ -11,6 +11,7 @@ import {
   type EntradaDeEmpresa,
 } from '@/stores/useEmpresaStore';
 import { useBrandStore } from '@/stores/useBrandStore';
+import { destinoAoTrocar, slugDoEndereco } from '@/lib/empresa-do-endereco';
 import { normalizarRotulo } from '@/components/integrations/rotulo';
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, Callout } from '@/components/common/primitives';
+import { CamposDaEmpresa, corInicial, descrito } from '@/components/empresa/FormularioDeEmpresa';
 
 /**
  * O dialogo de UMA empresa — criar (duas etapas) ou editar (uma).
@@ -32,10 +34,11 @@ import { Field, Callout } from '@/components/common/primitives';
  * pratica, comecando uma instalacao — e sair do dialogo com a empresa criada e
  * nenhum destino configurado e o caminho mais curto para o operador achar que
  * terminou quando nao terminou. A etapa 2 e o primeiro Pixel, e o sucesso leva
- * direto para /instalacao, onde estao o webhook e a tag.
+ * direto para a aba Fontes da empresa nova (`/e/<slug>/fontes`, V2 do v7),
+ * onde estao o webhook e a tag.
  *
- * Na EDICAO a etapa 2 nao existe: um Pixel ja criado se edita em /pixels, que e
- * a tela dele. Repetir o formulario de Pixel aqui criaria dois lugares para a
+ * Na EDICAO a etapa 2 nao existe: um Pixel ja criado se edita na aba Pixels
+ * (`/e/<slug>/pixels`), que e a tela dele. Repetir o formulario de Pixel aqui criaria dois lugares para a
  * mesma coisa e a duvida de qual deles manda.
  *
  * O campo do segredo se chama `token` neste arquivo, como no BrandDialog: o
@@ -53,41 +56,12 @@ export interface EmpresaDialogProps {
   empresa?: EmpresaPublica;
 }
 
-/**
- * COPIA do teto de `src/lib/empresas.ts` (LOGO_MAX_BYTES).
- *
- * 🔴 Nao da para importar de la: aquele arquivo abre com `import 'server-only'`.
- * A copia existe porque a imagem precisa ser recusada ANTES do `FileReader`:
- * quem escolhe um PNG de 4 MB nao deve esperar a leitura inteira, virar 5,3 MB
- * de base64 em memoria e so entao levar 400. A autoridade continua sendo o
- * servidor, que mede de novo em `salvarEmpresa()`.
+/*
+ * V7 do v7: os campos da empresa (nome, logo, plataforma, apelido, cor), o teto
+ * do logo e a cor inicial (`corInicial`, lida do `--tinta` do tema) moram em
+ * `FormularioDeEmpresa.tsx`, que a aba Configurações também usa. Este diálogo
+ * semeia a cor no cliente — o conteúdo só monta depois do portal.
  */
-const LOGO_MAX_BYTES = 150 * 1024;
-
-/**
- * Cor inicial do seletor = `--tinta` do tema, LIDA do tema.
- *
- * O `<input type="color">` nao tem estado "nenhuma cor": ele sempre devolve um
- * hex. Comecar na tinta da area faz a empresa nova nascer parecida com o resto
- * da interface em vez de com o preto que o navegador usa por padrao.
- *
- * v4: e `--tinta` (o degrau de FUNDO, L 0.80) e nao `--tinta-texto`, porque a
- * cor da empresa e usada como preenchimento — pastilha, barra, fundo de selo —
- * e nao como texto.
- *
- * 🔴 O valor NAO e copiado para ca. Um hex literal aqui viraria a segunda fonte
- * da cor de acento — e `check:contrast` (G7) reprova o build justamente para
- * isso: no dia em que o tema mudasse, empresa nova continuaria nascendo na cor
- * velha. Lendo a custom property, a copia nao existe.
- *
- * Fora do navegador devolve string vazia, e isso nao alcanca o `<input>`: o
- * conteudo do dialogo so monta depois do portal, ja no cliente.
- */
-function corInicial(): string {
-  if (typeof document === 'undefined') return '';
-  const v = getComputedStyle(document.documentElement).getPropertyValue('--tinta').trim();
-  return /^#[0-9a-f]{6}$/i.test(v) ? v : '';
-}
 
 const VAZIO = {
   nome: '',
@@ -102,30 +76,11 @@ const VAZIO = {
   testCode: '',
 };
 
-/**
- * Ids que o `Field` gera para helper e erro.
- *
- * O `Field` publica esses ids por contexto, mas o contexto so alcanca um
- * COMPONENTE filho — e aqui o `<Input>` e irmao na mesma renderizacao, entao o
- * hook nao veria o valor. Montar a string pela mesma convencao e o que mantem o
- * `aria-describedby` realmente ligado ao erro.
- */
-function descrito(id: string, temHelper: boolean, temErro: boolean): string | undefined {
-  const ids = [temHelper ? `${id}-helper` : '', temErro ? `${id}-error` : ''].filter(Boolean);
-  return ids.length ? ids.join(' ') : undefined;
-}
-
-/** Iniciais para o avatar enquanto nao ha logo. Ate duas letras. */
-function iniciais(nome: string): string {
-  const partes = nome.trim().split(/\s+/).filter(Boolean);
-  if (!partes.length) return '?';
-  return (partes[0][0] + (partes[1]?.[0] ?? '')).toUpperCase();
-}
-
 export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogProps) {
   const salvarEmpresa = useEmpresaStore((s) => s.salvarEmpresa);
   const setEmpresaAtiva = useEmpresaStore((s) => s.setEmpresaAtiva);
   const router = useRouter();
+  const pathname = usePathname();
 
   const [form, setForm] = useState({ ...VAZIO });
   const [etapa, setEtapa] = useState<1 | 2>(1);
@@ -133,7 +88,6 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
   const [salvando, setSalvando] = useState(false);
   /** Mensagem crua do servidor (o 400 de `ErroDeEmpresa`). Nunca reescrita. */
   const [erro, setErro] = useState('');
-  const [erroLogo, setErroLogo] = useState('');
   /**
    * O operador mexeu no apelido a mao? Enquanto nao mexeu, o apelido segue o
    * nome. Depois que mexeu, o nome para de mandar nele — senao a primeira letra
@@ -145,8 +99,6 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
    * ela existir, o dialogo esta no estado de recuperacao — ver `salvarTudo`.
    */
   const [criada, setCriada] = useState<EmpresaPublica | null>(null);
-
-  const refArquivo = useRef<HTMLInputElement>(null);
 
   // Semear o formulario DURANTE a renderizacao, e nao dentro de um efeito: o
   // efeito so roda depois da pintura, entao abrir "editar" pintaria um quadro
@@ -172,7 +124,6 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
     setEtapa(1);
     setVerToken(false);
     setErro('');
-    setErroLogo('');
     // Editando, o apelido ja existe e nao pode ser reescrito pelo nome: um slug
     // gravado pode ja estar numa URL de webhook em producao (D-15).
     setSlugTocado(Boolean(empresa));
@@ -180,45 +131,7 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
   }
 
   const editando = Boolean(empresa);
-  /** Prévia: o data URI escolhido agora vence; senão o arquivo estático da empresa. */
-  const previa = form.logoDataUrl || empresa?.logoUrl || '';
   const slugEfetivo = slugTocado ? form.slug : normalizarRotulo(form.nome);
-
-  /* ---------------------------------------------------------------- */
-  /* Logo                                                              */
-  /* ---------------------------------------------------------------- */
-
-  const escolherLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const arquivo = e.target.files?.[0];
-    if (!arquivo) return;
-
-    if (arquivo.size > LOGO_MAX_BYTES) {
-      setErroLogo(
-        `Esta imagem tem ${Math.round(arquivo.size / 1024)} KB. O limite é ` +
-          `${Math.round(LOGO_MAX_BYTES / 1024)} KB — escolha uma menor.`
-      );
-      // Zerar o campo: sem isso o nome do arquivo recusado continua na tela,
-      // como se ele tivesse entrado.
-      e.target.value = '';
-      return;
-    }
-
-    const leitor = new FileReader();
-    leitor.onerror = () => setErroLogo('Não foi possível ler este arquivo. Tente outro.');
-    leitor.onload = () => {
-      setErroLogo('');
-      setForm((f) => ({ ...f, logoDataUrl: String(leitor.result ?? '') }));
-    };
-    leitor.readAsDataURL(arquivo);
-  };
-
-  const removerLogo = () => {
-    setForm((f) => ({ ...f, logoDataUrl: '' }));
-    setErroLogo('');
-    // Zerar o `<input type="file">` tambem: senao escolher DE NOVO o mesmo
-    // arquivo nao dispara `change` e a imagem removida nao volta.
-    if (refArquivo.current) refArquivo.current.value = '';
-  };
 
   /* ---------------------------------------------------------------- */
   /* Gravacao                                                          */
@@ -256,12 +169,16 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
     });
   };
 
-  const concluir = (nomeDaEmpresa: string) => {
+  /** V2 (v7): cada aba da empresa mora no endereço dela, `/e/<slug>/<aba>`. */
+  const abaDa = (slug: string, aba: 'fontes' | 'pixels') =>
+    `/e/${encodeURIComponent(slug)}/${aba}`;
+
+  const concluir = (slugDaEmpresa: string, nomeDoPixel: string) => {
     toast.success(
-      `Empresa criada com o Pixel ${nomeDaEmpresa}. Agora instale o webhook e a tag.`
+      `Empresa criada com o Pixel ${nomeDoPixel}. Agora instale o webhook e a tag.`
     );
     onOpenChange(false);
-    router.push('/instalacao');
+    router.push(abaDa(slugDaEmpresa, 'fontes'));
   };
 
   /** Etapa 1 → etapa 2. Só na criação. */
@@ -280,9 +197,18 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
     setSalvando(true);
     setErro('');
     try {
-      await salvarEmpresa(entrada());
+      const salva = await salvarEmpresa(entrada());
       onOpenChange(false);
       toast.success('Empresa salva.');
+      // V2 (v7): o apelido É o endereço. Se ele mudou e a tela é desta
+      // empresa, a tela vai para o endereço novo (o antigo daria "Empresa não
+      // encontrada" no próximo clique). Senão, relê as páginas de servidor
+      // para o nome novo aparecer.
+      if (empresa && slugDoEndereco(pathname) === empresa.slug && salva.slug !== empresa.slug) {
+        router.replace(destinoAoTrocar(pathname, salva.slug));
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       // A mensagem do servidor e escrita para humano ("Já existe uma empresa com
       // o apelido …") e diz exatamente qual campo corrigir. Uma frase minha por
@@ -317,7 +243,7 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
         return;
       }
 
-      concluir(form.pixelNome.trim() || nova.nome);
+      concluir(nova.slug, form.pixelNome.trim() || nova.nome);
     } catch (e) {
       // Falhou a propria empresa: nada foi criado. O erro e de campo da etapa 1,
       // entao a etapa 1 e para onde o operador precisa voltar.
@@ -332,9 +258,11 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
   const pularPixel = () => {
     onOpenChange(false);
     toast.message('Empresa criada sem Pixel.', {
-      description: 'Cadastre o Pixel dela em Pixels para poder disparar.',
+      description: 'Cadastre o Pixel dela em Pixels para poder enviar.',
     });
-    router.push('/pixels');
+    // O estado de recuperação só existe com a empresa já criada; sem ela (não
+    // deveria acontecer), a lista de empresas é o lugar neutro.
+    router.push(criada ? abaDa(criada.slug, 'pixels') : '/empresas');
   };
 
   /* ---------------------------------------------------------------- */
@@ -426,129 +354,16 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
 
         {etapa === 1 ? (
           <div className="flex flex-col gap-4">
-            <Field
-              id="empresa-nome"
-              label="Nome"
-              required
-              helper="Como esta empresa aparece no seletor do cabeçalho."
-            >
-              <Input
-                id="empresa-nome"
-                autoFocus
-                value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                placeholder="Código Vencedor"
-                aria-describedby={descrito('empresa-nome', true, false)}
-                maxLength={60}
-              />
-            </Field>
-
-            <Field
-              id="empresa-logo"
-              label="Foto ou logo"
-              error={erroLogo || undefined}
-              helper="PNG, JPEG, SVG ou WebP, até 150 KB. Sem imagem, o avatar usa as iniciais."
-            >
-              <div className="flex items-center gap-3">
-                {/* Prévia redonda: é assim que o logo vai aparecer no seletor,
-                    então é assim que ele é mostrado aqui. */}
-                <span
-                  aria-hidden
-                  className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line-control bg-surface-2 text-label font-semibold text-white"
-                  style={previa ? undefined : { backgroundColor: form.cor }}
-                >
-                  {previa ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={previa}
-                      alt=""
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    iniciais(form.nome)
-                  )}
-                </span>
-
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <Input
-                    id="empresa-logo"
-                    ref={refArquivo}
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                    onChange={escolherLogo}
-                    aria-describedby={descrito('empresa-logo', true, Boolean(erroLogo))}
-                    className="h-auto cursor-pointer px-0 py-0 text-caption file:mr-3 file:cursor-pointer file:rounded-l-control file:border-0 file:bg-surface-3 file:px-3 file:py-2.5 file:text-label file:font-medium file:text-fg-body"
-                  />
-                  {form.logoDataUrl && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={removerLogo}
-                      className="self-start"
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                      Remover imagem
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Field>
-
-            <Field
-              id="empresa-plataforma"
-              label="Plataforma de vendas"
-              helper="Aparece nos textos de instalação do webhook desta empresa."
-            >
-              <Input
-                id="empresa-plataforma"
-                value={form.plataforma}
-                onChange={(e) => setForm({ ...form, plataforma: e.target.value })}
-                placeholder="xWinner, Hotmart, Kiwify…"
-                aria-describedby={descrito('empresa-plataforma', true, false)}
-                maxLength={40}
-              />
-            </Field>
-
-            <Field
-              id="empresa-slug"
-              label="Apelido da URL"
-              helper="Vai na URL do webhook desta empresa. Só minúsculas, dígitos e hífen."
-            >
-              <Input
-                id="empresa-slug"
-                value={slugEfetivo}
-                onChange={(e) => {
-                  setSlugTocado(true);
-                  setForm({ ...form, slug: e.target.value });
-                }}
-                // Normalizar ao sair do campo, e nao a cada tecla: normalizando
-                // durante a digitacao o hifen que o operador acabou de escrever
-                // some antes da proxima letra e o campo parece quebrado.
-                onBlur={() => setForm((f) => ({ ...f, slug: normalizarRotulo(slugEfetivo) }))}
-                placeholder="codigo-vencedor"
-                className="font-mono"
-                aria-describedby={descrito('empresa-slug', true, false)}
-                spellCheck={false}
-              />
-            </Field>
-
-            <Field
-              id="empresa-cor"
-              label="Cor"
-              helper="Cor do avatar quando a empresa não tem logo."
-            >
-              <div className="flex items-center gap-3">
-                <Input
-                  id="empresa-cor"
-                  type="color"
-                  value={form.cor || corInicial()}
-                  onChange={(e) => setForm({ ...form, cor: e.target.value })}
-                  aria-describedby={descrito('empresa-cor', true, false)}
-                  className="w-20 cursor-pointer px-1 py-1"
-                />
-                <span className="font-mono text-caption text-fg-muted">{form.cor}</span>
-              </div>
-            </Field>
+            {/* V7: os mesmos campos da aba Configurações, de um lugar só. */}
+            <CamposDaEmpresa
+              valores={form}
+              onChange={(mudanca) => setForm((f) => ({ ...f, ...mudanca }))}
+              slugEfetivo={slugEfetivo}
+              onSlugTocado={() => setSlugTocado(true)}
+              logoSalvo={empresa?.logoUrl}
+              prefixo="empresa"
+              autoFocus
+            />
 
             {/* So na CRIACAO. Na edicao isto ja aconteceu ha tempos e viraria
                 ruido permanente. O aviso existe porque a empresa nova nasce com

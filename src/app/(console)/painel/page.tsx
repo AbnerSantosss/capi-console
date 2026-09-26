@@ -1,33 +1,18 @@
-import { Gauge } from '@/components/ui/icones';
-
-import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
-import consoleStyles from '@/components/layout/console.module.css';
-import { PainelDeEventos } from '@/components/painel/PainelDeEventos';
+import { redirecionarRotaAntiga, type BuscaDaPagina } from '../redirecionar-rota-antiga';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * A primeira tela do console (decisão D-1' e D-2' do plano do Painel).
+ * 🔴 COMPATIBILIDADE PERMANENTE — NÃO REMOVA ESTA ROTA.
  *
- * Antes, quem abria o console caía no disparo manual — uma tela de trabalho,
- * que não responde a primeira pergunta de quem chega: "está entrando venda e
- * está saindo para a Meta?". O Painel responde isso antes de qualquer clique,
- * e cada número dele abre a lista dos eventos que o compõem.
- *
- * O conteúdo carrega no cliente, pelo `PainelDeEventos`, e não aqui no
- * servidor: é o mesmo `X-Empresa-Id` do resto do console que decide de qual
- * empresa são os números, e ele vem do store do navegador. Trocar de empresa no
- * cabeçalho refaz a conta sem recarregar a página.
+ * O Painel de eventos mora em `/e/<slug>/eventos` desde a V2 (v7). Quem
+ * responde a `/painel` é o proxy, com 307 e a query repassada (`?dias=`,
+ * `?de=&ate=`); esta página é a reserva (`redirecionar-rota-antiga.ts`).
  */
-export default function Painel() {
-  return (
-    <main className={consoleStyles.page} data-area="painel">
-      <ConsolePageHeader
-        title="Painel de eventos"
-        description="O que chegou, o que saiu para a Meta e de onde veio o tráfego. Os testes da equipe ficam fora das porcentagens."
-        icon={Gauge}
-      />
-      <PainelDeEventos />
-    </main>
-  );
+export default async function PainelEnderecoAntigo({
+  searchParams,
+}: {
+  searchParams: Promise<BuscaDaPagina>;
+}) {
+  return redirecionarRotaAntiga('/painel', searchParams);
 }

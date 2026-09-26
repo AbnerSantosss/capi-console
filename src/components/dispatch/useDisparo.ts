@@ -211,8 +211,8 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
     if (erros.length) {
       toast.error(
         erros.length === 1
-          ? 'Corrija 1 campo antes de disparar'
-          : `Corrija ${erros.length} campos antes de disparar`,
+          ? 'Corrija 1 campo antes de enviar'
+          : `Corrija ${erros.length} campos antes de enviar`,
         { description: erros[0].mensagem }
       );
       const resumo = document.getElementById('resumo-erros');
@@ -222,8 +222,8 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
     }
 
     if (!ativa?.temToken) {
-      toast.error('Marca sem token de acesso', {
-        description: 'Abra as marcas e informe o token da API de Conversões.',
+      toast.error('Pixel sem token de acesso', {
+        description: 'Abra os Pixels e informe o token da API de Conversões.',
       });
       onAbrirMarcas();
       return;

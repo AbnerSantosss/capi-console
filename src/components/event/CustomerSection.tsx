@@ -37,7 +37,7 @@ export function CustomerSection() {
           id="campo-email"
           label="E-mail"
           param="em"
-          helper="Criptografado em SHA-256 antes do envio."
+          helper="Transformado em hash SHA-256 antes do envio. Se já chegar em hash, passa como está."
           error={erros.email}
         >
           <Input
@@ -119,7 +119,7 @@ export function CustomerSection() {
           id="campo-cpf"
           label="CPF"
           param="external_id"
-          helper="Ou o ID do cliente no seu CRM. Também vai criptografado."
+          helper="Ou o ID do cliente no seu CRM. Também vai transformado em hash SHA-256."
           className="sm:col-span-2"
         >
           <Input
@@ -168,7 +168,7 @@ export function CustomerSection() {
             id="campo-ip"
             label="IP do cliente"
             param="client_ip_address"
-            helper="IP público do comprador. Vai sem criptografia, por exigência da Meta."
+            helper="IP público do comprador. Vai como está, sem hash, por exigência da Meta."
             error={erros.ip}
             tip="IP de proxy, de rede interna (10.x, 192.168.x, 172.16–31.x) ou loopback não serve: a Meta descarta e o dado geográfico fica errado."
           >

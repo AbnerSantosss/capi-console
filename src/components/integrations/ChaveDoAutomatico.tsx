@@ -1,16 +1,16 @@
 'use client';
 
 /**
- * A chavinha do disparo automático — o primeiro controle de /automatico.
+ * A chavinha do envio automático — o primeiro controle de /automatico.
  *
  * Ela existe porque o produto tem DUAS travas e elas moram em telas
  * diferentes:
  *
  *   Trava 1 — a REGRA precisa estar em modo `auto`   (aba Regras, aqui do lado)
- *   Trava 2 — o PIXEL precisa aceitar disparo automático (`Marca.autoDisparo`)
+ *   Trava 2 — o PIXEL precisa aceitar envio automático (`Marca.autoDisparo`)
  *
  * Mexer numa só não muda nada. Até agora a trava 2 só tinha interruptor lá em
- * /pixels, dentro do cartão de cada Pixel: quem abria "Disparo automático"
+ * /pixels, dentro do cartão de cada Pixel: quem abria "Envio automático"
  * mexia nas regras, saía achando que tinha ligado e nada saía. Esta chave é a
  * trava 2 trazida para onde a pergunta é feita, com a contagem da trava 1
  * escrita ao lado — as duas na mesma dobra, sem clique.
@@ -149,7 +149,7 @@ export function ChaveDoAutomatico({
       if (ligar) {
         await definirAutoDisparo(marca.id, true);
         setALigar(null);
-        toast.success(`Disparo automático ligado em ${marca.nome}.`, {
+        toast.success(`Envio automático ligado em ${marca.nome}.`, {
           description: marca.testCode?.trim()
             ? 'Os eventos saem em modo de teste, para o Testar eventos da Meta.'
             : 'As regras automáticas passam a enviar conversões reais sem passar por você.',
@@ -158,7 +158,7 @@ export function ChaveDoAutomatico({
         // Desligar desliga TODOS os que estavam ligados. Parar pela metade e
         // dizer "desligado" seria a tela mentindo no estado mais caro.
         for (const m of ligadas) await definirAutoDisparo(m.id, false);
-        toast.success('Disparo automático desligado.', {
+        toast.success('Envio automático desligado.', {
           description:
             'Os eventos continuam chegando e ficam na fila, esperando você enviar.',
         });
@@ -172,7 +172,7 @@ export function ChaveDoAutomatico({
       toast.error(
         e instanceof Error
           ? e.message
-          : 'Não foi possível salvar o disparo automático.'
+          : 'Não foi possível salvar o envio automático.'
       );
     } finally {
       setSalvando(false);
@@ -208,8 +208,8 @@ export function ChaveDoAutomatico({
   }
 
   const titulo = ligadoNoServidor
-    ? 'Disparo automático ligado'
-    : 'Disparo automático desligado';
+    ? 'Envio automático ligado'
+    : 'Envio automático desligado';
 
   /* ---------------------------------------------------------------- */
   /* A confirmação de ligar — ela diz o que vai acontecer              */
@@ -235,7 +235,7 @@ export function ChaveDoAutomatico({
    * outro lado da sala, antes de qualquer leitura.
    *
    * 🔴 Cor é REFORÇO, nunca o portador do estado (SC 1.4.1): o título em texto
-   * ("Disparo automático ligado/desligado"), o selo com palavra e o ícone que
+   * ("Envio automático ligado/desligado"), o selo com palavra e o ícone que
    * troca de glifo continuam dizendo tudo sem depender de enxergar a cor.
    *
    * Vermelho no desligado é uma divergência DELIBERADA do selo
@@ -271,7 +271,7 @@ export function ChaveDoAutomatico({
         data-area="automatico"
         className={cn(MOLDURA_BASE, 'border-line-strong before:bg-tinta/70')}
       >
-        <RegiaoDeEspera rotulo="Lendo o estado do disparo automático">
+        <RegiaoDeEspera rotulo="Lendo o estado do envio automático">
           <div className="flex flex-col gap-3">
             <Esqueleto className="h-5 w-56" />
             <Esqueleto className="h-4 w-full max-w-md" />
@@ -309,7 +309,7 @@ export function ChaveDoAutomatico({
             disabled={!alvo || (!ligado && !podeLigar)}
             salvando={salvando}
             onCheckedChange={(v) => pedirAlternar(v)}
-            rotulo="Disparo automático"
+            rotulo="Envio automático"
             descricao="Com ele ligado, os eventos que casam com uma regra automática vão para a Meta sem você conferir."
             rodape={
               <div className="flex flex-col gap-2">
@@ -374,7 +374,7 @@ export function ChaveDoAutomatico({
         <AlertDialogContent initialFocus={refDeixarDesligado}>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Ligar o disparo automático de &ldquo;{aLigar?.nome}&rdquo;?
+              Ligar o envio automático de &ldquo;{aLigar?.nome}&rdquo;?
             </AlertDialogTitle>
             {/* Três parágrafos: a Description do base-ui vira <p>, e <p>
                 dentro de <p> é HTML inválido. */}
@@ -413,7 +413,7 @@ export function ChaveDoAutomatico({
                 if (aLigar) void aplicar(aLigar, true);
               }}
             >
-              {salvando ? 'Ligando…' : 'Ligar o disparo automático'}
+              {salvando ? 'Ligando…' : 'Ligar o envio automático'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -193,7 +193,7 @@ const TEXTO_STATUS: Record<FiltroStatus, string> = {
 const TEXTO_EQUIPE: Record<FiltroEquipe, string> = {
   todos: 'reais e testes juntos',
   reais: 'só eventos reais',
-  'so-testes': 'só testes da equipe',
+  'so-testes': 'só testes internos',
 };
 
 /**
@@ -424,11 +424,11 @@ export function FiltrosInbox({
               <OpcaoSimples
                 valor="reais"
                 rotulo="Só eventos reais"
-                ajuda="Esconde teste da equipe e teste da plataforma."
+                ajuda="Esconde teste interno e teste da plataforma."
               />
               <OpcaoSimples
                 valor="so-testes"
-                rotulo="Só testes da equipe"
+                rotulo="Só testes internos"
                 ajuda="Mostra apenas o que foi marcado como teste."
               />
             </SelectContent>
@@ -456,7 +456,7 @@ export function FiltrosInbox({
           {ativo ? ' com este filtro' : ' na lista'}
           {' · '}
           {totalElegiveis === 0
-            ? 'nenhum pode ser disparado em lote'
+            ? 'nenhum pode ser enviado em lote'
             : `${totalElegiveis} pode${totalElegiveis === 1 ? '' : 'm'} ir para a Meta`}
         </p>
 
@@ -489,7 +489,7 @@ export function FiltrosInbox({
               aria-valuemin={0}
               aria-valuemax={lote.total}
               aria-valuenow={lote.feitos}
-              aria-label="Progresso do disparo em lote"
+              aria-label="Progresso do envio em lote"
             >
               <div
                 className="h-full bg-tinta transition-[width] duration-200"
@@ -506,7 +506,7 @@ export function FiltrosInbox({
               disabled={totalElegiveis === 0}
             >
               <Send className="size-3.5" aria-hidden />
-              Disparar {totalElegiveis > 0 ? `os ${totalElegiveis} ` : ''}filtrados
+              Enviar {totalElegiveis > 0 ? `os ${totalElegiveis} ` : ''}filtrados
             </Button>
             {totalElegiveis === 0 && totalVisiveis > 0 && (
               <span className="text-caption text-fg-muted">

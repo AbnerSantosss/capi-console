@@ -15,7 +15,8 @@ import {
   type DestinoRelay,
 } from '@/lib/config-store';
 import { normalizarDominio, erroDoDominio, type DominioTag } from '@/lib/tag-dominios';
-import { empresaDaRequisicao } from '@/lib/empresa-ativa';
+import { empresaDaRequisicao, empresaParaEscrita } from '@/lib/empresa-ativa';
+import { idDeEmpresaValido, listarEmpresas } from '@/lib/empresas';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
 
@@ -86,9 +87,9 @@ const destinoSchema = z
 
 const saidaSchema = z
   .array(destinoSchema)
-  .max(20, 'máximo de 20 destinos de saída')
+  .max(20, 'máximo de 20 endereços de repasse')
   .refine((ds) => new Set(ds.map((d) => d.id)).size === ds.length, {
-    message: 'há destinos com o mesmo id',
+    message: 'há endereços de repasse com o mesmo id',
   });
 
 /**
@@ -223,6 +224,17 @@ function corpoSeguro(bruto: unknown): Partial<Integracoes> & Record<string, unkn
 }
 
 /**
+ * Nome da empresa entre aspas, para a frase do 409 de T1. O operador reconhece
+ * "Empresa A", não `emp_mfx2k9`. Id que não está no registro só aparece cru se
+ * passou pela cerca de formato — o que veio da rede não volta ecoado sem filtro.
+ */
+async function nomeDaEmpresa(id: string): Promise<string> {
+  const achada = (await listarEmpresas()).find((e) => e.id === id);
+  if (achada) return `"${achada.nome}"`;
+  return idDeEmpresaValido(id) ? `"${id}" (que não existe mais)` : 'desconhecida';
+}
+
+/**
  * O segredo de entrada volta inteiro de proposito: o operador precisa copia-lo
  * para configurar o n8n, e este servidor roda em localhost, para ele mesmo.
  * O segredo nunca entra em log nem no payload de relay.
@@ -239,7 +251,7 @@ export async function GET(request: NextRequest) {
     // Antes: qualquer falha virava 401. Configuracao ilegivel precisa chegar na
     // tela como 503 com o caminho do arquivo — 401 manda o operador refazer o
     // login e esconder a causa real (portao D33).
-    return erroDeRota(e, 'Não foi possível ler as integrações.');
+    return erroDeRota(e, 'Não foi possível ler as configurações da empresa.');
   }
 }
 
@@ -256,12 +268,36 @@ export async function GET(request: NextRequest) {
  * B2-b — leitura e gravacao acontecem dentro da MESMA fila
  * (`atualizarIntegracoes`). Antes eram duas operacoes separadas, e entre elas
  * cabia o contador de hits da Tag apagando o save do operador.
+ *
+ * 🔴 T1 (pacote de correcao, C1) — o corpo DIZ de qual empresa os dados vieram
+ * (`empresaId`), e so grava se ela for a empresa ativa desta chamada. Antes a
+ * rota confiava so no header/cookie do MOMENTO do clique: a tela carregava a
+ * empresa A, o operador trocava para a B e clicava em Salvar, e o corpo tirado
+ * da A era mesclado por cima do arquivo da B. Sem o campo → 400; diferente da
+ * ativa → 409. Nos dois casos, nada e gravado.
+ *
+ * T6 — `empresaParaEscrita` recusa (409) quando o header da aba e o cookie do
+ * navegador apontam empresas diferentes.
  */
 export async function PUT(request: NextRequest) {
   try {
     exigirSessao(request);
-    const empresaId = await empresaDaRequisicao(request);
+    const empresaId = await empresaParaEscrita(request);
     const body = corpoSeguro(await request.json());
+
+    // `empresaId` e endereco, nao configuracao: sai do corpo aqui, antes do
+    // `...body` do mutador, para nunca ser gravado no arquivo da empresa.
+    const deOnde = typeof body.empresaId === 'string' ? body.empresaId.trim() : '';
+    delete body.empresaId;
+    if (!deOnde) {
+      return respostaErro('Diga de qual empresa são estes dados (empresaId).', 400);
+    }
+    if (deOnde !== empresaId) {
+      return respostaErro(
+        `Os dados na tela são da empresa ${await nomeDaEmpresa(deOnde)}, mas a empresa ativa é ${await nomeDaEmpresa(empresaId)}. Recarregue a página.`,
+        409
+      );
+    }
 
     /**
      * Os Pixels que ESTA empresa pode citar numa regra.
@@ -306,8 +342,8 @@ export async function PUT(request: NextRequest) {
       if (body.saida !== undefined) {
         const s = saidaSchema.safeParse(body.saida);
         if (!s.success) {
-          const erros = s.error.issues.map((i) => `destino ${i.path.join('.') || '?'}: ${i.message}`);
-          throw respostaErro('Não foi possível salvar os destinos — nada foi alterado.', 400, erros);
+          const erros = s.error.issues.map((i) => `endereço de repasse ${i.path.join('.') || '?'}: ${i.message}`);
+          throw respostaErro('Não foi possível salvar os endereços de repasse — nada foi alterado.', 400, erros);
         }
         saida = s.data as DestinoRelay[];
       }
@@ -373,7 +409,8 @@ export async function PUT(request: NextRequest) {
         // 1) tudo o que ja estava no disco, na ordem em que estava;
         ...atual,
         // 2) o que o corpo mandou por cima — inclusive chave que este handler
-        //    nao conhece, que e o ponto inteiro de B12-a;
+        //    nao conhece, que e o ponto inteiro de B12-a (menos `empresaId`,
+        //    que ja saiu do corpo logo depois do parse);
         ...body,
         // 3) e os blocos validados, que tem a ultima palavra.
         entrada: {
@@ -399,7 +436,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ integracoes: salva });
   } catch (e) {
-    return erroDeRota(e, 'Não foi possível salvar as integrações — nada foi alterado.', 400);
+    return erroDeRota(e, 'Não foi possível salvar as configurações da empresa — nada foi alterado.', 400);
   }
 }
 
@@ -415,11 +452,15 @@ export async function PUT(request: NextRequest) {
  *
  * 🔴 Este handler e o UNICO caminho que troca o segredo de entrada (B1-g).
  * Nenhuma falha de leitura, nenhuma restauracao e nenhum boot chega aqui.
+ *
+ * T6 (C1) — girar credencial e escrita: aba e navegador em empresas diferentes
+ * → 409, e nada gira. Girar o segredo da empresa errada derruba a entrega de
+ * vendas dela. Sem exigir corpo: a chamada antiga, sem corpo, continua valendo.
  */
 export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
-    const empresaId = await empresaDaRequisicao(request);
+    const empresaId = await empresaParaEscrita(request);
 
     // Corpo vazio nao e erro: e exatamente a chamada antiga, de antes de a
     // chave da tag existir.

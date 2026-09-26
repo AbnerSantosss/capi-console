@@ -100,7 +100,7 @@ export function SeletorDePixel(props: SeletorDePixelProps) {
 
   const rotuloId = id ? `${id}-rotulo` : undefined;
   const textoDoRotulo =
-    rotulo ?? (props.modo === 'varios' ? 'Pixels de destino' : 'Pixel de destino');
+    rotulo ?? (props.modo === 'varios' ? 'Pixels que recebem' : 'Pixel que recebe');
 
   /* ---------------------------------------------------------------- */
   /* Os tres estados que NAO podem virar uma lista vazia em silencio   */
@@ -120,7 +120,7 @@ export function SeletorDePixel(props: SeletorDePixelProps) {
   } else if (erro) {
     aviso = (
       <Callout tone="danger" icon={AlertTriangle} title="Não foi possível ler os Pixels">
-        {erro} Sem esta lista não dá para escolher o destino — e lista vazia aqui
+        {erro} Sem esta lista não dá para escolher o Pixel — e lista vazia aqui
         não quer dizer que não há Pixel.
         <span className="mt-2 block">
           <Button size="sm" variant="outline" onClick={() => void carregar()}>
@@ -132,7 +132,7 @@ export function SeletorDePixel(props: SeletorDePixelProps) {
   } else if (marcas.length === 0) {
     aviso = (
       <Callout tone="warning" icon={Target} title="Nenhum Pixel cadastrado">
-        Não existe destino para onde enviar.
+        Sem Pixel, não há para onde enviar.
         <span className="mt-2 block">
           <Link href="/pixels" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
             Cadastrar um Pixel

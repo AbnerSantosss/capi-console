@@ -79,7 +79,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
   const novo = marca === null;
 
   const salvar = async () => {
-    if (!form.nome.trim()) return toast.error('Informe o nome da marca.');
+    if (!form.nome.trim()) return toast.error('Informe o nome do Pixel.');
     if (!form.pixelId.trim()) return toast.error('Informe o Pixel ID.');
 
     setSalvando(true);
@@ -105,7 +105,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
           </DialogTitle>
           <DialogDescription>
             Um Pixel guarda o número do Pixel, o token de acesso e o código de
-            teste. É para onde o evento vai quando você dispara.
+            teste. É para onde o evento vai quando você envia.
           </DialogDescription>
         </DialogHeader>
 
@@ -114,7 +114,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
             id="marca-nome"
             label="Nome"
             required
-            helper="Como esta marca aparece no console."
+            helper="Como este Pixel aparece no console."
           >
             <Input
               id="marca-nome"

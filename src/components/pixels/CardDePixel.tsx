@@ -233,8 +233,8 @@ export function CardDePixel({
               </button>
             ) : (
               <p className="mt-1 text-caption text-danger">
-                Sem número de Pixel — este destino não existe no Gerenciador da
-                Meta.
+                Sem número de Pixel — sem ele, nenhum evento chega ao
+                Gerenciador da Meta.
               </p>
             )}
             {/* O aviso de copia vai por regiao viva, e nao por toast: quem usa
@@ -361,11 +361,11 @@ export function CardDePixel({
           <div className="flex flex-wrap items-center justify-between gap-3">
             {ativo ? (
               <p className="text-caption text-fg-muted">
-                É para este Pixel que o disparo manual aponta agora.
+                É para este Pixel que o envio manual aponta agora.
               </p>
             ) : (
               <p className="text-caption text-fg-muted">
-                O disparo manual está apontando para outro Pixel.
+                O envio manual está apontando para outro Pixel.
               </p>
             )}
 
@@ -376,9 +376,9 @@ export function CardDePixel({
                 size="sm"
                 variant="outline"
                 onClick={onUsar}
-                aria-label={`Usar ${marca.nome} no disparo manual`}
+                aria-label={`Usar ${marca.nome} no envio manual`}
               >
-                Usar neste disparo
+                Usar neste envio
               </Button>
             )}
           </div>
@@ -394,7 +394,7 @@ export function CardDePixel({
               disabled={!marca.temToken}
               salvando={salvandoAuto}
               onCheckedChange={(v) => onAlternarAuto(v)}
-              rotulo="Disparo automático"
+              rotulo="Envio automático"
               descricao="Eventos que casarem com uma regra automática vão para a Meta sem você fazer nada."
               rodape={
                 <div className="flex flex-col gap-1.5 text-caption text-fg-muted">
@@ -423,6 +423,17 @@ export function CardDePixel({
                     <p className="text-warning">
                       Ligado, mas nenhuma regra está no modo automático — então
                       nada sai sozinho ainda.
+                    </p>
+                  )}
+
+                  {/* V7: o lado simétrico, com o estado em palavra ao lado do
+                      Switch. Regra em Automático apontando para cá e Pixel
+                      Desligado = o evento vai para a Fila, não para a Meta. */}
+                  {!autoLigado && marca.temToken && regrasAuto > 0 && (
+                    <p className="text-warning">
+                      {regrasAuto === 1
+                        ? 'Desligado: 1 regra automática aponta para este Pixel, mas nada sai sozinho — os eventos ficam na Fila até você enviar.'
+                        : `Desligado: ${regrasAuto} regras automáticas apontam para este Pixel, mas nada sai sozinho — os eventos ficam na Fila até você enviar.`}
                     </p>
                   )}
                 </div>

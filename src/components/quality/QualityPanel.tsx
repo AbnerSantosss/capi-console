@@ -238,7 +238,7 @@ export function QualityModal({
                       {p.hash && (
                         <span
                           className="inline-flex items-center gap-0.5 text-success"
-                          title="Criptografado em SHA-256 antes do envio"
+                          title="Transformado em hash SHA-256 antes do envio"
                         >
                           <Lock className="size-2.5" aria-hidden />
                           SHA-256

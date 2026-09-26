@@ -72,6 +72,9 @@ import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis'
 // reimplementa nada disto: ela pergunta e obedece. Modulo neutro, sem
 // `server-only`, justamente para poder ser importado daqui.
 import { separarParaLote } from '@/lib/inbox-lote';
+// "Enviado só em teste": a MESMA leitura que o resumo usa (C9), importada
+// e não copiada. Módulo neutro, sem `server-only`.
+import { enviadoSoEmTeste } from '@/lib/inbox-resumo';
 import {
   FiltrosInbox,
   FILTROS_VAZIOS,
@@ -164,6 +167,8 @@ export interface ItemInbox {
   motivoIgnorar?: MotivoIgnorar;
   testePlataforma?: boolean;
   testeInterno?: boolean;
+  /** A frase do detector de teste interno (`deteccao-de-teste.ts`), quando houver. */
+  explicacaoDeTeste?: string;
   formato?: 'A' | 'B' | 'outro';
   rotuloRecebido?: string | null;
   rotuloDivergente?: boolean;
@@ -427,6 +432,17 @@ export function InboxList({
   const empresaAtiva = useEmpresaStore((s) => s.ativa());
   const rotuloWebhook = nomeDaPlataforma(empresaAtiva?.plataforma);
 
+  /**
+   * T2 (C4): a empresa de onde vieram os itens desta lista.
+   *
+   * `empresaAtivaId` é a escolha do store (é dela que `pedir()` tira o header
+   * `X-Empresa-Id`). A ref nasce com ela e só muda no efeito de troca, mais
+   * abaixo: é o que deixa o efeito agir na TROCA e não na montagem, e o que
+   * deixa `buscar` reconhecer uma resposta que saiu antes da troca.
+   */
+  const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
+  const empresaDaLista = useRef(empresaAtivaId);
+
   const carregarDoParser = useEventStore((s) => s.carregarDoParser);
   /**
    * Ids já vistos nesta sessão de tela. Serve para não avisar duas vezes o
@@ -440,10 +456,16 @@ export function InboxList({
   }, []);
 
   const buscar = useCallback(async () => {
+    // A empresa para a qual esta leitura sai (T2, C4). Se o operador trocar de
+    // empresa enquanto a resposta vem, ela é da empresa ANTERIOR: mesclá-la na
+    // lista que o efeito de troca acabou de zerar poria a venda de um cliente
+    // na tela de outro. A leitura da empresa nova já foi pedida pela troca.
+    const pedidaPara = empresaDaLista.current;
     try {
       const d = await pedir<{ itens: ItemInbox[] }>(`/api/inbox?limite=${limite}`, {
         cache: 'no-store',
       });
+      if (empresaDaLista.current !== pedidaPara) return;
       jaVisto(d.itens ?? []);
       setItens((atuais) => mesclar(atuais, d.itens ?? [], limite));
     } catch (e) {
@@ -452,9 +474,52 @@ export function InboxList({
       }
       /* servidor pode estar reiniciando: o SSE continua tentando */
     } finally {
-      setCarregando(false);
+      // Resposta velha não tira o "carregando" da empresa nova.
+      if (empresaDaLista.current === pedidaPara) setCarregando(false);
     }
   }, [jaVisto, limite]);
+
+  /**
+   * 🔴 T2 (C4): trocar de empresa recomeça a caixa de entrada do zero.
+   *
+   * Itens, ids vistos, Pixels escolhidos e lote são DA EMPRESA de onde os
+   * itens vieram. Antes, trocar de empresa com a caixa aberta deixava tudo isso
+   * na tela: o GET seguinte só mesclava por cima dos itens antigos e o SSE
+   * seguia aberto na empresa anterior (a rota resolve a empresa pelo cookie
+   * UMA vez, ao abrir). A venda de um cliente ficava na tela de outro, a um
+   * clique de "Disparar direto".
+   *
+   * Vale para as 3 montagens (Automático, tela inicial compacta e Painel)
+   * porque mora no componente, não em quem o monta.
+   *
+   * Age na TROCA, nunca na montagem: a ref nasce com a empresa atual, e o
+   * efeito só faz algo quando o store diz outra. É efeito, e não ajuste
+   * durante a renderização, porque mexe em ref (`vistos`, `cancelarLote`), e
+   * ref não se toca renderizando.
+   *
+   * `tentativa + 1` fecha o SSE velho e abre um novo. O novo já sai com o
+   * cookie da empresa nova, porque `setEmpresaAtiva` e o ouvinte de outra aba
+   * escrevem o cookie ANTES do estado. A leitura de apoio desse efeito refaz o
+   * GET. Nada de `router.refresh()`: a lista não vem da página de servidor.
+   */
+  useEffect(() => {
+    if (empresaDaLista.current === empresaAtivaId) return;
+    empresaDaLista.current = empresaAtivaId;
+    // Lote em andamento para: o item em voo termina, o próximo (da empresa
+    // anterior) não sai. A tela que mostraria o progresso acabou de ser zerada.
+    cancelarLote.current = true;
+    vistos.current.clear();
+    setItens([]);
+    setMarcasEscolhidas([]);
+    setMarcasDoLote([]);
+    setLoteAberto(false);
+    setResumoLote(null);
+    setAlvo(null);
+    setPayloadAberto(null);
+    setConexao('conectando');
+    setCarregando(true);
+    setTentativa((t) => t + 1);
+  }, [empresaAtivaId]);
 
   // Conexão SSE resiliente: sonda de sessão, backoff, watchdog de pulso e
   // religação quando a aba volta ou a rede volta.
@@ -649,7 +714,7 @@ export function InboxList({
       });
       setItens((a) => a.map((i) => (i.id === item.id ? { ...i, status: 'carregado' } : i)));
       toast.success('Dados carregados no formulário', {
-        description: `${r.preenchidos.length} campos preenchidos. Confira antes de disparar.`,
+        description: `${r.preenchidos.length} campos preenchidos. Confira antes de enviar.`,
       });
       document
         .getElementById('secao-evento')
@@ -745,7 +810,7 @@ export function InboxList({
       void buscar();
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
-      toast.error('Falha ao disparar', {
+      toast.error('Falha ao enviar', {
         description: e instanceof Error ? e.message : 'Erro desconhecido.',
       });
     } finally {
@@ -763,10 +828,10 @@ export function InboxList({
         body: JSON.stringify({ confirmar: true }),
       });
       setItens([]);
-      toast.success('Caixa de entrada limpa.');
+      toast.success('Fila limpa.');
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
-      toast.error('Falha ao limpar a caixa de entrada.', {
+      toast.error('Falha ao limpar a Fila.', {
         description: e instanceof Error ? e.message : '',
       });
     }
@@ -943,7 +1008,7 @@ export function InboxList({
     const resumo = `${p.ok} ok · ${p.pulados} pulado${p.pulados === 1 ? '' : 's'} · ${
       p.erros.length
     } erro${p.erros.length === 1 ? '' : 's'}`;
-    const titulo = `${p.feitos} de ${p.total} disparado${p.feitos === 1 ? '' : 's'}${
+    const titulo = `${p.feitos} de ${p.total} enviado${p.feitos === 1 ? '' : 's'}${
       interrompido ? ' (interrompido)' : ''
     }`;
     if (p.erros.length > 0) toast.warning(titulo, { description: resumo });
@@ -974,7 +1039,7 @@ export function InboxList({
     // primeiro mount, entao o esqueleto nunca cobre lista ja visivel.
     return (
       <RegiaoDeEspera
-        rotulo="Carregando a caixa de entrada"
+        rotulo="Carregando a Fila"
         className="flex flex-col gap-3"
       >
         {fase === 'spinner' && (
@@ -1196,7 +1261,7 @@ export function InboxList({
 
       {compacto && noPeriodo.length > 5 && (
         <Callout tone="info">
-          Mostrando os 5 mais recentes de {noPeriodo.length}. A lista completa está em Integrações.
+          Mostrando os 5 mais recentes de {noPeriodo.length}. A lista completa está na Fila.
         </Callout>
       )}
 
@@ -1228,7 +1293,7 @@ export function InboxList({
 
           <SeletorDePixel
             modo="varios"
-            rotulo="Pixels de destino"
+            rotulo="Pixels que recebem"
             valor={escolhidasVisiveis}
             onChange={setMarcasEscolhidas}
           />
@@ -1240,8 +1305,9 @@ export function InboxList({
           )}
 
           {alvo?.testeInterno && (
-            <Callout tone="warning" icon={FlaskConical} title="Isto parece teste da equipe">
-              Cupom de R$ 0,01 ou e-mail de teste. Enviar mistura teste com métrica real.
+            <Callout tone="warning" icon={FlaskConical} title="Isto parece teste interno">
+              {alvo.explicacaoDeTeste ??
+                'Cupom de R$ 0,01 ou e-mail de teste. Enviar mistura teste com métrica real.'}
             </Callout>
           )}
 
@@ -1393,7 +1459,7 @@ function LinhaEntrada({
    * para o estado do item; os outros dois continuam inteiros dentro do menu.
    */
   const acao = disparavel
-    ? { rotulo: 'Disparar direto', Icone: Send, ao: aoDisparar, principal: true }
+    ? { rotulo: 'Enviar agora', Icone: Send, ao: aoDisparar, principal: true }
     : !naoLido
       ? { rotulo: 'Carregar', Icone: ArrowDownToLine, ao: aoCarregar, principal: false }
       : { rotulo: 'Ver payload', Icone: FileJson, ao: aoVerPayload, principal: false };
@@ -1502,10 +1568,12 @@ function LinhaEntrada({
               carregado no formulário
             </Badge>
           )}
+          {/* Só texto (V6 passo 5b): quando todo aceite veio de Pixel com código
+              de teste, a venda não contou na campanha — o selo diz isso. */}
           {item.status === 'disparado' && (
             <Badge variant="sucesso">
               <Check aria-hidden />
-              enviado à Meta
+              {enviadoSoEmTeste(item) ? 'enviado só em teste' : 'enviado à Meta'}
             </Badge>
           )}
           {item.modo && (
@@ -1607,7 +1675,7 @@ function LinhaEntrada({
                 {item.testeInterno && (
                   <Badge variant="aviso">
                     <FlaskConical aria-hidden />
-                    teste da equipe
+                    teste interno
                   </Badge>
                 )}
                 {item.classificacao === 'desconhecido' && (
@@ -1689,7 +1757,7 @@ function LinhaEntrada({
             {disparavel && (
               <MenuItem onClick={aoDisparar}>
                 <Send aria-hidden />
-                Disparar direto
+                Enviar agora
               </MenuItem>
             )}
             {!naoLido && (

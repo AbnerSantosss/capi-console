@@ -39,10 +39,10 @@ export function estadoDaRegra(regras: RegraRoteamento[], origem: string): Estado
   const regra = regras.find((r) => r.eventoOrigem === origem);
   if (!regra) {
     return {
-      texto: 'Sem regra — fica na fila',
+      texto: 'Sem regra — não vai à Meta',
       tom: 'warning',
       explicacao:
-        'Nenhuma regra cobre este evento, então ele para na caixa de entrada esperando um clique. Crie a regra na aba Regras.',
+        'Sem regra, o evento não entra na fila nem vai à Meta. O fbc e o fbp dele ajudam a venda do webhook a achar a campanha.',
     };
   }
   if (!regra.ativo) {
@@ -73,6 +73,6 @@ export function estadoDaRegra(regras: RegraRoteamento[], origem: string): Estado
     texto: 'Na fila',
     tom: 'warning',
     explicacao:
-      'O evento fica na caixa de entrada esperando você revisar e disparar. Nada sai daqui sozinho.',
+      'O evento fica na Fila esperando você revisar e enviar. Nada sai daqui sozinho.',
   };
 }

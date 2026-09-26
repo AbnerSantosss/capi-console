@@ -117,6 +117,13 @@ export function Switch({
               // sobre a tinta. Manter o botao branco sobre a tinta deixaria os
               // dois em 1.7:1 — o estado sumiria dentro do proprio controle.
               //
+              // v7: ligado, o botao e `papel-texto`, "o que se escreve sobre a
+              // acao". A tinta do console e escura (o azul de acao) e
+              // `surface-0` sobre ela daria 3.69; `papel-texto` da 5.10 no
+              // console (branco) e continua quase preto sobre a tinta clara do
+              // login (9.33 no pior caso). O gate mede o par nas duas paletas,
+              // no grupo "Tinta cheia".
+              //
               // v3: o trilho desligado subiu de `surface-2` para `surface-3`.
               // Sobre o cartao (que agora tem rampa a partir de `surface-1`),
               // o `surface-2` mal se separava do fundo e o switch desligado
@@ -133,7 +140,7 @@ export function Switch({
             )}
             {...props}
           >
-            <SwitchPrimitive.Thumb className="block size-4 rounded-full bg-fg-strong shadow-sm transition-[translate] duration-150 data-checked:translate-x-5 data-checked:bg-surface-0" />
+            <SwitchPrimitive.Thumb className="block size-4 rounded-full bg-fg-strong shadow-sm transition-[translate] duration-150 data-checked:translate-x-5 data-checked:bg-papel-texto" />
           </SwitchPrimitive.Root>
         </div>
       </div>

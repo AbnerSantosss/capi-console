@@ -58,7 +58,7 @@ export function SourceSection() {
             className="h-control-sm gap-2 rounded-control px-4 text-label data-active:bg-surface-3 data-active:text-fg-strong"
           >
             <Inbox className="size-4" aria-hidden />
-            Caixa de entrada
+            Fila
           </TabsTrigger>
           <TabsTrigger
             value="json"
@@ -77,9 +77,9 @@ export function SourceSection() {
               Carregar no formulário
             </strong>{' '}
             traz os dados para os campos abaixo, para você conferir antes de
-            enviar — nada é disparado.{' '}
+            enviar — nada sai para a Meta.{' '}
             <strong className="font-semibold text-fg-body">
-              Disparar direto
+              Enviar agora
             </strong>{' '}
             envia o evento do jeito que ele chegou, sem passar pelo formulário.
           </p>
@@ -88,7 +88,7 @@ export function SourceSection() {
             href="/automatico?aba=inbox"
             className="mt-3 inline-flex min-h-10 items-center text-label font-medium text-tinta-texto underline-offset-4 hover:underline"
           >
-            Ver caixa de entrada completa
+            Ver a Fila completa
           </Link>
         </TabsContent>
 

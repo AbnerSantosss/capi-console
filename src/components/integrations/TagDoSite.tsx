@@ -1,7 +1,12 @@
 'use client';
 
 /**
- * Aba "Tag do site" — cadastro de domínios, DNS do cliente e tags prontas.
+ * Aba "Tag do site" — sites permitidos e tags prontas.
+ *
+ * V8 do plano v7: o domínio próprio do cliente (subdomínio, registro de DNS e
+ * a mensagem para o cliente) saiu daqui e mora na aba Domínio
+ * (`components/dominio/`). Esta tela ficou com o que se faz todo dia: copiar a
+ * tag e cuidar da lista de sites que o coletor aceita.
  *
  * O webhook da plataforma de vendas não manda PageView nenhum. Sem esta tag a
  * Meta não vê visita alguma no site e o algoritmo otimiza sem sinal de topo; pior,
@@ -14,16 +19,18 @@
  */
 
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   AlertTriangle,
+  ArrowRight,
   Check,
   Copy,
   Globe,
   KeyRound,
-  Network,
   Plus,
   RefreshCw,
   ShieldAlert,
@@ -32,19 +39,20 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { Callout, Field, Panel, ParamChip, StatusDot } from '@/components/common/primitives';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
+import { enderecoDaAba } from '@/lib/abas-empresa';
+import { slugDoEndereco } from '@/lib/empresa-do-endereco';
 import {
   erroDoDominio,
   hostDaTag,
   normalizarDominio,
-  registroDnsDe,
-  textoDnsParaCliente,
   type ConfigTag,
   type DominioTag,
 } from '@/lib/tag-dominios';
+import { useEnderecosProntos } from '@/components/dominio/AbaDominio';
+import { enderecoProprioDe } from '@/components/dominio/mensagens-dominio';
 import { OndeInstalarTag } from '@/components/instalacao/OndeInstalarTag';
 import { EventosExtras } from '@/components/instalacao/EventosExtras';
 import type { TagGerada } from '@/components/instalacao/tag-estado';
@@ -75,35 +83,11 @@ export interface TagDoSitePropriedades {
    * A tela de Instalação tinha duas seções lado a lado (Webhook, depois Tag);
    * a nova ordem funde as duas num fluxo só, com a tag primeiro (é o que falta
    * instalar) e o webhook por último (já costuma estar pronto). Este slot é
-   * onde `InstalacaoPage` encaixa o card de webhook, entre o DNS e a chave
-   * pública da tag — a mesma posição em que `antesDasTags` costumava aparecer,
-   * só que depois das tags, não antes.
+   * onde `InstalacaoPage` encaixa o card de webhook, entre os sites permitidos
+   * e a chave pública da tag — a mesma posição em que `antesDasTags` costumava
+   * aparecer, só que depois das tags, não antes.
    */
   blocoWebhood: React.ReactNode;
-}
-
-/* ------------------------------------------------------------------ */
-/* Validação do subdomínio                                             */
-/* ------------------------------------------------------------------ */
-
-/**
- * Erro legível do rótulo de subdomínio, ou null quando serve (vazio serve: o
- * subdomínio é opcional).
- *
- * Um rótulo torto vira um CNAME que o cliente cria no painel dele e que nunca
- * resolve. O prejuízo não aparece aqui: aparece como uma semana de campanha
- * rodando com a tag apontando para um endereço que não existe.
- */
-function erroDoSubdominio(v: string): string | null {
-  const s = String(v ?? '').trim().toLowerCase();
-  if (!s) return null;
-  if (s.length > 63) return 'Máximo de 63 caracteres.';
-  if (s.includes('.')) return 'Escreva só o rótulo, sem ponto — por exemplo tk.';
-  if (!/^[a-z0-9-]+$/.test(s)) return 'Só minúsculas, dígitos e hífen.';
-  if (s.startsWith('-') || s.endsWith('-')) {
-    return 'Não pode começar nem terminar com hífen.';
-  }
-  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,7 +119,6 @@ export function TagDoSite({
   const dominios = tag.dominios;
 
   const [dominioNovo, setDominioNovo] = useState('');
-  const [subdominioNovo, setSubdominioNovo] = useState('');
   const [removendoId, setRemovendoId] = useState<string | null>(null);
   const [confirmandoChave, setConfirmandoChave] = useState(false);
   const [trocandoChave, setTrocandoChave] = useState(false);
@@ -150,6 +133,13 @@ export function TagDoSite({
   // O tempo relativo só existe depois da hidratação: o servidor e o navegador
   // renderizariam minutos diferentes e o React reclamaria da diferença.
   const montado = useSyncExternalStore(assinarNada, () => true, () => false);
+  // V8: o link "O domínio próprio fica na aba Domínio" precisa do slug da
+  // empresa, e ele está no endereço (`/e/<slug>/fontes`).
+  const slug = slugDoEndereco(usePathname() ?? '');
+  // V8: a tag de um site com subdomínio só chama o endereço dele depois que a
+  // rota MEDIU que ele responde (`enderecoProprioPronto`). A linha "A tag
+  // chama" de cada site lê a mesma medição, para dizer o endereço de verdade.
+  const prontoDe = useEnderecosProntos(dominios);
 
   // O domínio escolhido some quando o operador o remove; aí a tela volta para
   // o primeiro em vez de ficar pedindo tags de um id que não existe mais.
@@ -211,9 +201,7 @@ export function TagDoSite({
   /* ---------------------------------------------------------------- */
 
   const hostLimpo = normalizarDominio(dominioNovo);
-  const subLimpo = subdominioNovo.trim().toLowerCase();
   const erroHost = dominioNovo.trim() ? erroDoDominio(hostLimpo) : null;
-  const erroSub = erroDoSubdominio(subdominioNovo);
   const repetido = Boolean(hostLimpo) && dominios.some((d) => d.host === hostLimpo);
   const erroHostFinal = erroHost ?? (repetido ? 'Este domínio já está cadastrado.' : null);
   /**
@@ -228,22 +216,21 @@ export function TagDoSite({
     (campo as HTMLInputElement | null)?.focus();
   };
 
-  const podeAdicionar =
-    Boolean(hostLimpo) && !erroHostFinal && !erroSub && !salvando;
+  const podeAdicionar = Boolean(hostLimpo) && !erroHostFinal && !salvando;
 
+  // V8: o site entra aqui sem subdomínio. O endereço próprio (subdomínio,
+  // registro de DNS e mensagem para o cliente) se escolhe na aba Domínio.
   const adicionar = async () => {
     if (!podeAdicionar) return;
     const novo: DominioTag = {
       id: crypto.randomUUID(),
       host: hostLimpo,
-      subdominio: subLimpo || undefined,
       criadoEm: new Date().toISOString(),
       hits: 0,
     };
     const ok = await onSalvarDominios([...dominios, novo]);
     if (!ok) return;
     setDominioNovo('');
-    setSubdominioNovo('');
     setSelecionado(novo.id);
   };
 
@@ -264,26 +251,17 @@ export function TagDoSite({
     }
   };
 
-  const comDns = dominios
-    .map((d) => ({ d, reg: registroDnsDe(d, base) }))
-    .filter((x): x is { d: DominioTag; reg: NonNullable<typeof x.reg> } =>
-      Boolean(x.reg)
-    );
-
   /**
-   * Pré-requisito da tag (Tarefa 6, §6.2 item 2): domínio autorizado e — só
-   * para quem escolheu subdomínio próprio — o primeiro hit já registrado. O
-   * hit NÃO prova o CNAME: o coletor conta pelo Origin do site
-   * (`tag-handler.ts`), venha a chamada pelo subdomínio ou pelo nosso
-   * endereço. Por isso o texto de sucesso diz "recebendo eventos", nunca
-   * "DNS confirmado" — a verificação de DNS de verdade é do plano v6. Um
-   * domínio SEM subdomínio nunca bloqueia o estado de sucesso: ele já usa o
-   * nosso endereço, que não depende de DNS nenhum do cliente.
+   * Pré-requisito da tag (Tarefa 6, §6.2 item 2): o site autorizado na lista.
+   *
+   * V8: o subdomínio deixou de ser pré-requisito. A tag de um site com
+   * subdomínio chama o NOSSO endereço até o endereço próprio responder (a rota
+   * mede), então copiar e instalar a tag nunca espera o DNS do cliente.
+   * "Recebendo eventos" só aparece quando algum site já contou um evento: o
+   * coletor conta pelo Origin do site (`tag-handler.ts`).
    */
-  const cnamesPendentes = dominios.filter(
-    (d) => d.subdominio && (d.hits ?? 0) === 0
-  );
-  const prerequisitosOk = dominios.length > 0 && cnamesPendentes.length === 0;
+  const siteNaLista = dominios.length > 0;
+  const algumRecebendo = dominios.some((d) => (d.hits ?? 0) > 0);
 
   /* ---------------------------------------------------------------- */
   /* Render                                                            */
@@ -301,25 +279,22 @@ export function TagDoSite({
         comprador paga no aplicativo do banco e nunca mais volta ao navegador.
       </p>
 
-      {/* 2 — pré-requisito de DNS/domínio ---------------------------- */}
-      {prerequisitosOk ? (
+      {/* 2 — pré-requisito: o site na lista ---------------------------- */}
+      {siteNaLista ? (
         <StatusDot tone="success" icon={Globe}>
-          Pré-requisitos atendidos — domínio autorizado e já recebendo eventos.
+          {algumRecebendo
+            ? 'Pré-requisito atendido — site permitido e já recebendo eventos.'
+            : 'Pré-requisito atendido — site permitido. Nenhum evento chegou ainda.'}
         </StatusDot>
       ) : (
         <Callout
           tone="warning"
           icon={AlertTriangle}
-          title="Antes de gerar a tag, faça duas coisas."
+          title="Antes de gerar a tag, cadastre o site do cliente."
           className="rounded-r-lg bg-warning/8 py-3 pr-3"
         >
-          1) Cadastre o domínio do site do cliente na lista de domínios
-          autorizados — sem isso o coletor recusa os eventos. 2) Se for usar um
-          subdomínio próprio do cliente (recomendado: faz o cookie durar mais
-          no Safari), peça ao cliente para criar o registro CNAME antes de
-          colar a tag. Só cadastre o subdomínio depois que o CNAME existir: com
-          ele cadastrado, o código gerado já chama o subdomínio, e colado antes
-          disso não coleta nada.
+          Cadastre o domínio do site do cliente em Sites permitidos, logo
+          abaixo — sem isso o coletor recusa os eventos.
         </Callout>
       )}
 
@@ -378,7 +353,7 @@ export function TagDoSite({
       />
 
       {/* 5 — domínios ---------------------------------------------- */}
-      <Panel title="Domínios autorizados" icon={Globe}>
+      <Panel title="Sites permitidos" icon={Globe}>
         <p className="text-caption text-fg-muted">
           A lista abaixo é a única tranca do endereço público: o coletor só
           aceita evento cujo <ParamChip>Origin</ParamChip> esteja aqui. Site
@@ -391,7 +366,7 @@ export function TagDoSite({
             className="mt-3"
             icone={Globe}
             titulo="Nenhum domínio cadastrado"
-            motivo="Com a lista vazia o coletor recusa tudo: nenhum site pode mandar evento. Cadastre o domínio do cliente para o console gerar as tags e o registro de DNS."
+            motivo="Com a lista vazia o coletor recusa tudo: nenhum site pode mandar evento. Cadastre o domínio do cliente para o console gerar as tags."
             acao={
               <Button variant="outline" onClick={focarCampoDeDominio}>
                 <Plus className="size-4" aria-hidden />
@@ -410,6 +385,11 @@ export function TagDoSite({
                     })
                   : null;
               const instalado = Boolean(d.ultimoHit);
+              // V8: com subdomínio, a tag só chama o endereço do cliente depois
+              // de medido (`true`); `false` = ainda no nosso endereço;
+              // `undefined` = a medição não voltou.
+              const proprio = enderecoProprioDe(d);
+              const medida = proprio ? prontoDe(d) : false;
               return (
                 <li
                   key={d.id}
@@ -423,15 +403,37 @@ export function TagDoSite({
                       <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
                         {d.host}
                       </p>
-                      <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
-                        <span>A tag chama:</span>
-                        <ParamChip>{hostDaTag(d, base)}</ParamChip>
-                        <span>
-                          {d.subdominio
-                            ? 'subdomínio do cliente — cookie de primeira parte, sobrevive ao Safari.'
-                            : 'nosso endereço — funciona, mas ainda como terceiro.'}
-                        </span>
-                      </p>
+                      {proprio && medida !== true ? (
+                        // V8: subdomínio cadastrado, endereço dele ainda não
+                        // medido como pronto — a tag chama o NOSSO endereço
+                        // (`endpointDoDominio` na rota) e continua coletando.
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
+                          <span>A tag chama:</span>
+                          {medida === undefined ? (
+                            <span>conferindo se {proprio} já responde…</span>
+                          ) : (
+                            <>
+                              <ParamChip>{hostDaTag({ ...d, subdominio: undefined }, base)}</ParamChip>
+                              <span>
+                                nosso endereço, até o endereço próprio{' '}
+                                <span className="wrap-token font-mono">{proprio}</span> ficar
+                                pronto. A tag continua coletando; o andamento fica na aba
+                                Domínio.
+                              </span>
+                            </>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
+                          <span>A tag chama:</span>
+                          <ParamChip>{hostDaTag(d, base)}</ParamChip>
+                          <span>
+                            {d.subdominio
+                              ? 'subdomínio do cliente — a tag é chamada pelo domínio dele. O cookie de primeira parte gravado pelo servidor ainda depende do certificado, que está em preparação.'
+                              : 'nosso endereço — funciona, mas ainda como terceiro.'}
+                          </span>
+                        </p>
+                      )}
                     </div>
 
                     {removendoId === d.id ? (
@@ -509,22 +511,6 @@ export function TagDoSite({
                 className="wrap-token font-mono"
               />
             </Field>
-
-            <Field
-              id="tag-subdominio-novo"
-              label="Subdomínio"
-              helper={`Opcional. Com ele a tag responde em ${subLimpo || 'tk'}.${hostLimpo || 'dominio.com.br'} e o cookie dura muito mais.`}
-              error={erroSub ?? undefined}
-            >
-              <Input
-                id="tag-subdominio-novo"
-                value={subdominioNovo}
-                placeholder="tk"
-                onChange={(e) => setSubdominioNovo(e.target.value)}
-                onBlur={() => setSubdominioNovo(subdominioNovo.trim().toLowerCase())}
-                className="wrap-token font-mono"
-              />
-            </Field>
           </div>
 
           <div className="flex justify-end">
@@ -534,118 +520,29 @@ export function TagDoSite({
             </Button>
           </div>
         </div>
+
+        {/* V8: o subdomínio, o registro de DNS e a mensagem para o cliente
+            saíram daqui. No lugar, uma linha só, com o caminho. */}
+        <p className="mt-3 text-caption text-fg-muted">
+          O domínio próprio fica na aba Domínio: lá se escolhe o endereço da
+          tag dentro do site do cliente (como m.loja.com.br) e se copia a
+          mensagem com o registro de DNS.{' '}
+          {slug && (
+            <Link
+              href={enderecoDaAba(slug, 'dominio')}
+              className="inline-flex items-center gap-1 text-label text-tinta-texto underline-offset-4 hover:underline"
+            >
+              Abrir a aba Domínio
+              <ArrowRight className="size-3.5" aria-hidden />
+            </Link>
+          )}
+        </p>
       </Panel>
 
-      {/* 6 — DNS ---------------------------------------------------- */}
-      <Panel title="Registro de DNS para o cliente criar" icon={Network}>
-        {comDns.length === 0 ? (
-          <p className="text-caption text-fg-muted">
-            Nenhum domínio tem subdomínio próprio ainda, então não há registro
-            de DNS a pedir. A medição já funciona pelo nosso endereço; o
-            subdomínio só serve para a tag responder dentro do domínio do
-            cliente e o cookie durar mais no navegador do visitante.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {comDns.map(({ d, reg }) => {
-              const texto = textoDnsParaCliente(d, base);
-              return (
-                <div
-                  key={d.id}
-                  // Mesmo caso do bloco de domínios acima: dentro de `Panel`,
-                  // então sobe para `surface-2` e larga a borda (G3′).
-                  className="rounded-panel bg-surface-2 p-4"
-                >
-                  <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
-                    {reg.nome}.{d.host}
-                  </p>
-
-                  <div
-                    className="mt-3 max-w-full overflow-x-auto"
-                    tabIndex={0}
-                    role="region"
-                    aria-label={`Registro de DNS de ${d.host}`}
-                  >
-                    <table className="w-full border-collapse text-left">
-                      <thead>
-                        <tr className="border-b border-line">
-                          {['Tipo', 'Nome', 'Valor', 'TTL', 'Proxy'].map((h) => (
-                            <th
-                              key={h}
-                              scope="col"
-                              className="py-2 pr-4 text-label font-semibold text-fg-strong"
-                            >
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-line">
-                          <td className="py-2 pr-4 font-mono text-caption text-fg-body">
-                            {reg.tipo}
-                          </td>
-                          <td className="py-2 pr-4 font-mono text-caption text-fg-body">
-                            {reg.nome}
-                          </td>
-                          <td className="wrap-token py-2 pr-4 font-mono text-caption text-fg-body">
-                            {reg.valor}
-                          </td>
-                          <td className="py-2 pr-4 text-label text-fg-body">
-                            {reg.ttl}
-                          </td>
-                          <td className="py-2 pr-4 text-label text-fg-body">
-                            {reg.proxy}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <p className="mt-2 text-body text-fg-body">
-                    {reg.observacao}
-                  </p>
-
-                  <Field
-                    id={`dns-texto-${d.id}`}
-                    label="Texto para mandar ao cliente"
-                    helper="Escrito para o dono do site, não para quem cuida de DNS. Mande assim, sem editar."
-                    className="mt-4"
-                    action={
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => copiar(texto, `dns-${d.id}`)}
-                      >
-                        {copiado === `dns-${d.id}` ? (
-                          <Check className="size-3.5 text-success" aria-hidden />
-                        ) : (
-                          <Copy className="size-3.5" aria-hidden />
-                        )}
-                        Copiar
-                      </Button>
-                    }
-                  >
-                    <Textarea
-                      id={`dns-texto-${d.id}`}
-                      readOnly
-                      spellCheck={false}
-                      rows={14}
-                      value={texto}
-                      className="wrap-token font-mono text-caption"
-                    />
-                  </Field>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Panel>
-
-      {/* 7 — webhook da plataforma de vendas ------------------------- */}
+      {/* 6 — webhook da plataforma de vendas ------------------------- */}
       {blocoWebhood}
 
-      {/* 8 — chave pública ------------------------------------------ */}
+      {/* 7 — chave pública ------------------------------------------ */}
       <Panel title="Chave pública da tag" icon={KeyRound}>
         <Callout
           tone="warning"
@@ -723,7 +620,7 @@ export function TagDoSite({
         </div>
       </Panel>
 
-      {/* 9 — aviso de localhost ------------------------------------- */}
+      {/* 8 — aviso de localhost ------------------------------------- */}
       {ehLocal && (
         <Callout
           tone="warning"

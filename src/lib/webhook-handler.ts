@@ -10,7 +10,7 @@ import {
 } from '@/lib/config-store';
 import { acharEmpresaPorSegredo } from '@/lib/empresas';
 import { respostaConfigIndisponivel } from '@/lib/erro-api';
-import { registrarEntrada, mascararEmail, contarComprasDoEmail } from '@/lib/inbox';
+import { registrarEntrada, mascararEmail, contarComprasDoEmail, hashDoEmail } from '@/lib/inbox';
 import { avaliarTeste } from '@/lib/deteccao-de-teste';
 import { sinaisDoPayload } from '@/lib/inbox-sinais';
 import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
@@ -18,7 +18,12 @@ import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
-import { resolverModoPorMarca, decisaoDaSonda, SEM_DECISAO } from '@/lib/modo-por-marca';
+import {
+  resolverModoPorMarca,
+  decisaoDaSonda,
+  soMarcasEmTeste,
+  SEM_DECISAO,
+} from '@/lib/modo-por-marca';
 
 /**
  * Handler único do recebimento de webhook, usado por duas rotas e três formas
@@ -67,16 +72,20 @@ const EVENTO_DA_SONDA = 'ViewContent';
  * Não é cliente de mentira: é o próprio console se identificando.
  */
 /**
- * A trava da sonda: ela so vai ao ar se alguma marca de destino tiver
- * `test_event_code`. E a checagem que mantem a regra 1 do CLAUDE.md de pe —
- * evento sintetico jamais entra no dataset que treina as campanhas.
+ * A trava da sonda: ela so vai aos destinos que tem `test_event_code`. E a
+ * checagem que mantem a regra 1 do CLAUDE.md de pe — evento sintetico jamais
+ * entra no dataset que treina as campanhas.
+ *
+ * Devolve QUAIS destinos estao em teste, e nao "algum esta?" (C10, D2): numa
+ * regra que mistura um Pixel em teste e um em producao, a pergunta antiga dizia
+ * "sim" e a sonda ia para os dois. O filtro em si e `soMarcasEmTeste`
+ * (`modo-por-marca.ts`), o mesmo que o teste da trava do Pixel prova.
  */
-async function algumaMarcaEmTeste(ids: string[]): Promise<boolean> {
+async function marcasEmTeste(ids: string[]): Promise<string[]> {
   try {
-    const todas = await listarMarcas();
-    return ids.some((id) => todas.find((m) => m.id === id)?.testCode?.trim());
+    return soMarcasEmTeste(ids, await listarMarcas());
   } catch {
-    return false; // na duvida, nao dispara
+    return []; // na duvida, nao dispara
   }
 }
 
@@ -288,12 +297,18 @@ export async function processarWebhook(
   // que o token vale, que o pixel existe, nem que a Meta aceita o evento.
   //
   // Agora ele fecha o circuito ate o Gerenciador de Eventos. Com uma trava:
-  // so dispara quando a marca de destino tem `test_event_code`. Com codigo de
-  // teste o evento cai em "Testar eventos" e fica fora das metricas e da
-  // otimizacao; sem codigo, iria para o dataset de producao como dado
-  // inventado — o que a regra 1 do CLAUDE.md proibe. Sem codigo de teste o
-  // `ping` volta a ser exatamente o que era: ignorado.
-  const sonda = testePlataforma && (await algumaMarcaEmTeste(marcas));
+  // so vai aos destinos que tem `test_event_code`. Com codigo de teste o evento
+  // cai em "Testar eventos" e fica fora das metricas e da otimizacao; sem
+  // codigo, iria para o dataset de producao como dado inventado — o que a
+  // regra 1 do CLAUDE.md proibe. Sem nenhum destino em teste o `ping` volta a
+  // ser exatamente o que era: ignorado.
+  //
+  // A trava vale Pixel a Pixel (C10, D2): numa regra que mistura teste e
+  // producao, so os Pixels em teste entram na decisao da sonda. O de producao
+  // fica fora do item inteiro — nem `modoPorMarca`, nem `motivoFila`, nem alvo
+  // do disparo —, entao nao recebe a sonda e nao a ve na fila.
+  const emTeste = testePlataforma ? await marcasEmTeste(marcas) : [];
+  const sonda = testePlataforma && emTeste.length > 0;
 
   const modo: 'auto' | 'fila' | 'ignorar' = sonda ? 'auto' : modoDaRegra;
   const eventoFinal = sonda ? EVENTO_DA_SONDA : eventoDaRegra;
@@ -307,12 +322,13 @@ export async function processarWebhook(
   // das duas pontas manda a conversao embora.
   //
   // 'ignorar' nao passa por aqui (§9.5.1 regra 3) e a sonda passa por fora da
-  // trava — o porque esta escrito em decisaoDaSonda().
+  // trava — o porque esta escrito em decisaoDaSonda(). A sonda recebe so os
+  // Pixels em teste, nunca a lista inteira da regra.
   const decisao =
     modo === 'ignorar'
       ? SEM_DECISAO
       : sonda
-        ? decisaoDaSonda(marcas)
+        ? decisaoDaSonda(emTeste)
         : await resolverModoPorMarca(modoDaRegra, marcas);
 
   const motivoIgnorar: MotivoIgnorar | undefined =
@@ -341,6 +357,11 @@ export async function processarWebhook(
   /* ---------------------------------------------------------------- */
 
   const emailMascarado = mascararEmail(texto('email'));
+  // Chave de contagem: SHA-256 do e-mail INTEIRO. A máscara junta pessoas
+  // diferentes (`maria@`, `marta@` e `mauro@` viram todas `ma***@`) e travava o
+  // automático de venda legítima. O hash é gravado no item, mas nunca sai para
+  // a tela: `inbox.ts` o tira em todo ponto de saída (`paraTela`).
+  const emailHash = hashDoEmail(texto('email'));
   const compraChegando = eventoFinal === 'Purchase';
 
   /**
@@ -355,7 +376,7 @@ export async function processarWebhook(
    * deixa a venda passar.
    */
   const comprasDoMesmoEmail = compraChegando
-    ? (await contarComprasDoEmail(emailMascarado, empresaId).catch(() => 0)) + 1
+    ? (await contarComprasDoEmail(emailHash, empresaId).catch(() => 0)) + 1
     : 0;
 
   const veredicto = avaliarTeste(
@@ -418,6 +439,7 @@ export async function processarWebhook(
     valor: texto('value') ? Number(texto('value')) : undefined,
     moeda: texto('currency'),
     emailMascarado,
+    emailHash,
     orderId: texto('orderId'),
     temFbc: Boolean(texto('fbc')),
     temFbp: Boolean(texto('fbp')),

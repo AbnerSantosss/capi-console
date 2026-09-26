@@ -63,7 +63,7 @@ export function DestinationSummary() {
             "Pixel" — para um unico registro, o que sugeria duas entidades
             onde ha uma. */}
         <div className="sm:col-span-2">
-          <dt className="text-fg-muted">Pixel de destino</dt>
+          <dt className="text-fg-muted">Pixel que recebe</dt>
           <dd className="mt-1 flex min-w-0 flex-col">
             <span className="truncate text-title font-medium text-fg-strong">
               {ativa?.nome ?? '—'}
@@ -115,11 +115,11 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
       <p className="text-caption text-fg-muted">
         Um evento por vez, revisado por você. Nada vai para a Meta antes de você
         clicar em{' '}
-        <strong className="font-medium text-fg-body">Disparar evento</strong>.
+        <strong className="font-medium text-fg-body">Enviar evento</strong>.
       </p>
 
       <Panel
-        title="Pixel de destino"
+        title="Pixel que recebe"
         icon={Target}
         tone={d.emTeste ? 'default' : 'warning'}
         action={
@@ -131,7 +131,7 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
         <dl className="flex flex-col gap-2 text-caption">
           {/* 8.B: um bloco de identidade, nao dois rotulos. */}
           <div className="flex flex-col gap-0.5">
-            <dt className="sr-only">Pixel de destino</dt>
+            <dt className="sr-only">Pixel que recebe</dt>
             <dd className="flex min-w-0 flex-col">
               <span className="flex min-w-0 items-center gap-1.5">
                 <MetaMark size={14} />
@@ -178,7 +178,7 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
           ) : (
             <Callout tone="warning" icon={AlertTriangle} title="Produção — evento real">
               Esta conversão entra nas métricas da conta e alimenta o algoritmo.
-              Só dispare vendas que aconteceram de verdade.
+              Só envie vendas que aconteceram de verdade.
             </Callout>
           )}
         </div>
@@ -199,7 +199,7 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
           ) : (
             <>
               <MetaMark size={16} mono />
-              Disparar evento
+              Enviar evento
             </>
           )}
         </Button>
@@ -294,7 +294,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
             ) : (
               <>
                 <MetaMark size={16} mono />
-                Disparar
+                Enviar
               </>
             )}
           </Button>

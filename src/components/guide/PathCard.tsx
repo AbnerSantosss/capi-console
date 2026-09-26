@@ -18,7 +18,8 @@ import Link from 'next/link';
 
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { Caminho } from './conteudo';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { destinoDoAtalho, type Caminho } from './conteudo';
 import { CLASSE_HUE } from './hue';
 import styles from './guide.module.css';
 
@@ -31,6 +32,10 @@ export function PathCard({
   estado: string;
 }) {
   const Icone = caminho.icone;
+  // V2 (v7): o botão leva à aba da empresa ativa (`/e/<slug>/...`).
+  const slugDaAtiva = useEmpresaStore(
+    (s) => s.empresas.find((e) => e.id === s.empresaAtivaId)?.slug
+  );
 
   return (
     <div className={cn(styles.pathCard, CLASSE_HUE[caminho.hue])}>
@@ -65,7 +70,7 @@ export function PathCard({
       </dl>
 
       <Link
-        href={caminho.cta.href}
+        href={destinoDoAtalho(caminho.cta, slugDaAtiva)}
         className={cn(buttonVariants({ variant: 'outline' }), 'mt-1 w-full')}
       >
         {caminho.cta.rotulo}

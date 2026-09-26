@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   ArrowDownRight,
   ArrowRight,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/icones';
 
 import { pedir } from '@/lib/cliente-api';
+import { slugDoEndereco } from '@/lib/empresa-do-endereco';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { Callout, Section } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
@@ -85,7 +87,10 @@ interface ResumoInbox {
   base: number;
   volume: {
     recebidos: number;
+    /** Só envio real. O que foi só para o "Testar eventos" vem em `enviadosEmTeste`. */
     enviados: CardContagem;
+    /** Reais que a Meta só recebeu em modo teste: fora de "Enviados" e do valor (C9, D20). */
+    enviadosEmTeste: number;
     naFila: CardContagem;
     ignorados: CardContagem;
     testesEquipe: number;
@@ -115,7 +120,9 @@ interface ValorDeCompras {
 
 interface ComprasDoPeriodo extends ValorDeCompras {
   moeda: string | null;
+  /** Aceitas de verdade: compra que só foi em modo teste está em `enviadasEmTeste`. */
   enviadas: number;
+  enviadasEmTeste: number;
   /**
    * 🔴 Aqui, e só aqui, "atribuído" é `fbclid || fbc` — sinal DA META. Os cards
    * de "De onde veio o tráfego" contam os cinco sinais, e de propósito: naquela
@@ -133,6 +140,21 @@ interface ComprasDoPeriodo extends ValorDeCompras {
 
 /** Só eventos reais: o recorte que todo card de métrica abre. */
 const SO_REAIS: FiltrosInboxValor = { ...FILTROS_VAZIOS, equipe: 'reais' };
+
+/**
+ * O que dizer quando parte do que saiu foi só para o "Testar eventos" (C9, D20).
+ *
+ * Envio com o Pixel em modo teste não conta conversão nem ensina a campanha,
+ * então fica fora de "Enviados à Meta" e do valor enviado. A frase diz quantos
+ * foram, por que não contam e o que fazer. `null` quando não houve nenhum: a
+ * tela não fala de teste que não aconteceu.
+ */
+function avisoDeModoTeste(n: number): string | null {
+  if (n <= 0) return null;
+  return `${n} em modo teste, fora da conta: ${
+    n === 1 ? 'foi' : 'foram'
+  } só para o Testar eventos da Meta. Os que já saíram em teste podem ir de verdade: apague o código de teste do Pixel na aba Pixels e use Enviar agora na Fila.`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Card                                                                */
@@ -202,6 +224,7 @@ function CardPainel({
   comBarra = false,
   aoClicar,
   ativo = false,
+  aviso,
 }: {
   titulo: string;
   explicacao: string;
@@ -212,11 +235,19 @@ function CardPainel({
   comBarra?: boolean;
   aoClicar?: () => void;
   ativo?: boolean;
+  /**
+   * Linha extra, só quando existe (ex.: envios em modo teste que ficaram fora
+   * da conta). Vai também no `aria-label`: sem isso, quem usa leitor de tela
+   * ouviria o número sem saber que parte ficou de fora.
+   */
+  aviso?: string | null;
 }) {
   const temPct = pct !== undefined && pct !== null;
   const descricao = [
     `${titulo}: ${total} ${total === 1 ? 'evento' : 'eventos'}`,
     temPct ? `${pct} por cento dos eventos reais` : '',
+    // Sem o ponto final: o `join('. ')` logo abaixo já põe um.
+    aviso ? aviso.replace(/\.$/, '') : '',
     aoClicar ? 'Abrir a lista destes eventos.' : '',
   ]
     .filter(Boolean)
@@ -246,6 +277,8 @@ function CardPainel({
       )}
 
       <span className="min-w-0 text-caption break-words text-fg-muted">{explicacao}</span>
+
+      {aviso && <span className="min-w-0 text-caption break-words text-fg-body">{aviso}</span>}
     </>
   );
 
@@ -405,7 +438,8 @@ function AvisoDeMoedasDiferentes({ valor }: { valor: number | null }) {
  * é a única pergunta que se faz antes de todas as outras. Os outros cartões
  * medem o funcionamento do console; este mede o negócio.
  *
- * O corpo inteiro é um link para `/painel/compras`, levando o período junto na
+ * O corpo inteiro é um link para "Quem comprou" (`/e/<slug>/eventos?vista=compras`
+ * desde a V2; antes, `/painel/compras`), levando o período junto na
  * URL — a lista que abre lá tem que ter o tamanho do número que foi clicado
  * aqui, e é a query que garante isso.
  *
@@ -424,6 +458,10 @@ function DestaqueDeCompras({
   href: string;
 }) {
   const plural = compras.total === 1 ? 'compra' : 'compras';
+  const emTeste = avisoDeModoTeste(compras.enviadasEmTeste);
+  // O aviso de moedas já termina em ponto; o dinheiro, não.
+  const valorFalado =
+    compras.valor === null ? AVISO_MOEDAS_DIFERENTES : `${dinheiro(compras.valor, compras.moeda)}.`;
 
   return (
     <Section
@@ -435,8 +473,8 @@ function DestaqueDeCompras({
     >
       <Link
         href={href}
-        aria-label={`${compras.total} ${plural}, ${
-          compras.valor === null ? AVISO_MOEDAS_DIFERENTES : dinheiro(compras.valor, compras.moeda)
+        aria-label={`${compras.total} ${plural}, ${valorFalado}${
+          emTeste ? ` ${emTeste}` : ''
         } Abrir a lista de quem comprou.`}
         className={cn(
           'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
@@ -508,6 +546,12 @@ function DestaqueDeCompras({
             <span className="text-label font-semibold text-fg-strong tabular-nums">
               {compras.enviadas} de {compras.total}
             </span>
+            {/* C9 (D20): compra que só foi para o "Testar eventos" não é
+                aceite da Meta. Sem esta linha, "o resto" esconderia justamente
+                a venda que o Pixel em modo teste não contou. */}
+            {compras.enviadasEmTeste > 0 && (
+              <span className="text-caption text-fg-body">{emTeste}</span>
+            )}
             <span className="text-caption text-fg-muted">
               O resto está na fila ou foi marcado para não enviar.
             </span>
@@ -528,7 +572,7 @@ interface Recorte {
   /**
    * O nome do evento, quando o recorte veio de um card de evento. Serve a duas
    * coisas: marcar qual card está aberto e oferecer, no cabeçalho da lista, o
-   * atalho para `/painel/eventos` — a tela "quem mandou", que tem URL e pode
+   * atalho para `/e/<slug>/eventos?evento=` — a tela "quem mandou", que tem URL e pode
    * ser mandada a alguém.
    */
   evento?: string;
@@ -574,6 +618,12 @@ export function PainelDeEventos() {
   // String, e não o objeto: dependência de efeito comparada por identidade
   // refaria a busca a cada render, já que o objeto do período nasce novo.
   const busca = buscaDoPeriodo(periodo);
+
+  // V2 (v7): as listas "quem comprou" e "quem mandou" são vistas da aba Eventos
+  // da empresa do ENDEREÇO. Fora de `/e/<slug>` (não deveria acontecer), o
+  // endereço antigo, que o proxy leva à empresa ativa.
+  const slugDaTela = slugDoEndereco(usePathname());
+  const abaEventos = slugDaTela ? `/e/${encodeURIComponent(slugDaTela)}/eventos` : null;
 
   useEffect(() => {
     let vivo = true;
@@ -797,7 +847,7 @@ export function PainelDeEventos() {
         <EstadoVazio
           icone={Inbox}
           titulo="Nenhum evento chegou neste período"
-          motivo="A caixa de entrada desta empresa está vazia na janela escolhida. Se o webhook acabou de ser instalado, o primeiro evento aparece aqui assim que a primeira venda entrar."
+          motivo="Nada desta empresa chegou na janela escolhida. Se o webhook acabou de ser instalado, o primeiro evento aparece aqui assim que a primeira venda entrar."
           acao={
             <Button
               variant="outline"
@@ -816,7 +866,9 @@ export function PainelDeEventos() {
           <DestaqueDeCompras
             compras={compras}
             periodo={rotuloDoPeriodo(periodo)}
-            href={`/painel/compras?${busca}`}
+            href={
+              abaEventos ? `${abaEventos}?vista=compras&${busca}` : `/painel/compras?${busca}`
+            }
           />
 
           {/* ---------------- os eventos principais ---------------- */}
@@ -848,7 +900,7 @@ export function PainelDeEventos() {
                 ))}
               </div>
               <p className="text-caption text-fg-muted">
-                A contagem é dos eventos reais do período — teste da equipe fica de fora.
+                A contagem é dos eventos reais do período — teste interno fica de fora.
               </p>
             </Section>
           )}
@@ -883,7 +935,7 @@ export function PainelDeEventos() {
                   <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                     <CardPainel
                       titulo="Recebidos no período"
-                      explicacao="Tudo o que entrou na caixa, incluindo teste da equipe."
+                      explicacao="Tudo o que chegou, incluindo teste interno."
                       total={volume.recebidos}
                       icone={Inbox}
                       matiz="chart-1"
@@ -902,6 +954,7 @@ export function PainelDeEventos() {
                         abrirRecorte({ ...SO_REAIS, status: 'disparado' }, 'enviados à Meta')
                       }
                       ativo={recorte?.rotulo === 'enviados à Meta'}
+                      aviso={avisoDeModoTeste(volume.enviadosEmTeste)}
                     />
                     <CardPainel
                       titulo="Na fila"
@@ -926,15 +979,15 @@ export function PainelDeEventos() {
                       ativo={recorte?.rotulo === 'ignorados'}
                     />
                     <CardPainel
-                      titulo="Testes da equipe"
+                      titulo="Testes internos"
                       explicacao="Ficam fora de toda porcentagem, de propósito."
                       total={volume.testesEquipe}
                       icone={FlaskConical}
                       matiz="chart-4"
                       aoClicar={() =>
-                        abrirRecorte({ ...FILTROS_VAZIOS, equipe: 'so-testes' }, 'testes da equipe')
+                        abrirRecorte({ ...FILTROS_VAZIOS, equipe: 'so-testes' }, 'testes internos')
                       }
-                      ativo={recorte?.rotulo === 'testes da equipe'}
+                      ativo={recorte?.rotulo === 'testes internos'}
                     />
                   </div>
                 </Section>
@@ -942,7 +995,7 @@ export function PainelDeEventos() {
                 {/* ---------------- atribuição ---------------- */}
                 <Section
                   title="De onde veio o tráfego"
-                  description="A porcentagem é sobre os eventos reais do período, sem os testes da equipe."
+                  description="A porcentagem é sobre os eventos reais do período, sem os testes internos."
                   icon={MousePointerClick}
                 >
                   <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -1017,6 +1070,8 @@ export function PainelDeEventos() {
                         </span>
                         <span className="text-caption text-fg-muted">
                           Soma do valor dos eventos que a Meta aceitou no período.
+                          {volume.enviadosEmTeste > 0 &&
+                            ' Os envios em modo teste ficam fora da soma.'}
                         </span>
                       </div>
                     )}
@@ -1033,7 +1088,7 @@ export function PainelDeEventos() {
         <Section
           id="recorte-do-painel"
           title={`Eventos: ${recorte.rotulo}`}
-          description={`A mesma caixa de entrada, no período "${rotuloDoPeriodo(periodo)}", já filtrada pelo card que você clicou.`}
+          description={`A mesma lista da Fila, no período "${rotuloDoPeriodo(periodo)}", já filtrada pelo card que você clicou.`}
           icon={Inbox}
           action={
             /* Os dois botões empilham no celular em vez de empurrar o
@@ -1049,7 +1104,7 @@ export function PainelDeEventos() {
                   size="sm"
                   render={
                     <Link
-                      href={`/painel/eventos?evento=${encodeURIComponent(recorte.evento)}&${busca}`}
+                      href={`${abaEventos ?? '/painel/eventos'}?evento=${encodeURIComponent(recorte.evento)}&${busca}`}
                     />
                   }
                 >

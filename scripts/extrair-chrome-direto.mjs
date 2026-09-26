@@ -89,9 +89,7 @@ async function main() {
   await fs.writeFile(caminhoSaida, JSON.stringify(resultado, null, 2), 'utf8');
 
   console.log(`💾 Entregas salvas em: ${caminhoSaida}`);
-  console.log(`\nAgora você pode processar e disparar a fila executando:`);
-  console.log(`  node scripts/processar-fila-cli.mjs logs/webhooks_extraidos.json --dry-run`);
-  console.log(`  node scripts/processar-fila-cli.mjs logs/webhooks_extraidos.json --producao\n`);
+  console.log(`\nOs disparos em lote foram aposentados em 23/09/2026; use a caixa de entrada do console.\n`);
 }
 
 main().catch((e) => {

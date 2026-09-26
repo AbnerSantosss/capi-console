@@ -54,6 +54,6 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     // A mensagem do erro não é repassada de propósito: os headers do destino
     // podem carregar `Authorization: Bearer …` e aparecer no texto da falha.
-    return erroDeRota(e, 'Não foi possível testar o destino — nada foi enviado.');
+    return erroDeRota(e, 'Não foi possível testar o endereço de repasse — nada foi enviado.');
   }
 }

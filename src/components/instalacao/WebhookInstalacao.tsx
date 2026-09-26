@@ -14,11 +14,12 @@
  * dois lugares por onde evento entra no produto.
  */
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
   Check,
+  ChevronDown,
   Copy,
   Eye,
   EyeOff,
@@ -31,12 +32,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Callout, Field, Panel } from '@/components/common/primitives';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+import { cn } from '@/lib/utils';
 import {
   erroDoRotulo,
   normalizarRotulo,
@@ -93,7 +89,7 @@ const passosXWinner: Array<{ id: string; conteudo: React.ReactNode }> = [
       <>
         O botão <strong>Testar</strong> do xWinner manda um evento{' '}
         <code className="font-mono">ping</code>, e não uma compra: ele prova o
-        canal, não o mapeamento. O ping aparece na caixa de entrada como
+        canal, não o mapeamento. O ping aparece na Fila como
         ignorado, e é esse o resultado certo.
       </>
     ),
@@ -125,7 +121,7 @@ export interface WebhookInstalacaoPropriedades {
   onTrocarSegredo: () => void | Promise<void>;
   /** Grava o apelido novo. Devolve false quando o servidor recusou. */
   onSalvarRotulo: (rotulo: string) => Promise<boolean>;
-  /** Manda um recebimento de exemplo para a caixa de entrada. */
+  /** Manda um recebimento de exemplo para a Fila. */
   onSimular: () => void | Promise<void>;
 }
 
@@ -142,6 +138,11 @@ export function WebhookInstalacao({
   const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
   const [salvandoRotulo, setSalvandoRotulo] = useState(false);
+  // V7: o dia a dia desta tela é copiar UMA URL. O resto — o segredo, a URL
+  // antiga, a URL do n8n, o apelido, o teste pela linha de comando — é de
+  // quem configura uma vez, e fica atrás de "Mostrar detalhes".
+  const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
+  const idDetalhes = useId();
 
   // De onde sai o nome da plataforma desta tela. A empresa vem do store e nao
   // de uma propriedade porque `InstalacaoPage` nao a tem: ela recebe do
@@ -210,13 +211,14 @@ export function WebhookInstalacao({
   };
 
   return (
-    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="flex min-w-0 flex-col gap-4">
       <div className="flex min-w-0 flex-col gap-4">
         {ehLocal && (
           <Callout tone="warning" icon={AlertTriangle} title="A plataforma exige https">
             O campo do backoffice é <strong>URL (https)</strong> e este console
             está em <code className="font-mono">{base}</code>. Abra o acesso
-            público ao lado e use a URL gerada no lugar de{' '}
+            público (em &ldquo;Mostrar detalhes&rdquo;, &ldquo;Expor para a
+            internet&rdquo;) e use a URL gerada no lugar de{' '}
             <code className="font-mono">localhost:3333</code>.
           </Callout>
         )}
@@ -291,7 +293,31 @@ export function WebhookInstalacao({
             </ol>
           </div>
         )}
+      </div>
 
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-expanded={mostrarDetalhes}
+          aria-controls={idDetalhes}
+          onClick={() => setMostrarDetalhes((v) => !v)}
+        >
+          <ChevronDown
+            className={cn('size-4 transition-transform', mostrarDetalhes && 'rotate-180')}
+            aria-hidden
+          />
+          {mostrarDetalhes ? 'Ocultar detalhes' : 'Mostrar detalhes'}
+        </Button>
+        <p className="mt-1 text-caption text-fg-muted">
+          Segredo, URL antiga, URL para o n8n, apelido da URL e teste pela linha de comando.
+        </p>
+      </div>
+
+      {/* `hidden`, e não desmontar: o rascunho do apelido e o rastreio de campo
+          sujo da `InstalacaoPage` (C2) seguem valendo com os detalhes fechados. */}
+      <div id={idDetalhes} hidden={!mostrarDetalhes}>
+      <div className="flex min-w-0 flex-col gap-4">
         <Field
           id="rotulo-endpoint"
           label="Apelido desta URL"
@@ -325,46 +351,37 @@ export function WebhookInstalacao({
             <strong>cadastrar a URL nova na plataforma</strong>. Enquanto o
             backoffice apontar para o apelido antigo, as entregas continuam
             chegando — o segredo é o mesmo —, mas aparecem marcadas como{' '}
-            <em>apelido antigo</em> na caixa de entrada.
+            <em>apelido antigo</em> na Fila.
           </Callout>
         )}
 
-        <Accordion className="rounded-lg border border-line bg-surface-2">
-          <AccordionItem value="url-antiga" className="last:border-b-0">
-            <AccordionTrigger className="px-4 hover:no-underline">
-              <span className="text-label font-semibold text-fg-body">
-                URL antiga, sem apelido (continua valendo)
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4">
-              <p className="mb-2 text-body text-fg-body">
-                É o formato cadastrado antes de o apelido existir. Não precisa
-                trocar: o endpoint aceita os dois. Serve de saída se algo der
-                errado com o apelido.
-              </p>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={endpointCaminhoVisivel}
-                  aria-label="URL antiga sem apelido"
-                  className="wrap-token font-mono"
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copiar(endpointCaminho, 'ep-caminho')}
-                >
-                  {copiado === 'ep-caminho' ? (
-                    <Check className="size-3.5 text-success" aria-hidden />
-                  ) : (
-                    <Copy className="size-3.5" aria-hidden />
-                  )}
-                  Copiar
-                </Button>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <Field
+          id="endpoint-caminho"
+          label="URL antiga, sem apelido (continua valendo)"
+          helper="É o formato cadastrado antes de o apelido existir. Não precisa trocar: o console aceita os dois. Serve de saída se algo der errado com o apelido. Mostrar e ocultar o segredo nela é o mesmo botão da URL de cima."
+          className="rounded-lg border border-line bg-surface-2 p-4"
+          action={
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => copiar(endpointCaminho, 'ep-caminho')}
+            >
+              {copiado === 'ep-caminho' ? (
+                <Check className="size-3.5 text-success" aria-hidden />
+              ) : (
+                <Copy className="size-3.5" aria-hidden />
+              )}
+              Copiar
+            </Button>
+          }
+        >
+          <Input
+            id="endpoint-caminho"
+            readOnly
+            value={endpointCaminhoVisivel}
+            className="wrap-token font-mono"
+          />
+        </Field>
 
         <Field
           id="endpoint-header"
@@ -442,34 +459,27 @@ export function WebhookInstalacao({
           />
         </Field>
 
-        <Accordion className="rounded-lg border border-line bg-surface-2">
-          <AccordionItem value="instrucoes" className="last:border-b-0">
-            <AccordionTrigger className="px-4 hover:no-underline">
-              <span className="flex items-center gap-2 text-label font-semibold text-fg-body">
-                <Terminal className="size-4 text-fg-body" aria-hidden />
-                Instruções técnicas
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4">
-              <p className="mb-2 text-body text-fg-body">
-                Teste pela linha de comando somente em um ambiente isolado.
-              </p>
-              <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
-                {curlVisivel}
-              </pre>
-              <Button variant="outline" className="mt-3" onClick={() => void onSimular()}>
-                <Send className="size-4" aria-hidden />
-                Simular recebimento
-              </Button>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <p className="flex items-center gap-2 text-label font-semibold text-fg-body">
+            <Terminal className="size-4 text-fg-body" aria-hidden />
+            Instruções técnicas
+          </p>
+          <p className="mt-2 mb-2 text-body text-fg-body">
+            Teste pela linha de comando somente em um ambiente isolado. O segredo
+            aparece aqui só com o &ldquo;Mostrar&rdquo; do campo Segredo.
+          </p>
+          <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
+            {curlVisivel}
+          </pre>
+          <Button variant="outline" className="mt-3" onClick={() => void onSimular()}>
+            <Send className="size-4" aria-hidden />
+            Simular recebimento
+          </Button>
+        </div>
 
-      <div className="flex min-w-0 flex-col gap-4">
         <Panel title="Expor para a internet" icon={ArrowUpRight}>
           <p className="text-body text-fg-body">
-            Este console roda em <code className="font-mono">localhost</code> e
+            Rodando em <code className="font-mono">localhost</code>, o console
             não é alcançável de fora. Para receber webhooks reais, abra um túnel:
           </p>
           <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-1 p-2.5 font-mono text-caption text-fg-strong">
@@ -485,6 +495,7 @@ export function WebhookInstalacao({
             O segredo é a única proteção — não o compartilhe.
           </p>
         </Panel>
+      </div>
       </div>
     </div>
   );

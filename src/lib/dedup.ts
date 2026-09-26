@@ -13,7 +13,8 @@ import { dataLocalIso } from './inbox-resumo';
  * CAPI, mas NAO entre dois envios de CAPI — ali a compra contaria em dobro e
  * o ROAS da campanha ficaria mentiroso.
  *
- * Fonte da verdade: logs/disparos.jsonl (so linhas que a Meta aceitou).
+ * Fonte da verdade: logs/disparos.jsonl (so linhas que a Meta aceitou e que
+ * nao foram em modo teste — ver o bloco da C8 abaixo).
  *
  * ────────────────────────────────────────────────────────────────────────
  * TRES CHAVES, e nao mais uma so
@@ -50,6 +51,25 @@ import { dataLocalIso } from './inbox-resumo';
  * 🔴 O e-mail entra na chave ja em hash. O Set fica em memoria e ninguem o
  * imprime, mas um dump de heap ou um log de depuracao futuro nao tem por que
  * encontrar e-mail de comprador em texto claro aqui dentro.
+ *
+ * ────────────────────────────────────────────────────────────────────────
+ * ENVIO EM MODO TESTE FICA DE FORA (C8, D12)
+ * ────────────────────────────────────────────────────────────────────────
+ *
+ * Envio com `test_event_code` (Pixel em modo teste) cai so em "Eventos de
+ * teste" da Meta e NAO conta como conversao. Se ele entrasse no indice, a
+ * venda mandada com o Pixel em teste ficaria barrada como "ja aceita" quando
+ * o Pixel fosse para producao, e a conversao real nunca sairia. Por isso:
+ *
+ *   - `carregar()` pula as linhas com `modoTeste: true`;
+ *   - `marcarEnviado(..., { modoTeste: true })` nao marca nada.
+ *
+ * Linha antiga, gravada antes da C8, nao tem o campo e continua contando
+ * como envio REAL (P6): nao ha como saber, e inferir pelo `testCode` de hoje
+ * do Pixel inventaria historia. Essas vendas saem pelo "Enviar mesmo assim".
+ *
+ * A pergunta `jaEnviado` nao muda: um envio em teste depois de um REAL
+ * continua recusado com a mesma mensagem de "ja aceito".
  */
 const ARQ = path.join(process.cwd(), 'logs', 'disparos.jsonl');
 let indice: Set<string> | null = null;
@@ -154,10 +174,14 @@ async function carregar(): Promise<Set<string>> {
           orderId?: string;
           httpStatus?: number;
           eventsReceived?: number;
+          modoTeste?: boolean;
         };
         // "Aceito pela Meta" continua sendo a unica coisa que entra no indice:
         // um 400 nao pode barrar a segunda tentativa do mesmo evento.
         if (!r.eventName || r.httpStatus !== 200 || (r.eventsReceived ?? 0) <= 0) continue;
+        // C8 (D12): envio em modo teste nao e conversao e nao barra o real.
+        // So `true` explicito sai: linha antiga sem o campo conta como real (P6).
+        if (r.modoTeste === true) continue;
         const pixel = r.pixelId ?? '';
         if (r.eventId) s.add(chave(pixel, r.eventName, 'evt', r.eventId));
         // Linha antiga tambem tem `orderId`: o historico inteiro ganha a chave
@@ -191,12 +215,21 @@ export async function jaEnviado(
   return chaves.some((k) => i.has(k));
 }
 
-/** Marca TODAS as chaves deste envio: o proximo caminho ja encontra qualquer uma. */
+/**
+ * Marca TODAS as chaves deste envio: o proximo caminho ja encontra qualquer uma.
+ *
+ * `opcoes.modoTeste: true` (C8, D12): o envio foi com `test_event_code` e nao
+ * marca nada — ele nao e conversao, e marcar barraria o envio real da mesma
+ * venda depois que o Pixel sair do modo teste. Sem a opcao, ou com `false`, e
+ * envio real e marca como sempre.
+ */
 export async function marcarEnviado(
   pixelId: string,
   eventName: string,
-  id?: string | IdentidadeDoEvento
+  id?: string | IdentidadeDoEvento,
+  opcoes: { modoTeste?: boolean } = {}
 ) {
+  if (opcoes.modoTeste === true) return;
   const chaves = chavesDe(pixelId, eventName, normalizar(id), false);
   if (chaves.length === 0) return;
   const i = await carregar();

@@ -51,7 +51,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Preferências</DialogTitle>
           <DialogDescription>
-            Ajustes locais deste navegador. Não afetam o disparo.
+            Ajustes locais deste navegador. Não afetam o envio.
           </DialogDescription>
         </DialogHeader>
 
@@ -59,7 +59,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
           <Field
             id="pref-nome"
             label="Seu nome"
-            helper="Aparece nos registros de disparo deste console."
+            helper="Aparece nos registros de envio deste console."
           >
             <Input
               id="pref-nome"

@@ -44,7 +44,7 @@ next-env.d.ts
 logs/
 
 # config local com segredos de integracao
-config/
+/config/
 
 # segredos de operacao gerados na maquina do operador (nunca versionar)
 *.local

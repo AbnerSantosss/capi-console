@@ -1,34 +1,33 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
-import { Menu } from '@base-ui/react/menu';
+import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Building2, Check, ChevronDown, Pencil, Plus } from '@/components/ui/icones';
+import { Check, Pencil } from '@/components/ui/icones';
 
-import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
-import { EmpresaDialog } from '@/components/empresa/EmpresaDialog';
+import type { EmpresaPublica } from '@/stores/useEmpresaStore';
+import { destinoAoTrocar, slugDoEndereco } from '@/lib/empresa-do-endereco';
 import { cn } from '@/lib/utils';
 
 /**
- * Quem e a empresa dona de tudo o que esta na tela (P8).
+ * Quem e a empresa dona de tudo o que esta na tela (P8), e como trocar.
  *
- * Isto ocupa o lugar do bloco fixo do cabecalho — o que ate a FASE D dizia
- * "Meta CAPI Console" em cima e o literal "Codigo Vencedor" embaixo. A ordem
- * das duas linhas INVERTEU de proposito, e nao por estetica: o dono pediu "a
- * logo dela sinalizada pra ver que todo esse menu e referente a ela". A linha
- * forte passa a ser a EMPRESA, porque e ela que muda; o produto vira a
- * legenda, porque ele e sempre o mesmo. Com varias empresas no mesmo console,
- * errar de empresa custa um evento real disparado para o Pixel errado — entao
- * quem esta ativo precisa ser a primeira coisa legivel do cabecalho, nao a
- * segunda.
+ * V3 (v7): o menu suspenso do cabecalho saiu. As empresas moram agora numa
+ * LISTA sempre aberta, na lateral a partir de `lg` e na gaveta abaixo disso
+ * (`LateralDeEmpresas`, `GavetaDeEmpresas`). Este arquivo ficou com as duas
+ * pecas que as duas usam: a insignia da empresa e a lista.
  *
- * v3: o cabecalho virou UMA linha de 56px, entao o gatilho perdeu a segunda
- * linha (a legenda com o nome do produto) e ganhou contorno de controle. O
- * nome do produto nao sumiu: ele mora na marca, a esquerda deste seletor.
+ * Com varias empresas no mesmo console, errar de empresa custa um evento real
+ * disparado para o Pixel errado. Por isso a empresa aberta se le de tres
+ * jeitos ao mesmo tempo, e nunca so pela cor: fundo realcado com filete a
+ * esquerda, o ✓ ao lado do nome e o `aria-current` para o leitor de tela.
+ *
+ * O ouvinte de "outra aba trocou a empresa" (C2) morava aqui e mudou para a
+ * `LateralDeEmpresas`, que monta uma vez so em toda tela. A lista aparece em
+ * dois lugares; o ouvinte, se viesse junto, reagiria duas vezes.
  *
  * 🔴 Nenhum `fetch` aqui (E-8): a leitura e a gravacao moram no
- * `useEmpresaStore`. Este componente so pede e mostra.
+ * `useEmpresaStore`. Este arquivo so mostra e navega.
  *
  * 🔴 Nenhuma cor nova: as classes sao as do DS (`surface-*`, `fg-*`, `line*`,
  * `tinta-texto`). A UNICA cor arbitraria da tela e a `cor` que o operador
@@ -97,7 +96,7 @@ export function Insignia({
     <span
       aria-hidden
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full text-caption font-semibold',
+        'flex shrink-0 items-center justify-center rounded-full font-semibold',
         cor
           ? letraEscura(cor)
             ? 'text-surface-0'
@@ -107,187 +106,132 @@ export function Insignia({
       )}
       style={cor ? { backgroundColor: cor } : undefined}
     >
-      {iniciaisDe(empresa.nome)}
+      {/* O tamanho da letra fica no filho: no mesmo `cn` da cor, o
+          tailwind-merge leria `text-caption` como cor e o descartaria. */}
+      <span className="text-caption leading-none">{iniciaisDe(empresa.nome)}</span>
     </span>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-export function SeletorDeEmpresa(): React.JSX.Element {
+/**
+ * O id do aviso fixo de "outra aba trocou a empresa". Um aviso so: trocas
+ * seguidas em outra aba atualizam o mesmo toast. Quem o mostra e a
+ * `LateralDeEmpresas`; a lista o fecha quando o operador troca daqui.
+ */
+export const ID_AVISO_OUTRA_ABA = 'empresa-trocada-fora';
+
+/** Pede à lateral que abra a edição desta empresa (o diálogo mora lá). */
+export const EVENTO_EDITAR_EMPRESA = 'capi:editar-empresa';
+
+/**
+ * A lista de empresas da lateral e da gaveta.
+ *
+ * A empresa aberta sai do ENDEREÇO (`/e/<slug>/…`), nunca do store: é o
+ * endereço que diz de qual empresa são os dados da tela (V2). Em `/empresas`
+ * e `/guia` nenhuma linha fica marcada, e isso é o certo: nenhuma empresa
+ * está aberta ali.
+ *
+ * Cada empresa tem um selo de estado. Até a V5 medir de verdade (tag chegando,
+ * Pixel respondendo), ele diz "—" com ponto neutro, e por extenso para o
+ * leitor de tela: melhor admitir que não mediu do que pintar um verde que
+ * ninguém conferiu.
+ *
+ * `aoEscolher` é para a gaveta se fechar quando o operador escolhe.
+ */
+export function ListaDeEmpresas({
+  empresas,
+  aoEscolher,
+}: {
+  empresas: EmpresaPublica[];
+  aoEscolher?: () => void;
+}) {
   const router = useRouter();
-
-  const empresas = useEmpresaStore((s) => s.empresas);
-  const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
-  const setEmpresaAtiva = useEmpresaStore((s) => s.setEmpresaAtiva);
-
-  const [menuAberto, setMenuAberto] = React.useState(false);
-  const [dialogo, setDialogo] = React.useState<'criar' | 'editar' | null>(null);
-
-  const ativa = empresas.find((e) => e.id === empresaAtivaId) ?? empresas[0];
+  const pathname = usePathname();
+  const slugAberto = slugDoEndereco(pathname);
 
   /**
-   * O barramento de eventos de janela que o cabecalho JA usa para abrir a
-   * paleta (`capi:abrir-paleta`). O botao "Adicionar empresa" do canto
-   * superior direito e os dois itens da paleta falam com este componente por
-   * aqui — o dialogo e o menu moram DENTRO do seletor (ele nao recebe props,
-   * por contrato), e inventar um contexto novo so para dois botoes seria mais
-   * peca do que o problema pede.
+   * V2 (v7): trocar de empresa é NAVEGAR. O endereço é a única fonte da
+   * empresa aberta, então a escolha leva à MESMA aba da empresa nova quando se
+   * está numa aba, e à Visão geral dela em qualquer outro lugar
+   * (`destinoAoTrocar`). Quem alinha o store, o cookie e os Pixels ao chegar
+   * é o `EmpresaDoEndereco`; o proxy grava o cookie já no primeiro pedido.
    */
-  React.useEffect(() => {
-    const abrirMenu = () => setMenuAberto(true);
-    const abrirDialogo = () => setDialogo('criar');
-    window.addEventListener('capi:trocar-empresa', abrirMenu);
-    window.addEventListener('capi:adicionar-empresa', abrirDialogo);
-    return () => {
-      window.removeEventListener('capi:trocar-empresa', abrirMenu);
-      window.removeEventListener('capi:adicionar-empresa', abrirDialogo);
-    };
-  }, []);
-
-  const trocar = async (empresa: EmpresaPublica) => {
-    setMenuAberto(false);
-    if (empresa.id === empresaAtivaId) return;
-    try {
-      await setEmpresaAtiva(empresa.id);
-      // `router.refresh()` e o que faz as paginas de servidor (/instalacao,
-      // /automatico) relerem com o cookie novo. Sem ele o cabecalho trocaria
-      // de nome e o corpo continuaria mostrando o webhook da empresa anterior.
-      router.refresh();
-      toast.success(`Agora você está em ${empresa.nome}`);
-    } catch (e) {
-      toast.error('Não foi possível trocar de empresa', {
-        description:
-          e instanceof Error ? e.message : 'Tente de novo em alguns instantes.',
-      });
-    }
+  const trocar = (empresa: EmpresaPublica) => {
+    aoEscolher?.();
+    // A tela já é desta empresa: não há para onde ir.
+    if (slugAberto === empresa.slug) return;
+    // A troca feita AQUI leva a outra tela: o aviso de outra aba perde o objeto.
+    toast.dismiss(ID_AVISO_OUTRA_ABA);
+    router.push(destinoAoTrocar(pathname, empresa.slug));
+    toast.success(`Agora você está em ${empresa.nome}`);
   };
 
+  if (empresas.length === 0) {
+    return (
+      <p className="px-2 py-1.5 text-label text-fg-muted">
+        Nenhuma empresa ainda. Use &quot;Nova empresa&quot;, logo acima, para cadastrar a primeira.
+      </p>
+    );
+  }
+
   return (
-    <>
-      <Menu.Root open={menuAberto} onOpenChange={setMenuAberto}>
-        <Menu.Trigger
-          render={
+    // O tamanho do texto mora na lista, e não em cada linha: somado a uma cor
+    // de texto no mesmo `cn`, o tailwind-merge descartaria a cor.
+    <ul className="flex flex-col gap-0.5 text-body">
+      {empresas.map((empresa) => {
+        const aberta = empresa.slug === slugAberto;
+        return (
+          <li key={empresa.id} className="flex min-w-0 items-center gap-1">
             <button
               type="button"
-              // Botao de verdade, e nao uma div clicavel: o teclado precisa
-              // chegar aqui com Tab e abrir com Enter/Espaco.
-              aria-label={
-                ativa
-                  ? `Empresa ativa: ${ativa.nome}. Trocar de empresa`
-                  : 'Trocar de empresa'
+              onClick={() => trocar(empresa)}
+              aria-current={aberta ? 'page' : undefined}
+              title={empresa.nome}
+              className={
+                'flex min-h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-control border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto ' +
+                (aberta
+                  ? 'border-tinta-texto bg-tinta/15 font-medium text-fg-strong'
+                  : 'border-transparent text-fg-body hover:bg-surface-2 hover:text-fg-strong')
               }
-              title={ativa?.nome}
-              // Gatilho de 36px com contorno próprio: no cabeçalho de uma
-              // linha ele precisa se ler como controle, e não como texto solto.
-              /* `shrink-0`, e não `shrink`: enquanto este era o único item
-                 encolhível do cabeçalho, o flex despejava nele toda a sobra da
-                 linha e o botão ia de 10,5rem para 0,1rem — o nome da empresa
-                 desaparecia e sobrava uma lasca clicável. Errar de empresa
-                 custa evento real no Pixel errado, então esta é a última coisa
-                 da linha que pode encolher. Quem cede agora é a busca.
-                 Só a partir de 80rem, veja bem: é de lá para cima que o menu
-                 divide a linha com o seletor. No celular não há menu nenhum
-                 aqui em cima e o `shrink` continua sendo o que faz o nome
-                 caber em 375px. */
-              className="flex h-control-sm min-w-0 shrink cursor-pointer items-center gap-2 rounded-control border border-line bg-surface-1 py-0 pr-2 pl-1.5 text-left shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto aria-expanded:bg-surface-2 xl:shrink-0"
-            />
-          }
-        >
-          {ativa ? (
-            <Insignia empresa={ativa} className="size-[1.375rem] rounded-control" />
-          ) : (
-            <span
-              aria-hidden
-              className="flex size-[1.375rem] shrink-0 items-center justify-center rounded-control bg-surface-2 text-fg-muted"
             >
-              <Building2 className="size-3.5" />
-            </span>
-          )}
-          {/* O nome da empresa aparece em TODA largura — inclusive no celular,
-              onde ele vivia escondido abaixo de 640px. Errar de empresa custa
-              um evento real no Pixel errado, então o nome não é enfeite. O
-              produto desceu para a marca, à esquerda deste seletor. */}
-          <span className="max-w-28 min-w-0 truncate text-label font-medium text-fg-strong sm:max-w-40">
-            {ativa ? ativa.nome : 'lendo as empresas…'}
-          </span>
-          <ChevronDown className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-        </Menu.Trigger>
-
-        <Menu.Portal>
-          <Menu.Positioner
-            side="bottom"
-            align="start"
-            sideOffset={6}
-            className="isolate z-50"
-          >
-            <Menu.Popup className="min-w-60 origin-(--transform-origin) rounded-panel border border-line-control bg-surface-3 p-1 shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-              {/* O `Menu.Group` nao e enfeite: o `Menu.GroupLabel` LANCA se
-                  nao achar o contexto do grupo (MenuGroupContext), e e ele
-                  que amarra o rotulo ao `role="group"` para o leitor de tela. */}
-              <Menu.Group>
-                <Menu.GroupLabel className="px-2 py-1.5 text-caption font-semibold tracking-wide text-fg-muted uppercase">
-                  Empresas
-                </Menu.GroupLabel>
-
-                {empresas.map((empresa) => {
-                  const estaAtiva = empresa.id === (ativa?.id ?? empresaAtivaId);
-                  return (
-                    <Menu.Item
-                      key={empresa.id}
-                      onClick={() => void trocar(empresa)}
-                      className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
-                    >
-                      <Insignia empresa={empresa} className="size-5" />
-                      <span className="min-w-0 flex-1 truncate">{empresa.nome}</span>
-                      {/* O ✓ e o que diz qual esta ativa — cor sozinha nao e
-                          rotulo, e um leitor de tela nao ve realce nenhum. */}
-                      {estaAtiva && (
-                        <>
-                          <Check className="size-4 shrink-0 text-tinta-texto" aria-hidden />
-                          <span className="sr-only">(empresa ativa)</span>
-                        </>
-                      )}
-                    </Menu.Item>
-                  );
-                })}
-              </Menu.Group>
-
-              <Menu.Separator className="my-1 h-px bg-line-strong" />
-
-              <Menu.Item
-                onClick={() => setDialogo('criar')}
-                className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
-              >
-                <Plus className="size-4 shrink-0" aria-hidden />
-                Adicionar empresa
-              </Menu.Item>
-
-              {ativa && (
-                <Menu.Item
-                  onClick={() => setDialogo('editar')}
-                  className="flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong"
-                >
-                  <Pencil className="size-4 shrink-0" aria-hidden />
-                  Editar empresa atual
-                </Menu.Item>
+              <Insignia empresa={empresa} className="size-6" />
+              <span className="min-w-0 flex-1 truncate">{empresa.nome}</span>
+              {/* O ✓ é o que diz qual está aberta — cor sozinha não é rótulo. */}
+              {aberta && (
+                <>
+                  <Check className="size-4 shrink-0 text-tinta-texto" aria-hidden />
+                  <span className="sr-only">(empresa aberta)</span>
+                </>
               )}
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
-
-      {/* Criar tem duas etapas (empresa + primeiro Pixel); editar so a
-          primeira. Quem decide isso e a presenca da prop `empresa`. */}
-      <EmpresaDialog
-        aberto={dialogo !== null}
-        onOpenChange={(aberto) => {
-          if (!aberto) setDialogo(null);
-        }}
-        empresa={dialogo === 'editar' ? ativa : undefined}
-      />
-    </>
+              <span className="flex shrink-0 items-center gap-1 text-caption text-fg-muted">
+                <span aria-hidden className="size-1.5 rounded-full bg-fg-muted" />
+                <span aria-hidden>—</span>
+                <span className="sr-only">Estado: ainda não medido</span>
+              </span>
+            </button>
+            {/* Editar só a empresa aberta: é dela que a tela fala. Em V7 a
+                edição muda para a aba Configurações. */}
+            {aberta && (
+              <button
+                type="button"
+                onClick={() => {
+                  aoEscolher?.();
+                  window.dispatchEvent(
+                    new CustomEvent(EVENTO_EDITAR_EMPRESA, { detail: { id: empresa.id } })
+                  );
+                }}
+                aria-label={`Editar ${empresa.nome}`}
+                title={`Editar ${empresa.nome}`}
+                className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+              >
+                <Pencil className="size-4" aria-hidden />
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
-
-export default SeletorDeEmpresa;

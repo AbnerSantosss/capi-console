@@ -11,6 +11,7 @@ import { EMPRESA_DEFAULT_ID } from '@/lib/config-store';
 import { empresaDaRequisicao } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { erroDeRota, respostaErro } from '@/lib/erro-api';
+import { parseWebhook } from '@/lib/parser';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,27 @@ function daEmpresa(item: ItemInbox | undefined, empresaId: string): boolean {
   return item !== undefined && (item.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId;
 }
 
+/**
+ * O item com o `eventId` que vai (ou foi) para a Meta.
+ *
+ * `ItemInbox` não guarda o campo: o `event_id` do disparo sai do `payload` pela
+ * MESMA chamada que o disparo usa (`parseWebhook`, ver `inbox/disparar`) — o id
+ * canônico da plataforma ou `order_<pedido>`. Derivar aqui vale também para
+ * item antigo e não toca no log gravado.
+ *
+ * `emailHash` continua fora: o item já chega sem ele (`paraTela`, C7) e o
+ * espalhamento só ACRESCENTA `eventId`. Payload ilegível devolve o item como
+ * está, sem `eventId` — nunca um id inventado.
+ */
+function comEventId(item: ItemInbox): ItemInbox & { eventId?: string } {
+  try {
+    const id = parseWebhook(JSON.stringify(item.payload ?? null)).fields.eventId;
+    return typeof id === 'string' && id !== '' ? { ...item, eventId: id } : item;
+  } catch {
+    return item;
+  }
+}
+
 /** `?limite=` clampado em 1..1000 (teto = LIMITE_MEMORIA de inbox.ts). Ausente ou lixo → 50, o de sempre. */
 const LIMITE_PADRAO = 50;
 const LIMITE_MAXIMO = 1000;
@@ -53,15 +75,16 @@ export async function GET(request: NextRequest) {
       const item = await acharEntrada(id);
       // 404, nunca 403: 403 confirmaria que o id existe em OUTRA empresa. A
       // resposta de item alheio e byte a byte a de item inexistente.
-      if (!daEmpresa(item, empresaId)) {
+      if (!item || !daEmpresa(item, empresaId)) {
         return respostaErro('Entrada não encontrada.', 404);
       }
-      return NextResponse.json({ item });
+      return NextResponse.json({ item: comEventId(item) });
     }
     const limite = limiteDaConsulta(new URL(request.url).searchParams.get('limite'));
-    return NextResponse.json({ itens: await listarEntradas(limite, empresaId) });
+    const itens = await listarEntradas(limite, empresaId);
+    return NextResponse.json({ itens: itens.map(comEventId) });
   } catch (e) {
-    return erroDeRota(e, 'Não foi possível ler a caixa de entrada.');
+    return erroDeRota(e, 'Não foi possível ler a Fila.');
   }
 }
 
@@ -111,7 +134,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!confirmado) {
       return respostaErro(
-        'Apagar a caixa de entrada é irreversível. Confirme a operação para continuar — nada foi apagado.',
+        'Apagar a Fila é irreversível. Confirme a operação para continuar — nada foi apagado.',
         400
       );
     }
@@ -119,6 +142,6 @@ export async function DELETE(request: NextRequest) {
     await limparEntradas(empresaId);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return erroDeRota(e, 'Não foi possível limpar a caixa de entrada — nada foi apagado.');
+    return erroDeRota(e, 'Não foi possível limpar a Fila — nada foi apagado.');
   }
 }

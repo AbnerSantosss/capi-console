@@ -13,12 +13,18 @@ import Link from 'next/link';
 
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { TAREFAS } from './conteudo';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { TAREFAS, destinoDoAtalho } from './conteudo';
 import { CLASSE_HUE } from './hue';
 import { RichText } from './RichText';
 import styles from './guide.module.css';
 
 export function TaskCards() {
+  // V2 (v7): cada botão leva à aba da empresa ativa (`/e/<slug>/...`).
+  const slugDaAtiva = useEmpresaStore(
+    (s) => s.empresas.find((e) => e.id === s.empresaAtivaId)?.slug
+  );
+
   return (
     <ul className={styles.tasks}>
       {TAREFAS.map((tarefa) => {
@@ -56,7 +62,7 @@ export function TaskCards() {
             )}
 
             <Link
-              href={tarefa.cta.href}
+              href={destinoDoAtalho(tarefa.cta, slugDaAtiva)}
               className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-auto w-full')}
             >
               {tarefa.cta.rotulo}

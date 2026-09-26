@@ -40,10 +40,10 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const id = String(body.id || '').trim();
     if (!id) {
-      return NextResponse.json({ erro: 'Informe o id da marca.' }, { status: 400 });
+      return NextResponse.json({ erro: 'Informe o id do Pixel.' }, { status: 400 });
     }
     if (!String(body.nome || '').trim()) {
-      return NextResponse.json({ erro: 'Informe o nome da marca.' }, { status: 400 });
+      return NextResponse.json({ erro: 'Informe o nome do Pixel.' }, { status: 400 });
     }
     if (!String(body.pixelId || '').trim()) {
       return NextResponse.json({ erro: 'Informe o Pixel ID.' }, { status: 400 });
@@ -114,7 +114,7 @@ export async function PUT(request: NextRequest) {
           {
             erro:
               'Este Pixel não tem token de acesso. Sem token nada sai para a Meta, ' +
-              'então o disparo automático não pode ser ligado. Salve o token primeiro.',
+              'então o envio automático não pode ser ligado. Salve o token primeiro.',
           },
           { status: 400 }
         );

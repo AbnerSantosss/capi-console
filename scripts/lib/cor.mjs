@@ -91,6 +91,18 @@ export function sobrepor(frente, alfa, fundo) {
   return hexDe(f.map((v, i) => v * alfa + t[i] * (1 - alfa)));
 }
 
+/**
+ * A mesma mistura, na ordem em que se lê um `color-mix` de CSS:
+ * `color-mix(in srgb, <frente> <alfa>, transparent)` pintado sobre `<fundo>`.
+ * Existe para o pior caso de `--surface-painel` (v7): o painel translúcido
+ * não tem cor própria, só a que sobra depois de compor com o que está atrás,
+ * e o gate compõe sobre o ponto mais claro possível (#FFFFFF) e sobre o
+ * `--surface-0` antes de medir texto em cima. `alfa` vai de 0 a 1.
+ */
+export function compor(frente, fundo, alfa) {
+  return sobrepor(frente, alfa, fundo);
+}
+
 /* -------------------------------------------------------------------------
    OKLab / OKLCH
    ------------------------------------------------------------------------- */

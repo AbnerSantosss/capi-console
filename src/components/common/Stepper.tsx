@@ -66,7 +66,7 @@ const ETAPAS = [
   },
   {
     n: 4,
-    titulo: 'Conferir e disparar',
+    titulo: 'Conferir e enviar',
     alvo: 'secao-disparo',
     ajuda: 'Confira antes de enviar',
   },
@@ -123,7 +123,7 @@ export function Stepper({ className = '' }: { className?: string }) {
 
   return (
     <nav
-      aria-label="Etapas do disparo"
+      aria-label="Etapas do envio"
       className={cn(
         'rounded-panel border border-line-strong bg-surface-1 p-2',
         className

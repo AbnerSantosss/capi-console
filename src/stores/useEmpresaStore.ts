@@ -65,16 +65,39 @@ interface EmpresaState {
   carregado: boolean;
   /** Mensagem da última falha de leitura. Null quando a lista está boa. */
   erro: string | null;
+  /**
+   * A tela aberta tem coisa digitada e não salva (C2, T6). Quem marca são as
+   * telas de configuração (Instalação e Automático); quem lê é o seletor, na
+   * hora em que OUTRA aba troca a empresa: sem rascunho ele recarrega a tela,
+   * com rascunho ele só avisa e oferece "Recarregar agora". Fica FORA do
+   * `persist` — é estado desta aba, não preferência.
+   */
+  rascunhoSujo: boolean;
 
   carregar: () => Promise<void>;
   setEmpresaAtiva: (id: string) => Promise<void>;
   salvarEmpresa: (dados: EntradaDeEmpresa) => Promise<EmpresaPublica>;
   removerEmpresa: (id: string) => Promise<void>;
   ativa: () => EmpresaPublica | undefined;
+  marcarRascunho: (sujo: boolean) => void;
 }
 
 /** Nome da chave do `persist` no `localStorage`. */
 export const CHAVE_EMPRESA_ATIVA = 'capi_empresa_ativa_v1';
+
+/**
+ * Evento de janela disparado quando OUTRA aba trocou a empresa e este store já
+ * acompanhou. `detail` é {@link DetalheTrocaFora}. Quem ouve é o
+ * `SeletorDeEmpresa`, que decide entre recarregar a tela e só avisar.
+ */
+export const EVENTO_EMPRESA_TROCADA_FORA = 'capi:empresa-trocada-fora';
+
+export interface DetalheTrocaFora {
+  /** A empresa para a qual a outra aba foi. */
+  id: string;
+  /** A empresa que esta aba mostrava até agora. */
+  anterior: string;
+}
 
 /**
  * Cookie que o servidor lê (`COOKIE_EMPRESA` de `src/lib/empresa-ativa.ts`).
@@ -143,10 +166,20 @@ export const useEmpresaStore = create<EmpresaState>()(
       carregando: false,
       carregado: false,
       erro: null,
+      rascunhoSujo: false,
 
       carregar: async () => {
         if (get().carregando) return;
         set({ carregando: true });
+        // A escolha no momento em que a leitura sai. Se ela mudar enquanto a
+        // resposta vem (outra aba trocou para uma empresa que acabou de criar),
+        // a lista que chega pode ser ANTERIOR à empresa nova, e a regra D-4
+        // abaixo reconduziria para a padrão, com o `persist` levando todas as
+        // abas junto (revisão da C2, ressalva 5). Nesse caso relê em vez de
+        // reconduzir. A segunda leitura já sai com a escolha nova e decide
+        // normalmente, então não há laço.
+        const pedida = get().empresaAtivaId;
+        let reler = false;
         try {
           // `ativa` vem na resposta porque o servidor já resolveu
           // header → cookie → 'default' para poder responder. Não o usamos para
@@ -159,9 +192,13 @@ export const useEmpresaStore = create<EmpresaState>()(
             cache: 'no-store',
           });
           const empresas = dados.empresas ?? [];
-          const escolhida = empresas.some((e) => e.id === get().empresaAtivaId)
-            ? get().empresaAtivaId
-            : EMPRESA_DEFAULT;
+          const atual = get().empresaAtivaId;
+          if (atual !== pedida && !empresas.some((e) => e.id === atual)) {
+            set({ empresas, carregado: true, erro: null });
+            reler = true;
+            return;
+          }
+          const escolhida = empresas.some((e) => e.id === atual) ? atual : EMPRESA_DEFAULT;
 
           set({ empresas, carregado: true, erro: null, empresaAtivaId: escolhida });
 
@@ -181,6 +218,7 @@ export const useEmpresaStore = create<EmpresaState>()(
           });
         } finally {
           set({ carregando: false });
+          if (reler) void get().carregar();
         }
       },
 
@@ -276,11 +314,84 @@ export const useEmpresaStore = create<EmpresaState>()(
           empresas[0]
         );
       },
+
+      marcarRascunho: (sujo) => {
+        if (get().rascunhoSujo !== sujo) set({ rascunhoSujo: sujo });
+      },
     }),
     {
       name: CHAVE_EMPRESA_ATIVA,
       // só a escolha do usuário é persistida; a lista vem sempre do servidor
+      // (e `rascunhoSujo` é desta aba: não entra aqui)
       partialize: (s) => ({ empresaAtivaId: s.empresaAtivaId }) as Partial<EmpresaState>,
     }
   )
 );
+
+/**
+ * T6 (C2) — outra aba trocou a empresa.
+ *
+ * O `persist` grava a escolha no `localStorage`, que é compartilhado entre as
+ * abas; o navegador entrega o evento `storage` só às OUTRAS abas. Sem este
+ * ouvinte, a aba 2 seguia dizendo "Empresa A" enquanto o cookie (também
+ * compartilhado) já dizia "Empresa B" — e o próximo "Salvar" dela gravava os
+ * dados de A na empresa B.
+ *
+ * O valor está no formato do `persist` — `{"state":{"empresaAtivaId":"…"},
+ * "version":0}` —, nunca o id cru. Qualquer outra coisa (outra chave, chave
+ * apagada, JSON quebrado, formato estranho) é ignorada em silêncio: na dúvida,
+ * a aba fica onde está e o servidor continua recusando a escrita divergente.
+ *
+ * 🔴 O evento só diz QUE a chave mudou; o valor lido é o gravado AGORA, e não
+ * o `e.newValue` (revisão da C2, ressalva 1). O `newValue` é histórico: uma
+ * aba congelada acorda com vários eventos na fila, e seguir cada um fazia
+ * esta aba regravar valores velhos pelo `persist`. Cada regravação virava um
+ * `storage` na outra aba, que fazia o mesmo, e as duas trocavam B↔C sem parar.
+ * Lendo o valor atual, esta aba só adota o que já está gravado: a escrita do
+ * `persist` que se segue é igual ao gravado e, pela especificação, não chega
+ * a aba nenhuma.
+ *
+ * R5: compara com o estado atual ANTES de agir. O próprio `persist` desta aba
+ * regrava a chave depois do `setState` abaixo, e esse eco não pode virar uma
+ * segunda troca. O resto da fila de eventos atrasados cai aqui também.
+ *
+ * O store não conhece o router (ver `setEmpresaAtiva`): ele acompanha a troca e
+ * avisa a janela com {@link EVENTO_EMPRESA_TROCADA_FORA}. Quem recarrega a tela,
+ * ou só avisa porque há rascunho, é o `SeletorDeEmpresa`.
+ */
+function aoMudarEmOutraAba(e: StorageEvent): void {
+  if (e.key !== CHAVE_EMPRESA_ATIVA) return;
+  let id: unknown;
+  try {
+    const agora = window.localStorage.getItem(CHAVE_EMPRESA_ATIVA);
+    const gravado = JSON.parse(agora ?? 'null') as { state?: { empresaAtivaId?: unknown } } | null;
+    id = gravado?.state?.empresaAtivaId;
+  } catch {
+    // JSON quebrado, ou `localStorage` bloqueado: a aba fica onde está.
+    return;
+  }
+  if (typeof id !== 'string' || !id.trim()) return;
+
+  const estado = useEmpresaStore.getState();
+  const anterior = estado.empresaAtivaId;
+  if (id === anterior) return;
+
+  // Mesma ordem de `setEmpresaAtiva`: cookie, estado, Pixels.
+  escreverCookieEmpresa(id);
+  useEmpresaStore.setState({ empresaAtivaId: id });
+  void useBrandStore.getState().carregar();
+  // Empresa criada na outra aba ainda não está na lista desta: sem reler, o
+  // cabeçalho mostraria o nome errado (`ativa()` cairia na padrão).
+  if (!estado.empresas.some((x) => x.id === id)) void useEmpresaStore.getState().carregar();
+
+  const detail: DetalheTrocaFora = { id, anterior };
+  window.dispatchEvent(new CustomEvent<DetalheTrocaFora>(EVENTO_EMPRESA_TROCADA_FORA, { detail }));
+}
+
+if (typeof window !== 'undefined') {
+  // Uma inscrição só por janela, mesmo com o módulo reavaliado pelo HMR.
+  const janela = window as Window & { __capiDesligarAbasEmpresa?: () => void };
+  janela.__capiDesligarAbasEmpresa?.();
+  window.addEventListener('storage', aoMudarEmOutraAba);
+  janela.__capiDesligarAbasEmpresa = () => window.removeEventListener('storage', aoMudarEmOutraAba);
+}

@@ -59,6 +59,30 @@ export interface ItemResumivel {
   testePlataforma?: boolean;
   valor?: number;
   moeda?: string;
+  /**
+   * O que cada Pixel respondeu no último disparo do item. É daqui que sai a
+   * diferença entre "a Meta aceitou" e "foi só para o Testar eventos" (C9,
+   * D20). Ausente em item gravado antes de o campo existir.
+   *
+   * `unknown` porque é assim que `ItemInbox.resultados` chega (`inbox.ts`): a
+   * linha vem de um arquivo gravado em disco, e cada elemento é lido campo a
+   * campo por `comoResultado`, como `ResultadoResumivel`.
+   */
+  resultados?: ReadonlyArray<unknown>;
+}
+
+/**
+ * Um resultado por Pixel, só com o que o resumo lê — os MESMOS nomes de campo
+ * de `ResultadoPorPixel` (`inbox.ts`). Nada de PII: status, números da
+ * resposta da Meta e se o Pixel estava com código de teste.
+ */
+export interface ResultadoResumivel {
+  /** `'enviado'` quando a Meta aceitou; `'duplicado'`, `'erro'`, etc. no resto. */
+  status?: string;
+  httpStatus?: number;
+  eventsReceived?: number;
+  /** O Pixel tinha código de teste: o evento foi para o "Testar eventos". */
+  modoTeste?: boolean;
 }
 
 export interface CardContagem {
@@ -86,7 +110,15 @@ export interface ResumoInbox {
   base: number;
   volume: {
     recebidos: number;
+    /** Só envio REAL: o que foi só para o "Testar eventos" está em `enviadosEmTeste`. */
     enviados: CardContagem;
+    /**
+     * Eventos reais que a Meta só recebeu em MODO TESTE (Pixel com código de
+     * teste): aparecem no "Testar eventos", não contam conversão e não ensinam
+     * a campanha. Ficam fora de `enviados`, de `receitaEnviada` e do EMQ médio,
+     * e a tela diz quantos são (C9, D20).
+     */
+    enviadosEmTeste: number;
     naFila: CardContagem;
     ignorados: CardContagem;
     /** Fora da base, sempre. */
@@ -101,13 +133,38 @@ export interface ResumoInbox {
     semAtribuicao: CardContagem;
   };
   qualidade: {
-    /** Média do EMQ dos enviados que têm nota. `null` quando não há nenhum. */
+    /** Média do EMQ dos enviados REAIS que têm nota. `null` quando não há nenhum. */
     emqMedio: number | null;
     enviadosComEmq: number;
+    /**
+     * Enviados REAIS com prova de que a Meta aceitou num Pixel sem código de
+     * teste: um resultado aceito (`httpStatus 200` com `eventsReceived > 0`, ou
+     * `status 'enviado'`, que nasce dessa mesma conta) com `modoTeste !== true`,
+     * ou um `duplicado` real (R1). Subconjunto de `volume.enviados`.
+     */
+    aceitos: number;
+    /**
+     * Eventos reais que a Meta RESPONDEU sem aceitar (4xx/5xx, ou 200 sem
+     * evento recebido) num Pixel real, e sem nenhum aceite real.
+     *
+     * 🔴 Não é "enviado sem aceite": a recusa NÃO vira `disparado`
+     * (`auto-dispatch.ts` só marca quando algum Pixel deu `enviado`), então o
+     * item recusado fica na fila com o erro gravado — e é contado aqui em
+     * qualquer situação. O que não é resposta da Meta (sem token, Pixel
+     * desligado, erro de rede) e o item antigo sem `resultados` não entram:
+     * não há resposta da Meta para contar. Só-teste também não entra.
+     *
+     * Por isso `aceitos + recusados` pode ser menor que `enviados`: a taxa de
+     * aceite honesta é `aceitos / (aceitos + recusados)`.
+     */
+    recusados: number;
   };
   /** Os oito nomes de evento mais frequentes, do maior para o menor. */
   porEvento: Array<{ evento: string; total: number; pct: number | null }>;
-  /** Soma do valor dos enviados — só quando há UMA moeda; senão `null`. */
+  /**
+   * Soma do valor dos enviados REAIS — só quando há UMA moeda; senão `null`.
+   * Envio em modo teste fica de fora: não é dinheiro que a Meta contou.
+   */
   receitaEnviada: { total: number; moeda: string } | null;
   /**
    * COMPRA — o evento que paga a conta, separado de todos os outros.
@@ -117,6 +174,84 @@ export interface ResumoInbox {
    * o número que ninguém deveria precisar procurar.
    */
   compras: ComprasDoPeriodo;
+  /**
+   * Por evento DA META (`PageView`, `InitiateCheckout`, `Purchase`...), sem
+   * teste da equipe nem da plataforma. É a fonte dos KPIs da Visão geral.
+   *
+   * Diferente de `porEvento`, que agrupa pelo nome da ORIGEM e corta em oito:
+   * aqui a chave é `eventoMeta` e a lista vem inteira. Item sem `eventoMeta`
+   * só entra quando é compra (a régua de `ehCompra`), para `Purchase` bater
+   * com `compras.total`; nome cru sem evento da Meta fica de fora. Evento que
+   * não chegou no período não aparece (nada de linha com zero inventada).
+   */
+  porEventoMeta: ContagemPorEventoMeta[];
+  /**
+   * Um registro por dia de Brasília da janela, do mais antigo ao mais novo, sem
+   * teste da equipe nem da plataforma (a soma de `recebidos` é `base`).
+   *
+   * Dia que a leitura não cobriu inteiro (`amostraCobreJanela === false` e o
+   * dia começa antes do item mais antigo lido) SAI da lista: aparecer como 0
+   * seria número inventado.
+   */
+  porDia: DiaDoResumo[];
+  /**
+   * A mesma conta na janela imediatamente anterior, do mesmo tamanho — só
+   * quando a rota pede `comparar=1`; sem isso fica `undefined` e nada é
+   * calculado. `null` quando a amostra lida não alcança a janela anterior
+   * inteira: comparar com um número incompleto inventaria uma queda.
+   */
+  anterior?: ResumoAnterior | null;
+}
+
+export interface ContagemPorEventoMeta {
+  eventoMeta: string;
+  /** Reais recebidos no período, em qualquer situação. */
+  recebidos: number;
+  /** Dos recebidos, quantos a Meta aceitou de verdade (a régua de `qualidade.aceitos`). */
+  aceitos: number;
+}
+
+export interface DiaDoResumo {
+  /** `AAAA-MM-DD` em Brasília. */
+  dia: string;
+  recebidos: number;
+  aceitos: number;
+  /**
+   * Soma do valor dos enviados REAIS do dia (o mesmo recorte de
+   * `receitaEnviada`), na moeda de `receitaEnviada.moeda`. `0` quando o dia não
+   * teve venda enviada. `null` quando o dia mistura moedas — ou quando o valor
+   * dele está numa moeda que não é a moeda única da janela: um dia em real e
+   * outro em dólar no mesmo eixo não é dinheiro nenhum.
+   */
+  receita: number | null;
+  /** Compras reais recebidas no dia, em qualquer situação (a régua de `ehCompra`). */
+  compras: number;
+}
+
+export interface ResumoAnterior {
+  /** A janela anterior, em ISO: termina antes de a janela atual começar. */
+  janela: { inicio: string; fim: string };
+  /** Mesmo sentido de `volume.recebidos`. */
+  recebidos: number;
+  /** Mesmo sentido de `volume.enviados.total`. */
+  enviados: number;
+  /** Mesmo sentido de `qualidade.aceitos`. */
+  aceitos: number;
+  receitaEnviada: { total: number; moeda: string } | null;
+  porEventoMeta: ContagemPorEventoMeta[];
+}
+
+/** O que a rota pode pedir além do período. */
+export interface OpcoesDoResumo {
+  /** Calcula `anterior` (a janela anterior, do mesmo tamanho). */
+  comparar?: boolean;
+  /**
+   * Instante (ms) em que a memória GLOBAL da caixa começa, quando ela está no
+   * teto (`inicioDaMemoriaNoTeto` de `inbox.ts`). Antes dele pode faltar item
+   * desta empresa, mesmo com a lista dela bem abaixo de `tetoDaAmostra` (R2 da
+   * V4). Ausente ou `null`: a memória tem tudo.
+   */
+  memoriaComecaEm?: number | null;
 }
 
 export interface ValorDeCompras {
@@ -133,8 +268,13 @@ export interface ValorDeCompras {
 export interface ComprasDoPeriodo extends ValorDeCompras {
   /** Moeda única do período, quando existe. A tela formata com ela. */
   moeda: string | null;
-  /** Quantas dessas compras a Meta já aceitou (status `disparado`). */
+  /**
+   * Quantas dessas compras a Meta já aceitou DE VERDADE (status `disparado`,
+   * sem ser só em modo teste).
+   */
   enviadas: number;
+  /** Quantas foram só para o "Testar eventos" — fora de `enviadas` (C9, D20). */
+  enviadasEmTeste: number;
   /**
    * O recorte que PODE ser lido como resultado de campanha: compra que trouxe
    * clique da Meta (`fbclid` ou `fbc`).
@@ -288,6 +428,34 @@ export function janelaDoPeriodo(agora: number, periodo: Periodo): { inicio: numb
   return { inicio: agora - periodo * DIA_MS, fim: agora };
 }
 
+/** `AAAA-MM-DD` menos `n` dias de calendário. */
+function diaIsoMenos(iso: string, n: number): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d - n)).toISOString().slice(0, 10);
+}
+
+/**
+ * A janela imediatamente anterior, do mesmo tamanho, que termina 1 ms antes de
+ * a atual começar.
+ *
+ * Número = a mesma janela corrida recuada N dias (`[inicio − N d, inicio)`).
+ * Dia de calendário (`'hoje'`, `'ontem'`, período livre) recua em DIAS de
+ * Brasília e mantém a duração: "hoje até as 9h" compara com "ontem até as 9h",
+ * não com o dia de ontem inteiro — senão toda manhã pareceria uma queda.
+ */
+function janelaAnterior(periodo: Periodo, inicio: number, fim: number): { inicio: number; fim: number } {
+  let inicioAnterior: number;
+  if (typeof periodo === 'number') {
+    inicioAnterior = inicio - periodo * DIA_MS;
+  } else {
+    const dias = ehPeriodoPersonalizado(periodo)
+      ? Math.round((Date.parse(`${periodo.ate}T00:00:00Z`) - Date.parse(`${periodo.de}T00:00:00Z`)) / DIA_MS) + 1
+      : 1;
+    inicioAnterior = meiaNoiteDaData(diaIsoMenos(dataLocalIso(inicio), dias));
+  }
+  return { inicio: inicioAnterior, fim: Math.min(inicioAnterior + (fim - inicio), inicio - 1) };
+}
+
 function pct(parte: number, base: number): number | null {
   if (base === 0) return null;
   return Math.round((parte / base) * 1000) / 10;
@@ -323,6 +491,106 @@ export function ehCompra(i: Pick<ItemResumivel, 'evento' | 'eventoMeta'>): boole
   return i.eventoMeta === 'Purchase' || i.evento === 'Purchase';
 }
 
+/**
+ * A Meta aceitou o evento neste Pixel?
+ *
+ * `status === 'enviado'` é como o disparo grava o aceite, e ele nasce de
+ * `httpStatus 200` com `eventsReceived > 0` (`auto-dispatch.ts`). As duas
+ * formas valem porque dizem a mesma coisa: o resumo não depende de um campo
+ * só para reconhecer um aceite.
+ */
+function aceitoPelaMeta(r: ResultadoResumivel): boolean {
+  return r.status === 'enviado' || (r.httpStatus === 200 && (r.eventsReceived ?? 0) > 0);
+}
+
+/**
+ * Lê um elemento de `resultados` campo a campo. Campo com tipo errado some, em
+ * vez de virar verdade: um `modoTeste: "true"` em texto não prova teste nenhum.
+ */
+function comoResultado(bruto: unknown): ResultadoResumivel | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const r = bruto as Record<string, unknown>;
+  return {
+    status: typeof r.status === 'string' ? r.status : undefined,
+    httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : undefined,
+    eventsReceived: typeof r.eventsReceived === 'number' ? r.eventsReceived : undefined,
+    modoTeste: typeof r.modoTeste === 'boolean' ? r.modoTeste : undefined,
+  };
+}
+
+/**
+ * O item saiu como `disparado`, mas SÓ chegou à Meta em modo teste?
+ *
+ * É teste quando existe pelo menos um aceite e TODOS os aceites vieram de Pixel
+ * com código de teste. Um aceite real em qualquer Pixel basta para o item ser
+ * envio real.
+ *
+ * 🔴 Sem nenhum aceite na lista, o item NÃO vira teste. O registro de
+ * resultados é sobrescrito a cada disparo: uma venda real disparada de novo
+ * fica só com `duplicado`, e "todos os aceites são teste" numa lista vazia
+ * seria verdade por vacuidade — tiraria de "Enviados" uma venda que foi. Item
+ * antigo, sem `resultados`, também segue como real: não há como saber, e é a
+ * mesma regra do dedup (ausência de `modoTeste` = envio real).
+ *
+ * 🔴 `duplicado` de Pixel REAL (`modoTeste !== true`) também prova envio real
+ * (R1 da C9, feito na V4): `duplicado` é "este evento já foi aceito pela Meta
+ * neste Pixel" (`auto-dispatch.ts`). Numa regra com um Pixel em produção e
+ * outro em teste, a venda disparada de novo fica com
+ * [produção `duplicado`, teste `enviado`] — e sem esta regra ela viraria "só
+ * teste" e sumiria do valor enviado, embora a Meta já tenha contado a venda.
+ *
+ * Exportada para a tela que abre a lista do card aplicar a MESMA régua.
+ */
+export function enviadoSoEmTeste(i: Pick<ItemResumivel, 'status' | 'resultados'>): boolean {
+  if (i.status !== 'disparado') return false;
+  const lidos = lerResultados(i);
+  if (lidos.some(duplicadoReal)) return false;
+  const aceitos = lidos.filter(aceitoPelaMeta);
+  return aceitos.length > 0 && aceitos.every((r) => r.modoTeste === true);
+}
+
+/** Os resultados do item já lidos campo a campo, sem os elementos ilegíveis. */
+function lerResultados(i: Pick<ItemResumivel, 'resultados'>): ResultadoResumivel[] {
+  return (i.resultados ?? []).map(comoResultado).filter((r): r is ResultadoResumivel => r !== null);
+}
+
+/** `duplicado` num Pixel sem código de teste: a Meta já tinha aceitado ali, de verdade. */
+function duplicadoReal(r: ResultadoResumivel): boolean {
+  return r.status === 'duplicado' && r.modoTeste !== true;
+}
+
+/**
+ * Algum Pixel REAL provou que a Meta aceitou: aceite com `modoTeste !== true`
+ * ou `duplicado` real. Os nomes lidos são os de `ResultadoPorPixel`
+ * (`httpStatus`, `eventsReceived`); `events_received` não existe no log e não
+ * vira aceite.
+ */
+function temAceiteReal(i: Pick<ItemResumivel, 'resultados'>): boolean {
+  return lerResultados(i).some((r) => (aceitoPelaMeta(r) && r.modoTeste !== true) || duplicadoReal(r));
+}
+
+/** Enviado REAL e aceito: `disparado` com aceite de Pixel real (ver `qualidade.aceitos`). */
+function aceitoDeVerdade(i: ItemResumivel): boolean {
+  return i.status === 'disparado' && temAceiteReal(i);
+}
+
+/**
+ * A Meta respondeu e NÃO aceitou, num Pixel real, sem aceite real em outro
+ * Pixel (ver `qualidade.recusados`). Só vale resposta com `httpStatus`: falta
+ * de token ou erro de rede não chegou à Meta.
+ *
+ * 🔴 Aceite em Pixel de TESTE não apaga a recusa do Pixel real (R1 da V4):
+ * com [produção `erro` 400, teste `enviado`] o item é "só em teste" no
+ * volume, mas a produção recusou — com o token vencido, a Qualidade diria
+ * "0 recusados" enquanto a produção recusa tudo.
+ */
+function recusadoDeVerdade(i: ItemResumivel): boolean {
+  if (temAceiteReal(i)) return false;
+  return lerResultados(i).some(
+    (r) => r.modoTeste !== true && typeof r.httpStatus === 'number' && !aceitoPelaMeta(r)
+  );
+}
+
 /** Clique da Meta — o que faz uma compra poder ser lida como resultado de campanha. */
 function temCliqueDaMeta(i: ItemResumivel): boolean {
   return i.temFbclid === true || i.temFbc === true;
@@ -342,41 +610,163 @@ function somar(itens: ItemResumivel[], misturouMoedas: boolean): ValorDeCompras 
   return { total: itens.length, valor: Math.round(soma * 100) / 100 };
 }
 
+function temValor(i: ItemResumivel): boolean {
+  return typeof i.valor === 'number' && Number.isFinite(i.valor);
+}
+
+/** Valor dos enviados — só com UMA moeda; senão (ou sem valor nenhum) `null`. */
+function somarReceita(enviados: ItemResumivel[]): { total: number; moeda: string } | null {
+  const comValor = enviados.filter(temValor);
+  const moedas = new Set(comValor.map((i) => i.moeda ?? 'BRL'));
+  if (moedas.size !== 1) return null;
+  return {
+    total: Math.round(comValor.reduce((s, i) => s + (i.valor as number), 0) * 100) / 100,
+    moeda: [...moedas][0],
+  };
+}
+
+/** O evento da Meta do item, ou `undefined` quando não há (ver `porEventoMeta`). */
+function eventoMetaDoItem(i: ItemResumivel): string | undefined {
+  if (typeof i.eventoMeta === 'string' && i.eventoMeta !== '') return i.eventoMeta;
+  return ehCompra(i) ? 'Purchase' : undefined;
+}
+
+function contarPorEventoMeta(reais: ItemResumivel[]): ContagemPorEventoMeta[] {
+  const mapa = new Map<string, { recebidos: number; aceitos: number }>();
+  for (const i of reais) {
+    const nome = eventoMetaDoItem(i);
+    if (!nome) continue;
+    const c = mapa.get(nome) ?? { recebidos: 0, aceitos: 0 };
+    c.recebidos++;
+    if (aceitoDeVerdade(i)) c.aceitos++;
+    mapa.set(nome, c);
+  }
+  return [...mapa.entries()]
+    .sort((a, b) => b[1].recebidos - a[1].recebidos || a[0].localeCompare(b[0]))
+    .map(([eventoMeta, c]) => ({ eventoMeta, recebidos: c.recebidos, aceitos: c.aceitos }));
+}
+
+/**
+ * O recorte de uma janela, com a mesma régua para a atual e para a anterior.
+ * Data ilegível fica de fora, caladamente: não derruba o painel.
+ */
+function recortar(itens: ItemResumivel[], inicio: number, fim: number) {
+  const noPeriodo = itens.filter((i) => {
+    const t = Date.parse(i.recebidoEm);
+    return Number.isFinite(t) && t >= inicio && t <= fim;
+  });
+  const reais = noPeriodo.filter((i) => !ehTeste(i));
+  // `disparado` também é marcado quando o único aceite veio de um Pixel em
+  // modo teste. Esse envio foi para o "Testar eventos", não conta conversão, e
+  // por isso sai de `enviados` — e, com ele, da receita e do EMQ (C9, D20).
+  const disparados = reais.filter((i) => i.status === 'disparado');
+  const enviados = disparados.filter((i) => !enviadoSoEmTeste(i));
+  return { noPeriodo, reais, disparados, enviados };
+}
+
+/** O dia seguinte a `AAAA-MM-DD`, pelo calendário (sem fuso: é só a data). */
+function proximoDiaIso(iso: string): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Os dias de Brasília da janela, cada um com as suas contagens.
+ *
+ * `lidoDesde` é o instante a partir do qual a amostra é completa: dia que
+ * começa (dentro da janela) antes dele sai da lista, porque parte dele não foi
+ * lida. `moedaDaJanela` é `receitaEnviada.moeda` — ver `DiaDoResumo.receita`.
+ */
+function contarPorDia(
+  reais: ItemResumivel[],
+  enviados: ItemResumivel[],
+  inicio: number,
+  fim: number,
+  lidoDesde: number,
+  moedaDaJanela: string | null
+): DiaDoResumo[] {
+  const dias = new Map<string, DiaDoResumo & { soma: number; moedas: Set<string> }>();
+  if (inicio <= fim) {
+    const ultimo = dataLocalIso(fim);
+    for (let d = dataLocalIso(inicio); d <= ultimo; d = proximoDiaIso(d)) {
+      if (Math.max(meiaNoiteDaData(d), inicio) < lidoDesde) continue;
+      dias.set(d, { dia: d, recebidos: 0, aceitos: 0, receita: 0, compras: 0, soma: 0, moedas: new Set() });
+    }
+  }
+  const doDia = (i: ItemResumivel) => dias.get(dataLocalIso(Date.parse(i.recebidoEm)));
+  for (const i of reais) {
+    const c = doDia(i);
+    if (!c) continue;
+    c.recebidos++;
+    if (aceitoDeVerdade(i)) c.aceitos++;
+    if (ehCompra(i)) c.compras++;
+  }
+  for (const i of enviados) {
+    const c = doDia(i);
+    if (!c || !temValor(i)) continue;
+    c.soma += i.valor as number;
+    c.moedas.add(i.moeda ?? 'BRL');
+  }
+  return [...dias.values()].map(({ dia, recebidos, aceitos, compras, soma, moedas }) => ({
+    dia,
+    recebidos,
+    aceitos,
+    receita:
+      moedas.size === 0
+        ? 0
+        : moedas.size === 1 && moedaDaJanela !== null && moedas.has(moedaDaJanela)
+          ? Math.round(soma * 100) / 100
+          : null,
+    compras,
+  }));
+}
+
 /**
  * Conta o que chegou, o que saiu e de onde veio.
  *
  * `agoraIso` entra por parâmetro (e não como `new Date()`) para o teste poder
  * fixar o relógio — sem isso, um caso de "40 dias atrás" passa hoje e falha
  * amanhã.
+ *
+ * `opcoes.comparar` liga o cálculo de `anterior` (a rota passa com
+ * `?comparar=1`). Sem ele, a janela anterior nem é olhada.
  */
 export function resumirInbox(
   itens: ItemResumivel[],
   agoraIso: string,
   periodo: Periodo,
-  tetoDaAmostra: number = Number.POSITIVE_INFINITY
+  tetoDaAmostra: number = Number.POSITIVE_INFINITY,
+  opcoes: OpcoesDoResumo = {}
 ): ResumoInbox {
   const agora = Date.parse(agoraIso);
   const { inicio, fim } = janelaDoPeriodo(agora, periodo);
-
-  const noPeriodo = itens.filter((i) => {
-    const t = Date.parse(i.recebidoEm);
-    // Data ilegível não derruba o painel: fica de fora, caladamente.
-    return Number.isFinite(t) && t >= inicio && t <= fim;
-  });
 
   // A amostra só cobre a janela se ela alcança algo ANTERIOR ao início dela.
   // Com a amostra no teto e o item mais antigo já dentro do período, existe
   // evento do período que ficou de fora da leitura — e aí o número é um piso,
   // não um total.
+  //
+  // Dois tetos: o da lista desta empresa (`tetoDaAmostra`) e o da memória
+  // global da caixa (`opcoes.memoriaComecaEm`, R2 da V4). Cada teto que bateu
+  // corta a leitura num começo; vale o MAIS NOVO dos começos que cortaram.
+  // Lista abaixo do teto não corta nada: o item mais antigo dela é só o mais
+  // antigo que a empresa tem.
   const tempos = itens.map((i) => Date.parse(i.recebidoEm)).filter((t) => Number.isFinite(t));
-  const maisAntigo = tempos.length > 0 ? Math.min(...tempos) : Number.NEGATIVE_INFINITY;
-  const amostraCobreJanela = itens.length < tetoDaAmostra || maisAntigo <= inicio;
+  const listaNoTeto = itens.length >= tetoDaAmostra;
+  const memoriaComecaEm =
+    typeof opcoes.memoriaComecaEm === 'number' && Number.isFinite(opcoes.memoriaComecaEm)
+      ? opcoes.memoriaComecaEm
+      : null;
+  let maisAntigo = Number.NEGATIVE_INFINITY;
+  if (listaNoTeto && tempos.length > 0) maisAntigo = Math.min(...tempos);
+  if (memoriaComecaEm !== null) maisAntigo = Math.max(maisAntigo, memoriaComecaEm);
+  const amostraNoTeto = listaNoTeto || memoriaComecaEm !== null;
+  const amostraCobreJanela = !amostraNoTeto || maisAntigo <= inicio;
 
+  const { noPeriodo, reais, disparados, enviados } = recortar(itens, inicio, fim);
   const testes = noPeriodo.filter(ehTeste);
-  const reais = noPeriodo.filter((i) => !ehTeste(i));
   const base = reais.length;
-
-  const enviados = reais.filter((i) => i.status === 'disparado');
+  const enviadosEmTeste = disparados.filter(enviadoSoEmTeste);
   const naFila = reais.filter((i) => i.status === 'novo' || i.status === 'carregado');
   const ignorados = reais.filter((i) => i.status === 'ignorado');
 
@@ -418,15 +808,15 @@ export function resumirInbox(
   const comprasComClique = compras.filter(temCliqueDaMeta);
   const comprasSemClique = compras.filter((i) => !temCliqueDaMeta(i));
 
-  const comValor = enviados.filter((i) => typeof i.valor === 'number' && Number.isFinite(i.valor));
-  const moedas = new Set(comValor.map((i) => i.moeda ?? 'BRL'));
-  const receitaEnviada =
-    moedas.size === 1
-      ? {
-          total: Math.round(comValor.reduce((s, i) => s + (i.valor as number), 0) * 100) / 100,
-          moeda: [...moedas][0],
-        }
-      : null;
+  const receitaEnviada = somarReceita(enviados);
+  const porDia = contarPorDia(
+    reais,
+    enviados,
+    inicio,
+    fim,
+    amostraCobreJanela ? Number.NEGATIVE_INFINITY : maisAntigo,
+    receitaEnviada?.moeda ?? null
+  );
 
   return {
     periodo,
@@ -437,6 +827,7 @@ export function resumirInbox(
     volume: {
       recebidos: noPeriodo.length,
       enviados: card(enviados.length, base),
+      enviadosEmTeste: enviadosEmTeste.length,
       naFila: card(naFila.length, base),
       ignorados: card(ignorados.length, base),
       testesEquipe: testes.length,
@@ -449,15 +840,52 @@ export function resumirInbox(
       microsoft: card(reais.filter((i) => i.temMsclkid === true).length, base),
       semAtribuicao: card(semAtribuicao.length, base),
     },
-    qualidade: { emqMedio, enviadosComEmq: comEmq.length },
+    qualidade: {
+      emqMedio,
+      enviadosComEmq: comEmq.length,
+      aceitos: enviados.filter(aceitoDeVerdade).length,
+      recusados: reais.filter(recusadoDeVerdade).length,
+    },
     porEvento,
     receitaEnviada,
     compras: {
       ...somar(compras, misturouMoedas),
       moeda: moedaDeCompra,
-      enviadas: compras.filter((i) => i.status === 'disparado').length,
+      enviadas: compras.filter((i) => i.status === 'disparado' && !enviadoSoEmTeste(i)).length,
+      enviadasEmTeste: compras.filter(enviadoSoEmTeste).length,
       atribuidasMeta: somar(comprasComClique, misturouMoedas),
       semAtribuicaoMeta: somar(comprasSemClique, misturouMoedas),
     },
+    porEventoMeta: contarPorEventoMeta(reais),
+    porDia,
+    ...(opcoes.comparar === true
+      ? { anterior: resumirAnterior(itens, periodo, inicio, fim, amostraNoTeto, maisAntigo) }
+      : {}),
+  };
+}
+
+/**
+ * A janela anterior (ver `ResumoInbox.anterior`), com a MESMA régua da atual:
+ * `recortar`, `aceitoDeVerdade`, `somarReceita`, `contarPorEventoMeta`.
+ */
+function resumirAnterior(
+  itens: ItemResumivel[],
+  periodo: Periodo,
+  inicio: number,
+  fim: number,
+  amostraNoTeto: boolean,
+  maisAntigo: number
+): ResumoAnterior | null {
+  const janela = janelaAnterior(periodo, inicio, fim);
+  // Mesma conta de `amostraCobreJanela`, para o início da janela anterior.
+  if (amostraNoTeto && maisAntigo > janela.inicio) return null;
+  const { noPeriodo, reais, enviados } = recortar(itens, janela.inicio, janela.fim);
+  return {
+    janela: { inicio: new Date(janela.inicio).toISOString(), fim: new Date(janela.fim).toISOString() },
+    recebidos: noPeriodo.length,
+    enviados: enviados.length,
+    aceitos: enviados.filter(aceitoDeVerdade).length,
+    receitaEnviada: somarReceita(enviados),
+    porEventoMeta: contarPorEventoMeta(reais),
   };
 }

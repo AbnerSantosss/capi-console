@@ -36,7 +36,7 @@ export interface ParametroEmq {
   peso: number;
   presente: boolean;
   critico: boolean;
-  /** Se vai criptografado em SHA-256 antes de sair. */
+  /** Se vai transformado em hash SHA-256 antes de sair. */
   hash: boolean;
   /** Valor truncado para exibicao. Nunca o valor completo de dado pessoal. */
   amostra: string | null;
@@ -92,7 +92,7 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       hash: true,
       amostra: corta(c.email, 26),
       comoObter:
-        'Vem do checkout ou do CRM. É normalizado em minúsculas e criptografado em SHA-256 antes do envio.',
+        'Vem do checkout ou do CRM. É normalizado em minúsculas e transformado em hash SHA-256 antes do envio.',
     },
     {
       id: 'phone',
@@ -131,7 +131,7 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       hash: false,
       amostra: corta(c.ip, 24),
       comoObter:
-        'IP público do comprador no momento da compra. Vai sem criptografia, por exigência da Meta. IP de proxy ou de rede interna não serve.',
+        'IP público do comprador no momento da compra. Vai como está, sem hash, por exigência da Meta. IP de proxy ou de rede interna não serve.',
     },
     {
       id: 'userAgent',
@@ -170,7 +170,7 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       hash: false,
       amostra: corta(c.eventId, 24),
       comoObter:
-        'Qualquer identificador estável do pedido, como order_118. Evita contagem dupla se o Pixel do navegador também disparar o mesmo evento.',
+        'Qualquer identificador estável do pedido, como order_118. Evita contagem dupla se o Pixel do navegador também enviar o mesmo evento.',
     },
     {
       id: 'nome',
@@ -186,7 +186,7 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       hash: true,
       amostra: corta([c.firstName, c.lastName].filter(Boolean).join(' '), 26),
       comoObter:
-        'Nome e sobrenome do checkout. São normalizados sem acentos e criptografados em SHA-256.',
+        'Nome e sobrenome do checkout. São normalizados sem acentos e transformados em hash SHA-256.',
     },
   ];
 

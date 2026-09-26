@@ -57,7 +57,7 @@ const PASSOS: PassoDoFluxo[] = [
     id: 'inbox',
     tipo: 'aba',
     tab: 'inbox',
-    title: 'Caixa de entrada',
+    title: 'Fila',
     icon: Inbox,
     tinta: 'var(--tinta-automatico)',
   },
@@ -81,7 +81,7 @@ const PASSOS: PassoDoFluxo[] = [
     id: 'retornos',
     tipo: 'aba',
     tab: 'retornos',
-    title: 'Retornos',
+    title: 'Repasse',
     icon: RotateCcw,
     tinta: 'var(--tinta-automatico)',
   },
@@ -252,9 +252,9 @@ export function IntegrationFlow({
       linha:
         typeof naFila === 'number'
           ? naFila === 1
-            ? '1 esperando o disparo'
-            : `${naFila.toLocaleString('pt-BR')} esperando o disparo`
-          : `${AUSENTE} esperando o disparo`,
+            ? '1 esperando envio'
+            : `${naFila.toLocaleString('pt-BR')} esperando envio`
+          : `${AUSENTE} esperando envio`,
       direita: <Contador valor={naFila} />,
     },
     regras: {
@@ -266,7 +266,7 @@ export function IntegrationFlow({
       direita: <SeloDeEstado estado={estadoPixels} />,
     },
     retornos: {
-      linha: plural(destinosAtivos, 'destino ligado', 'destinos ligados'),
+      linha: plural(destinosAtivos, 'endereço ligado', 'endereços ligados'),
       direita: <Contador valor={destinosAtivos} />,
     },
   };
@@ -292,7 +292,7 @@ export function IntegrationFlow({
       {/* Vertical de proposito: em pe cada estacao cabe inteira, com o numero
           do lado, em qualquer largura. A fileira horizontal so mostrava cinco
           rotulos iguais e nenhum estado. */}
-      <nav aria-label="Estado das integrações" className="mt-3 grid gap-0.5">
+      <nav aria-label="Estado do caminho" className="mt-3 grid gap-0.5">
         {PASSOS.map((passo) => {
           const { linha, direita } = linhas[passo.id];
           const ativa = passo.tipo === 'aba' && passo.tab === abaAtiva;

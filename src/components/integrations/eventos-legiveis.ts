@@ -87,7 +87,7 @@ export const TEXTO_CLASSIFICACAO: Record<ClassificacaoEvento, TextoClassificacao
   desconhecido: {
     rotulo: 'Nome novo, ainda sem regra. Nada foi enviado.',
     explicacao:
-      'O nome não está no catálogo conhecido. Nenhum palpite vira conversão sozinho: crie a regra na aba Regras para decidir o destino.',
+      'O nome não está no catálogo conhecido. Nenhum palpite vira conversão sozinho: crie a regra na aba Regras para decidir se ele vai à Meta e para qual Pixel.',
     tom: 'warning',
   },
   'sem-evento': {
@@ -103,7 +103,7 @@ export const TEXTO_MOTIVO: Record<MotivoIgnorar, string> = {
   regra: 'a regra deste evento está em Ignorar',
   'sem-equivalente-meta': 'não existe evento padrão equivalente na Meta',
   'teste-plataforma': 'é teste da própria plataforma, não é venda',
-  'sem-regra': 'é um nome novo e ninguém decidiu ainda o destino dele',
+  'sem-regra': 'é um nome novo e ainda não há regra dizendo para qual Pixel ele vai',
   'nao-lido': 'o corpo não pôde ser lido (não é JSON ou passou de 1 MB)',
 };
 
@@ -170,7 +170,7 @@ export function motivoLegivel(dados: DadosDoMotivo): string {
   }
 
   if (dados.classificacao === 'desconhecido' || dados.motivoIgnorar === 'sem-regra') {
-    return 'Nome novo, fora do catálogo conhecido. Nada é enviado por palpite: crie uma regra na aba Regras para decidir o destino.';
+    return 'Nome novo, fora do catálogo conhecido. Nada é enviado por palpite: crie uma regra na aba Regras para decidir se ele vai à Meta e para qual Pixel.';
   }
 
   if (dados.classificacao === 'sem-evento') {

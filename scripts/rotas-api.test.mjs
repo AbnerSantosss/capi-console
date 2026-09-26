@@ -459,12 +459,15 @@ fs.writeFileSync(
 );
 fs.rmSync(BAK, { force: true });
 
-// Um save igual ao da tela de Regras: manda só `regras`, mais nada.
+// Um save igual ao da tela de Regras: manda só `regras`, mais nada — além do
+// `empresaId` que todo PUT passou a levar (C1/T1: sem ele, 400). Sem header e
+// sem cookie de empresa, a ativa é a padrão, e é dela que estes dados são.
 const resPut = await rotaIntegracoes.PUT(
   req('/api/integracoes', {
     metodo: 'PUT',
     sessao: true,
     corpo: {
+      empresaId: 'default',
       regras: [
         {
           id: 'r1',
@@ -510,7 +513,7 @@ ok(depois.entrada.segredo === SEGREDO, '🔴 B1-g: o PUT NÃO trocou o segredo d
 
 // `saida: []` explícito é a única forma de esvaziar.
 const resVazia = await rotaIntegracoes.PUT(
-  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { saida: [] } })
+  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { empresaId: 'default', saida: [] } })
 );
 await corpoDe(resVazia);
 const semSaida = JSON.parse(lerArq(ARQ));
@@ -530,6 +533,7 @@ const resInvalido = await rotaIntegracoes.PUT(
     metodo: 'PUT',
     sessao: true,
     corpo: {
+      empresaId: 'default',
       regras: [
         { id: 'r9', eventoOrigem: 'x', eventoMeta: 'Purchase', marcas: [], modo: 'auto', ativo: true },
       ],
@@ -548,11 +552,22 @@ ok(lerArq(ARQ) === antesInvalido, 'e o arquivo está byte a byte igual ao de ant
 // `__proto__` no corpo não envenena o objeto gravado.
 const resProto = await rotaIntegracoes.PUT(
   // String crua de propósito: um literal `{ __proto__: ... }` em JS trocaria o
-  // protótipo do objeto do teste em vez de criar a chave.
-  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: '{"__proto__":{"poluido":true}}' })
+  // protótipo do objeto do teste em vez de criar a chave. O `empresaId` vai
+  // DENTRO da string (C1): sem ele a rota pararia no 400 antes de mesclar o
+  // corpo, e esta prova deixaria de exercitar o caminho que grava.
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: '{"__proto__":{"poluido":true},"empresaId":"default"}',
+  })
 );
 await corpoDe(resProto);
 ok(({}).poluido === undefined, 'chave __proto__ no corpo não polui o Object.prototype');
+ok(
+  resProto.status === 200,
+  'e o PUT com __proto__ chegou até a mesclagem (200), em vez de parar antes',
+  `status=${resProto.status}`
+);
 
 /* ================================================================== */
 /* C16c — a lista de testes, o unico campo que PARA uma venda          */
@@ -569,6 +584,7 @@ const resTestes = await rotaIntegracoes.PUT(
     metodo: 'PUT',
     sessao: true,
     corpo: {
+      empresaId: 'default',
       testes: {
         // Maiusculas, espaco em volta e um repetido: tudo isso chega do
         // copiar-e-colar do backoffice e nenhum deles pode virar item novo.
@@ -600,7 +616,7 @@ ok(comTestes.testes?.comprasParaSuspeitar === 4, 'o limite do operador foi grava
 
 // A mesma regra de `saida`: ausente significa "não mexi nisto".
 const resSemTestes = await rotaIntegracoes.PUT(
-  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { saida: [] } })
+  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { empresaId: 'default', saida: [] } })
 );
 await corpoDe(resSemTestes);
 ok(
@@ -612,7 +628,11 @@ ok(
 // como teste, e nenhuma venda voltaria à Meta — sem erro em lugar nenhum.
 const antesNomeCurto = lerArq(ARQ);
 const resNomeCurto = await rotaIntegracoes.PUT(
-  req('/api/integracoes', { metodo: 'PUT', sessao: true, corpo: { testes: { nomes: ['a'] } } })
+  req('/api/integracoes', {
+    metodo: 'PUT',
+    sessao: true,
+    corpo: { empresaId: 'default', testes: { nomes: ['a'] } },
+  })
 );
 const corpoNomeCurto = await corpoDe(resNomeCurto);
 ok(
@@ -626,7 +646,7 @@ const resEmailQuebrado = await rotaIntegracoes.PUT(
   req('/api/integracoes', {
     metodo: 'PUT',
     sessao: true,
-    corpo: { testes: { emails: ['jairo'] } },
+    corpo: { empresaId: 'default', testes: { emails: ['jairo'] } },
   })
 );
 await corpoDe(resEmailQuebrado);
@@ -640,7 +660,7 @@ const resLimite1 = await rotaIntegracoes.PUT(
   req('/api/integracoes', {
     metodo: 'PUT',
     sessao: true,
-    corpo: { testes: { comprasParaSuspeitar: 1 } },
+    corpo: { empresaId: 'default', testes: { comprasParaSuspeitar: 1 } },
   })
 );
 await corpoDe(resLimite1);
@@ -659,7 +679,7 @@ const resEsvaziar = await rotaIntegracoes.PUT(
   req('/api/integracoes', {
     metodo: 'PUT',
     sessao: true,
-    corpo: { testes: { emails: [], nomes: [] } },
+    corpo: { empresaId: 'default', testes: { emails: [], nomes: [] } },
   })
 );
 await corpoDe(resEsvaziar);

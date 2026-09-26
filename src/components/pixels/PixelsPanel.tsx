@@ -5,7 +5,11 @@ import { toast } from 'sonner';
 import { Plus, Target } from '@/components/ui/icones';
 
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
-import { useRegrasDeRoteamento } from '@/hooks/useEstadoAutomatico';
+import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import {
+  useRecarregarRegras,
+  useRegrasDeRoteamento,
+} from '@/hooks/useEstadoAutomatico';
 import { BrandDialog } from '@/components/brand/BrandDialog';
 import { CardDePixel } from '@/components/pixels/CardDePixel';
 import {
@@ -92,6 +96,47 @@ export function PixelsPanel() {
    */
   const regras = useRegrasDeRoteamento();
 
+  /**
+   * 🔴 T3 (C6) — a confirmacao de ligar rele as regras ao abrir.
+   *
+   * O store le as regras uma vez e reaproveita. A frase "Hoje nenhuma regra
+   * esta no modo automatico, entao nada sera enviado ainda" nao pode sair
+   * dessa leitura: o operador pode ter criado uma regra automatica em
+   * Automatico depois dela, e o dialogo diria "nada sai" justamente no clique
+   * que liga o envio de conversao real sem revisao.
+   *
+   * `conferindo` nasce no MESMO clique que abre o dialogo. Se nascesse num
+   * efeito, o primeiro quadro do dialogo ja mostraria a frase velha.
+   * `leituraDoDialogo` conta as aberturas: a releitura de uma abertura
+   * anterior (fechar e reabrir rapido) nao encerra o "conferindo" da atual.
+   */
+  const recarregarRegras = useRecarregarRegras();
+  const [conferindo, setConferindo] = React.useState(false);
+  const leituraDoDialogo = React.useRef(0);
+
+  /**
+   * T3 (C6) — trocar de empresa fecha as confirmacoes abertas.
+   *
+   * /pixels nao remonta na troca: a lista vem do store, nao da pagina de
+   * servidor. Se outra aba troca a empresa com um dialogo aberto aqui, o Pixel
+   * dele e da empresa anterior, enquanto as regras que o store acabou de
+   * reler ja sao da nova — a frase contaria as regras de uma empresa e o botao
+   * gravaria o Pixel de outra. Quem avisa que a empresa mudou e o seletor.
+   *
+   * Age na TROCA, nunca na montagem (a ref nasce com a empresa atual), como a
+   * caixa de entrada faz (C4).
+   */
+  const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
+  const empresaDaTela = React.useRef(empresaAtivaId);
+  React.useEffect(() => {
+    if (empresaDaTela.current === empresaAtivaId) return;
+    empresaDaTela.current = empresaAtivaId;
+    leituraDoDialogo.current += 1;
+    setALigar(null);
+    setAApagar(null);
+    setConferindo(false);
+  }, [empresaAtivaId]);
+
   const fase = useEscadaDeEspera(carregando && !carregado);
 
   React.useEffect(() => {
@@ -135,7 +180,7 @@ export function PixelsPanel() {
 
   const usar = (marca: MarcaPublica) => {
     setMarcaAtiva(marca.id);
-    toast.success(`Disparo manual apontando para ${marca.nome}`, {
+    toast.success(`Envio manual apontando para ${marca.nome}`, {
       description: marca.temToken
         ? undefined
         : 'Atenção: este Pixel está sem token, então nada sai enquanto isso não for resolvido.',
@@ -156,28 +201,44 @@ export function PixelsPanel() {
       await definirAutoDisparo(marca.id, ligado);
       setALigar(null);
       if (ligado) {
-        toast.success(`Disparo automático ligado em ${marca.nome}.`, {
+        toast.success(`Envio automático ligado em ${marca.nome}.`, {
           description: marca.testCode?.trim()
             ? 'Os eventos vão sair em modo de teste, para o Testar eventos da Meta.'
             : 'A partir de agora, as regras automáticas enviam conversões reais sem passar por você.',
         });
       } else {
-        toast.success(`Disparo automático desligado em ${marca.nome}.`, {
+        toast.success(`Envio automático desligado em ${marca.nome}.`, {
           description: 'Os eventos voltam a ficar na fila, esperando aprovação.',
         });
       }
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : 'Não foi possível salvar o disparo automático.'
+        e instanceof Error ? e.message : 'Não foi possível salvar o envio automático.'
       );
     } finally {
       setSalvandoAuto(null);
     }
   };
 
+  /**
+   * Abre a confirmacao de ligar JA conferindo as regras (T3, C6): o dialogo
+   * so afirma o que vai acontecer depois que a releitura voltar.
+   */
+  const abrirConfirmacaoDeLigar = (marca: MarcaPublica) => {
+    leituraDoDialogo.current += 1;
+    const minha = leituraDoDialogo.current;
+    setALigar(marca);
+    setConferindo(true);
+    // `recarregarRegras` nunca rejeita: falha vira `regras = null`, e a frase
+    // passa a dizer que nao foi possivel conferir.
+    void recarregarRegras().finally(() => {
+      if (leituraDoDialogo.current === minha) setConferindo(false);
+    });
+  };
+
   /** C-4 — ligar abre a confirmacao de 9.7.1; desligar acontece na hora. */
   const pedirAlternarAuto = (marca: MarcaPublica, ligado: boolean) => {
-    if (ligado) setALigar(marca);
+    if (ligado) abrirConfirmacaoDeLigar(marca);
     else void aplicarAuto(marca, false);
   };
 
@@ -243,7 +304,7 @@ export function PixelsPanel() {
       <EstadoVazio
         icone={Target}
         titulo="Nenhum Pixel cadastrado"
-        motivo="Um Pixel guarda o número do Pixel, o token da API de Conversões e o código de teste. Sem pelo menos um, não há para onde disparar."
+        motivo="Um Pixel guarda o número do Pixel, o token da API de Conversões e o código de teste. Sem pelo menos um, não há para onde enviar."
         acao={botaoAdicionar}
       />
     );
@@ -292,15 +353,15 @@ export function PixelsPanel() {
     // seria o pior dos mundos: a frase mais tranquilizadora no momento em que
     // menos se pode garantir.
     consequencia =
-      'Não foi possível conferir quantas regras enviam para ele — a lista de regras não carregou. As regras que apontarem para este Pixel continuarão existindo, mas ficarão sem destino.';
+      'Não foi possível conferir quantas regras enviam para ele — a lista de regras não carregou. As regras que apontarem para este Pixel continuarão existindo, mas ficarão sem Pixel.';
   } else if (afetadas === 0) {
     consequencia =
       'Nenhuma regra envia para ele. Eventos já enviados não são afetados.';
   } else if (afetadas === 1) {
     consequencia =
-      '1 regra envia para ele. Ela continuará existindo, mas ficará sem destino. Eventos já enviados não são afetados.';
+      '1 regra envia para ele. Ela continuará existindo, mas ficará sem Pixel. Eventos já enviados não são afetados.';
   } else {
-    consequencia = `${afetadas} regras enviam para ele. Elas continuarão existindo, mas ficarão sem destino. Eventos já enviados não são afetados.`;
+    consequencia = `${afetadas} regras enviam para ele. Elas continuarão existindo, mas ficarão sem Pixel. Eventos já enviados não são afetados.`;
   }
 
   /* ---------------------------------------------------------------- */
@@ -319,7 +380,16 @@ export function PixelsPanel() {
     aLigar && regras ? nomesDasRegrasAuto(regras, aLigar.id) : null;
 
   let oQueVaiAcontecer: React.ReactNode;
-  if (autoAfetadas === null) {
+  if (conferindo) {
+    // T3 (C6): enquanto a releitura nao volta, o dialogo nao afirma nada —
+    // nem "nenhuma regra", nem uma contagem da leitura anterior.
+    oQueVaiAcontecer = (
+      <span className="inline-flex items-center gap-2">
+        <Spinner />
+        Conferindo as regras…
+      </span>
+    );
+  } else if (autoAfetadas === null) {
     oQueVaiAcontecer =
       'Não foi possível conferir quantas regras estão no modo automático — a lista de regras não carregou. Ligue apenas se souber o que está em automático hoje.';
   } else if (autoAfetadas.length === 0) {
@@ -333,7 +403,7 @@ export function PixelsPanel() {
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-title font-semibold text-fg-strong">
           {carregado && !erro
             ? marcas.length === 1
@@ -343,6 +413,13 @@ export function PixelsPanel() {
         </h2>
         {botaoAdicionar}
       </div>
+      {/* V7: a frase do topo diz as DUAS travas do envio automático, do lado
+          do Pixel. A outra metade (a regra) mora na aba Regras. */}
+      <p className="mb-4 max-w-3xl text-body text-fg-muted">
+        Cada Pixel tem o próprio envio automático. Um evento só sai sozinho
+        quando a regra dele está em Automático e o Pixel está Ligado; com o
+        Pixel Desligado, ele fica na Fila esperando você.
+      </p>
 
       {conteudo}
 
@@ -393,7 +470,7 @@ export function PixelsPanel() {
             {/* RD-20 — a confirmacao NOMEIA o objeto. "Tem certeza?" nao diz
                 de qual Pixel se esta falando quando ha mais de um na tela. */}
             <AlertDialogTitle>
-              Ligar o disparo automático de &ldquo;{aLigar?.nome}&rdquo;?
+              Ligar o envio automático de &ldquo;{aLigar?.nome}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription
               // O corpo tem tres paragrafos; a `Description` do base-ui vira
@@ -412,7 +489,11 @@ export function PixelsPanel() {
                 .
               </p>
 
-              <p className="mt-2">{oQueVaiAcontecer}</p>
+              {/* `aria-live`: quem usa leitor de tela ouve a frase trocar de
+                  "Conferindo as regras…" para o resultado. */}
+              <p className="mt-2" aria-live="polite">
+                {oQueVaiAcontecer}
+              </p>
 
               {/* 9.7.3 — a ordem de go-live continua mandando. Aviso, nunca
                   bloqueio: o operador pode ter motivo, e botao cinza mudo e
@@ -436,10 +517,13 @@ export function PixelsPanel() {
             >
               Deixar desligado
             </AlertDialogCancel>
+            {/* T3 (C6) — ligar espera a releitura das regras: a frase acima
+                precisa dizer o que vai sair ANTES de o operador confirmar.
+                O motivo da espera esta escrito na propria frase. */}
             <AlertDialogAction
-              disabled={salvandoAuto !== null}
+              disabled={salvandoAuto !== null || conferindo}
               onClick={() => {
-                if (aLigar) void aplicarAuto(aLigar, true);
+                if (aLigar && !conferindo) void aplicarAuto(aLigar, true);
               }}
             >
               {salvandoAuto !== null

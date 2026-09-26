@@ -31,7 +31,7 @@ export function AvisoConfigIndisponivel({ arquivo }: { arquivo: string }) {
         </h2>
         <p className="text-body text-fg-body">
           O arquivo <code className="font-mono text-fg-strong">{arquivo}</code> não pôde ser lido, e
-          a cópia de segurança também não serviu. Nenhuma regra, marca ou segredo foi apagado ou
+          a cópia de segurança também não serviu. Nenhuma regra, Pixel ou segredo foi apagado ou
           regerado: o segredo de entrada do webhook só muda quando alguém clica para trocá-lo.
         </p>
         <p className="text-caption text-fg-muted">

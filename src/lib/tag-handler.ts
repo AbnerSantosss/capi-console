@@ -10,7 +10,7 @@ import {
 import { acharEmpresaPorChaveTag, listarEmpresas } from '@/lib/empresas';
 import { origemPermitida, type DominioTag } from '@/lib/tag-dominios';
 import { eventoTagPermitido } from '@/lib/tag-eventos';
-import { registrarEntrada, mascararEmail } from '@/lib/inbox';
+import { registrarEntrada, mascararEmail, hashDoEmail } from '@/lib/inbox';
 import { calcularEmq } from '@/lib/emq';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
@@ -716,6 +716,10 @@ export async function processarTag(
     // chega depois, fora do navegador, sem atribuicao nenhuma.
     nomeCliente: [campos.firstName, campos.lastName].filter(Boolean).join(' ') || undefined,
     emailMascarado: campos.email?.includes('@') ? mascararEmail(campos.email) : undefined,
+    // Mesma chave de contagem do webhook (SHA-256 do e-mail inteiro): uma
+    // compra que chega pela tag conta para o mesmo comprador que a do webhook.
+    // Nunca sai para a tela — `inbox.ts` tira o campo em todo ponto de saída.
+    emailHash: hashDoEmail(campos.email),
     temFbclid: Boolean(campos.fbclid),
     temGclid: Boolean(campos.gclid),
     temTtclid: Boolean(campos.ttclid),

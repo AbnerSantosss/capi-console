@@ -1,29 +1,28 @@
 import type { ReactNode } from 'react';
 
-import { BarraDeAbas } from './BarraDeAbas';
 import { ConsoleBackground } from './ConsoleBackground';
 import styles from './console.module.css';
 
 /**
- * A casca de toda tela protegida: fundo, conteúdo e a navegação de rodapé.
+ * A casca de toda tela protegida: fundo, lateral de empresas e conteúdo.
  *
- * A barra de abas fica AQUI, e não dentro do cabeçalho, porque ela é fixa na
- * base da janela: montada no `<header>` ela herdaria o `z-index` e o `sticky`
- * de lá. Ela mora depois do conteúdo também na ordem do DOM, que é a ordem em
- * que o leitor de tela encontra as coisas — o cabeçalho já abre a página com
- * a navegação de telas largas.
+ * V3 (v7): a partir de `lg` (64rem) a casca é uma grade de duas colunas, a
+ * lateral de empresas (248px) e o conteúdo; abaixo, uma coluna só, e as
+ * empresas abrem na gaveta do cabeçalho (`console.module.css`, `.shell`).
+ * Quem navega entre as telas de uma empresa são as 7 abas no topo do
+ * conteúdo, em qualquer largura; não existe mais barra fixa embaixo, e a
+ * página não reserva espaço para ela.
  *
- * Nada de conteúdo fica atrás dela: todas as páginas do console usam
- * `.page` (`console.module.css`), que reserva
- * `var(--altura-barra-abas) + env(safe-area-inset-bottom) + 1.5rem` de respiro
- * embaixo até 80rem — exatamente onde a barra some.
+ * `lateral` chega pronta do layout do servidor, com a lista de empresas que
+ * ele leu. O atributo `data-console` (V1) fica no `div` raiz da casca: é ele
+ * que liga os tokens do console, e a grade não muda isso.
  */
-export function ConsoleShell({ children }: { children: ReactNode }) {
+export function ConsoleShell({ lateral, children }: { lateral?: ReactNode; children: ReactNode }) {
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-console>
       <ConsoleBackground />
+      {lateral}
       <div className={styles.content}>{children}</div>
-      <BarraDeAbas />
     </div>
   );
 }

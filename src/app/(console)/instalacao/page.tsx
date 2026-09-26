@@ -1,56 +1,18 @@
-import { InstalacaoPage } from '@/components/instalacao/InstalacaoPage';
-import { ErroConfiguracaoIndisponivel, lerIntegracoes } from '@/lib/config-store';
-import { empresaDaPagina } from '@/lib/empresa-ativa';
-import { Plug } from '@/components/ui/icones';
-import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
-import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
-import consoleStyles from '@/components/layout/console.module.css';
+import { redirecionarRotaAntiga, type BuscaDaPagina } from '../redirecionar-rota-antiga';
 
 export const dynamic = 'force-dynamic';
 
-const TITULO = 'Instalação';
-const DESCRICAO =
-  'As duas portas por onde o evento entra: o webhook da plataforma de vendas e a tag do site do cliente.';
-
-export default async function Instalacao() {
-  // Leitura única: esta tela não depende do log de entregas, e configuração
-  // ilegível aqui é o caso que mais importa acertar — é a tela onde o operador
-  // chega quando está montando um cliente novo.
-  let integracoes;
-  try {
-    // A empresa ativa vem do cookie — página de servidor não vê header de
-    // aplicação. Registro de empresas ilegível cai no mesmo catch abaixo, e é a
-    // resposta certa: seguir na empresa padrão mostraria a URL de webhook do
-    // Código Vencedor a quem está instalando outro cliente.
-    integracoes = await lerIntegracoes(await empresaDaPagina());
-  } catch (erro) {
-    // B1-e: configuração ilegível NÃO cai no error boundary do Next. O boundary
-    // mostraria "algo deu errado" numa tela em branco, que é exatamente a
-    // mensagem que faz o operador achar que perdeu a configuração.
-    if (!(erro instanceof ErroConfiguracaoIndisponivel)) throw erro;
-    return (
-      <main className={consoleStyles.page} data-area="instalacao">
-        <ConsolePageHeader
-          title={TITULO}
-          description={DESCRICAO}
-          icon={Plug}
-        />
-        <AvisoConfigIndisponivel arquivo={erro.arquivo} />
-      </main>
-    );
-  }
-
-  return (
-    <main className={consoleStyles.page} data-area="instalacao">
-      <ConsolePageHeader
-        title={TITULO}
-        description={DESCRICAO}
-        icon={Plug}
-      />
-      <InstalacaoPage
-        inicial={{ integracoes }}
-        publicBaseUrl={process.env.PUBLIC_BASE_URL}
-      />
-    </main>
-  );
+/**
+ * 🔴 COMPATIBILIDADE PERMANENTE — NÃO REMOVA ESTA ROTA.
+ *
+ * O webhook e a tag do site moram em `/e/<slug>/fontes` desde a V2 (v7). Quem
+ * responde a `/instalacao` é o proxy, com 307; `#webhook` e `#tag` o navegador
+ * mantém sozinho. Esta página é a reserva (`redirecionar-rota-antiga.ts`).
+ */
+export default async function InstalacaoEnderecoAntigo({
+  searchParams,
+}: {
+  searchParams: Promise<BuscaDaPagina>;
+}) {
+  return redirecionarRotaAntiga('/instalacao', searchParams);
 }

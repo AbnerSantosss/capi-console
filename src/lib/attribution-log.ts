@@ -133,6 +133,20 @@ export interface EntradaLog {
   pixelId?: string;
   /** Idem: opcional para o leitor de registro antigo, obrigatorio para gravar. */
   marcaId?: string;
+  /**
+   * O envio foi com `test_event_code` (Pixel em modo teste)? (C8, D12)
+   *
+   * Envio de teste cai so em "Eventos de teste" da Meta e NAO conta como
+   * conversao, entao ele fica FORA da deduplicacao (`dedup.ts`): senao a venda
+   * mandada com o Pixel em teste ficaria barrada como "ja aceita" quando o
+   * Pixel voltasse para producao, e a conversao real nunca sairia.
+   *
+   * Opcional aqui pelo mesmo motivo do `pixelId`: as linhas gravadas antes da
+   * C8 nao tem o campo, e quem le trata a ausencia como envio REAL (P6) — nao
+   * ha como saber, e inferir pelo `testCode` de hoje do Pixel inventaria
+   * historia. Quem ESCREVE e obrigado a informar (ver `EntradaLogNova`).
+   */
+  modoTeste?: boolean;
 }
 
 /**
@@ -146,16 +160,29 @@ export interface EntradaLog {
  *
  * Isto NAO e migracao: nenhuma linha ja gravada e reescrita, nenhum arquivo e
  * convertido. Vale so para o que for gravado daqui para a frente.
+ *
+ * `modoTeste` (C8, D12) entra no mesmo pacote: todo disparo novo diz se foi
+ * com `test_event_code`. Os dois chamadores sao `auto-dispatch.ts` e
+ * `api/enviar/route.ts` (o lote que tambem gravava aqui foi apagado na C11).
  */
-export type EntradaLogNova = EntradaLog & Required<Pick<EntradaLog, 'pixelId' | 'marcaId'>>;
+export type EntradaLogNova = EntradaLog &
+  Required<Pick<EntradaLog, 'pixelId' | 'marcaId' | 'modoTeste'>>;
 
 /** Grava uma linha JSON (maquina) + um bloco legivel com os links (humano). */
 export async function registrarDisparo(e: EntradaLogNova): Promise<{ jsonl: string; md: string }> {
   await fs.mkdir(DIR_LOG, { recursive: true });
   const agora = new Date();
   const a = e.atribuicao;
+  // Sempre um booleano na linha nova, mesmo que um chamador em JS cru esqueca o
+  // campo (o tipo o exige): assim "linha sem `modoTeste`" continua querendo
+  // dizer so "gravada antes da C8", e a ausencia aqui vira envio real (P6).
+  const modoTeste = e.modoTeste === true;
 
-  await fs.appendFile(ARQ_JSONL, JSON.stringify({ registradoEm: agora.toISOString(), ...e }) + '\n', 'utf8');
+  await fs.appendFile(
+    ARQ_JSONL,
+    JSON.stringify({ registradoEm: agora.toISOString(), ...e, modoTeste }) + '\n',
+    'utf8'
+  );
 
   const brl =
     e.value !== undefined
@@ -171,6 +198,7 @@ export async function registrarDisparo(e: EntradaLogNova): Promise<{ jsonl: stri
     `|---|---|`,
     `| event_id | \`${e.eventId || '—'}\` |`,
     `| pixel | \`${e.pixelId || '—'}\`${e.marcaId ? ` (marca \`${e.marcaId}\`)` : ''} |`,
+    `| modo | ${modoTeste ? 'TESTE (test_event_code; não conta como conversão nem entra na deduplicação)' : 'real'} |`,
     `| event_time | ${e.eventTime} (${new Date(e.eventTime * 1000).toISOString()}) |`,
     `| pedido | \`${e.orderId || '—'}\` |`,
     `| HTTP / recebidos | ${e.httpStatus} / ${e.eventsReceived ?? 0} |`,

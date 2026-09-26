@@ -3,113 +3,76 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu } from '@base-ui/react/menu';
 import { toast } from 'sonner';
-import {
-  Bell,
-  BookOpen,
-  Gauge,
-  LogOut,
-  Plug,
-  Plus,
-  Search,
-  Send,
-  Settings,
-  Target,
-  User,
-  Workflow,
-} from '@/components/ui/icones';
+import { ArrowRight, Copy, Search } from '@/components/ui/icones';
 
 import { useBrandStore, limparLegado } from '@/stores/useBrandStore';
-import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import { useEstadoAutomatico } from '@/hooks/useEstadoAutomatico';
-import { useEventStore } from '@/stores/useEventStore';
-import { useUserStore } from '@/stores/useUserStore';
-import { SeletorDeEmpresa } from '@/components/empresa/SeletorDeEmpresa';
-import { SettingsDialog } from '@/components/settings/SettingsDialog';
+import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
 import { CommandPalette } from '@/components/common/CommandPalette';
-import { AppMark } from '@/components/ui/app-mark';
-import { NOME_PRODUTO } from '@/lib/produto';
+import type { TagGerada } from '@/components/instalacao/tag-estado';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { useEstadoNoCabecalho } from '@/components/visao-geral/estado-no-cabecalho';
+import { rotuloDaAba, abaAtiva } from '@/lib/abas-empresa';
+import type { TomDaEmpresa } from '@/lib/checklist-empresa';
+import { pedir, SessaoExpirada } from '@/lib/cliente-api';
+import { slugDoEndereco } from '@/lib/empresa-do-endereco';
 import { cn } from '@/lib/utils';
+import { useListaDeEmpresas } from './LateralDeEmpresas';
+
+/** O ponto do selo, em cor E com o texto ao lado (nunca só a cor). */
+const PONTO_DO_ESTADO: Record<TomDaEmpresa, string> = {
+  erro: 'bg-danger',
+  pendente: 'bg-warning',
+  andamento: 'bg-tinta-texto',
+  ok: 'bg-success',
+};
 
 /**
- * As cinco seções do console, na ordem do trabalho real.
+ * O cabeçalho do console (V3 do v7): trilha, estado da empresa e UMA ação.
  *
- * 🔴 TETO DE CINCO ITENS (IA-R1'). O Painel abriu a quinta vaga por decisão
- * registrada em `wiki/plano-dashboard-ux.md` (§3-bis): ele responde a primeira
- * pergunta de quem abre o console — "entrou venda? saiu para a Meta?" — e por
- * isso vem antes de Instalação. Um SEXTO item continua proibido: significa que
- * algo deveria ter virado aba de um dos cinco.
+ * Saíram daqui o menu de cinco seções, a pílula de ambiente, o sino e o menu
+ * do operador. Quem navega agora são as 7 abas da empresa (`AbasDaEmpresa`)
+ * e a lateral de empresas; Ajuda, Preferências e Sair moram no pé da
+ * lateral (e da gaveta, abaixo de `lg`). O cabeçalho ficou com o que diz ONDE
+ * você está e o que fazer AGORA:
  *
- * Depois do Painel a ordem é a do trabalho: instalar (webhook e tag), dizer
- * para qual Pixel vai, disparar na mão e só então deixar a regra disparar
- * sozinha. O Guia não é etapa de trabalho, é consulta: mora no menu do
- * operador.
+ *  - a trilha "Empresas / Gtech / Domínio", que sai do ENDEREÇO (o layout não
+ *    re-renderiza na navegação, então ninguém passa nome nem aba por prop);
+ *  - o selo de estado da empresa (V5): na Visão geral, o pior passo do
+ *    checklist que ela acabou de medir ("Falta configurar", "Com erro"...),
+ *    com a causa por extenso; nas outras abas, "—", porque um selo medido
+ *    antes de o dono mexer na aba ficaria velho sem avisar;
+ *  - uma ação primária por aba. Na Visão geral é o VERBO do próximo passo do
+ *    checklist (V5): "Cadastrar um Pixel", "Conectar o webhook de vendas"...;
+ *    quando o próximo passo é a tag, o botão copia a tag ali mesmo. As outras
+ *    abas ganham o verbo delas em V7.
  *
- * A lista é exportada porque a barra de abas do rodapé (`BarraDeAbas.tsx`)
- * mostra exatamente as mesmas cinco seções com os rótulos curtos. Duas listas
- * paralelas seriam duas navegações que discordam na primeira mudança.
+ * A paleta de comandos (⌘K) continua montada aqui, uma vez só para o console
+ * inteiro, e a lupa do cabeçalho abre a mesma paleta.
+ *
+ * `gaveta` é a gaveta de empresas (abaixo de `lg`), montada pelo layout do
+ * servidor com a lista que ele leu. Ela entra por prop, e não por import,
+ * para que a lista de empresas passe do servidor para ela sem desvio.
  */
-/* `area` é o mesmo valor que o <main> da rota declara em `data-area`. Ele entra
-   aqui na FASE 3b para que o sublinhado da aba ativa possa ser a tinta da área
-   de DESTINO: sem isso o cabeçalho fica fora de qualquer `[data-area]` e as
-   cinco abas herdariam a tinta padrão do :root, que é a do Painel — cinco
-   seções, uma cor só, e a régua deixaria de dizer onde você está. */
-export const SECOES = [
-  { href: '/painel', rotulo: 'Painel', curto: 'Painel', icon: Gauge, area: 'painel' },
-  {
-    href: '/instalacao',
-    rotulo: 'Instalação',
-    curto: 'Instalar',
-    icon: Plug,
-    area: 'instalacao',
-  },
-  { href: '/pixels', rotulo: 'Pixels', curto: 'Pixels', icon: Target, area: 'pixels' },
-  { href: '/', rotulo: 'Disparo manual', curto: 'Manual', icon: Send, area: 'manual' },
-  {
-    href: '/automatico',
-    rotulo: 'Disparo automático',
-    curto: 'Auto',
-    icon: Workflow,
-    area: 'automatico',
-  },
-] as const;
-
-/** `/` só está ativo em `/`; as outras casam por prefixo (abas e âncoras). */
-export function secaoAtiva(pathname: string, href: string): boolean {
-  return href === '/' ? pathname === '/' : pathname.startsWith(href);
-}
-
-/** Até duas letras do nome do operador; sem nome, o ícone genérico. */
-function iniciaisDoOperador(nome: string): string | null {
-  const partes = nome.trim().split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return null;
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
-}
-
-/** Uma linha só de item de menu — as cinco do operador são idênticas. */
-const ITEM_MENU =
-  'flex cursor-default items-center gap-2.5 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-fg-body outline-none select-none data-highlighted:border-tinta-texto data-highlighted:bg-tinta/15 data-highlighted:text-fg-strong';
-
-export function Header() {
+export function Header({
+  empresas: doServidor,
+  gaveta,
+}: {
+  empresas: EmpresaPublica[];
+  gaveta?: React.ReactNode;
+}) {
   const pathname = usePathname();
   const router = useRouter();
-  const [prefsAbertas, setPrefsAbertas] = useState(false);
 
-  const marcas = useBrandStore((s) => s.marcas);
-  const marcaAtivaId = useBrandStore((s) => s.marcaAtivaId);
-  const carregado = useBrandStore((s) => s.carregado);
   const carregar = useBrandStore((s) => s.carregar);
   const carregarEmpresas = useEmpresaStore((s) => s.carregar);
-  const nomeOperador = useUserStore((s) => s.nome);
-  const automatico = useEstadoAutomatico();
+  const empresas = useListaDeEmpresas(doServidor);
 
   useEffect(() => {
     void carregar();
     // A lista de empresas entra pelo mesmo caminho das marcas: o cabecalho e o
     // unico componente presente em toda tela, entao e dele a montagem que
-    // enche os dois stores. O `SeletorDeEmpresa` so le — ele nunca busca.
+    // enche os dois stores. A lateral e a gaveta so leem — elas nunca buscam.
     void carregarEmpresas();
     if (limparLegado()) {
       toast.warning('Token removido do navegador', {
@@ -120,317 +83,218 @@ export function Header() {
     }
   }, [carregar, carregarEmpresas]);
 
-  /** Apaga o cookie de sessão e limpa PII do rascunho local (D10). */
-  const sair = async () => {
-    try {
-      await fetch('/api/sessao', { method: 'DELETE' });
-    } catch {
-      /* offline: o cookie expira sozinho */
-    }
-    try {
-      useEventStore.persist.clearStorage();
-      useEventStore.getState().reset();
-    } catch {
-      /* localStorage indisponível */
-    }
-    // Recarga completa de propósito, e não router.push: sair precisa descartar
-    // o estado em memória da sessão anterior (marcas, rascunho do evento, fila)
-    // — um push manteria os stores vivos para quem entrasse depois.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign('/login');
-  };
+  const slug = slugDoEndereco(pathname);
+  const empresa = slug ? empresas.find((e) => e.slug === slug) : undefined;
+  const nomeDaEmpresa = empresa?.nome ?? slug ?? '';
+  const aba = slug ? rotuloDaAba(pathname, slug) : null;
+  // Só com a empresa achada na lista: um slug que não existe cai na tela
+  // "Empresa não encontrada", e ali não há tag nenhuma para copiar.
+  const naVisaoGeral = Boolean(empresa) && slug !== null && abaAtiva(pathname, slug) === '';
 
-  const ativa = marcas.find((m) => m.id === marcaAtivaId) ?? marcas[0];
-  const emTeste = Boolean(ativa?.testCode?.trim());
-  const iniciais = iniciaisDoOperador(nomeOperador);
+  // O que a Visão geral mediu desta empresa. Só vale NELA: nas outras abas o
+  // dono pode ter acabado de mudar o que o selo diria.
+  const medido = useEstadoNoCabecalho(slug);
+  const estado = naVisaoGeral ? (medido?.estado ?? null) : null;
+  const proximo = naVisaoGeral ? (medido?.proximo ?? null) : null;
+
+  const [copiando, setCopiando] = useState(false);
 
   /**
-   * A pílula de ambiente carrega o estado do automático (R-03). Antes eram
-   * duas coisas: um selo de ambiente aqui em cima e uma faixa inteira
-   * "Disparo automático: N em produção" numa terceira linha do cabeçalho —
-   * faixa que, de quebra, sumia entre 1024 e 1279px porque estava em
-   * `lg:hidden` enquanto a tira de abas ia até `xl`. As duas viraram esta
-   * pílula, visível em QUALQUER largura: o buraco de 1024–1279px deixa de
-   * existir por construção, e não por um breakpoint corrigido.
+   * "Copiar tag do site": o trecho do PageView, o que vai no `<head>` de todas
+   * as páginas do cliente. Pede à rota de sempre (`/api/tag/gerar`) e diz a
+   * empresa pelo cabeçalho, a do ENDEREÇO, sem depender do store.
+   *
+   * Sem domínio cadastrado a tag até sai, mas o coletor recusa o evento pela
+   * origem: copiar assim seria entregar ao cliente uma tag que não funciona.
+   * Então o botão não copia, diz por quê e leva para a aba Fontes, onde moram a
+   * tag e o campo do domínio do site desde a V8 (R1 da V8).
    */
-  const contaAuto =
-    automatico.situacao === 'carregando'
-      ? 'lendo…'
-      : automatico.regrasAuto === 0
-        ? 'sem auto'
-        : `${automatico.regrasAuto} auto`;
-  const ambienteLongo = `${emTeste ? 'TESTE' : 'PRODUÇÃO'} · ${contaAuto}`;
-  const ambienteCurto = emTeste ? 'TESTE' : 'PROD';
-  const ambienteFalado = [
-    emTeste
-      ? `Modo teste com o código ${ativa?.testCode ?? ''}`.trim()
-      : 'Modo produção: o evento entra nas métricas reais',
-    automatico.situacao === 'carregando'
-      ? 'ainda lendo as regras'
-      : automatico.regrasAuto === 0
-        ? 'nenhuma regra em disparo automático'
-        : `${automatico.regrasAuto} ${
-            automatico.regrasAuto === 1 ? 'regra' : 'regras'
-          } em disparo automático`,
-    'Abre os Pixels',
-  ].join('. ');
+  const copiarTag = async () => {
+    if (!slug || !empresa) return;
+    const irParaFontes = {
+      label: 'Abrir Fontes',
+      onClick: () => router.push(`/e/${slug}/fontes`),
+    };
+    setCopiando(true);
+    try {
+      const resposta = await pedir<{ dominioId: string | null; tags?: TagGerada[] }>(
+        '/api/tag/gerar',
+        {
+          cache: 'no-store',
+          headers: { 'X-Empresa-Id': empresa.id },
+        }
+      );
+      if (!resposta.dominioId) {
+        toast.warning('Cadastre o domínio do site antes de copiar a tag.', {
+          description: 'Sem domínio cadastrado, o console recusa os eventos que o site mandar.',
+          action: irParaFontes,
+        });
+        return;
+      }
+      const trecho = resposta.tags?.find((t) => t.evento.origem === 'tag.pageview')?.site;
+      if (!trecho) {
+        toast.error('A tag do site não veio pronta.', {
+          description: 'Abra a aba Fontes: a tag completa fica lá, com o botão de copiar.',
+          action: irParaFontes,
+        });
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(trecho);
+      } catch {
+        // Área de transferência bloqueada (permissão negada, página em http).
+        toast.error('O navegador bloqueou a cópia.', {
+          description: 'Abra a aba Fontes: a tag fica num campo que dá para selecionar e copiar à mão.',
+          action: irParaFontes,
+        });
+        return;
+      }
+      toast.success('Tag do site copiada.', {
+        description: 'Cole no <head> de todas as páginas do site.',
+      });
+    } catch (e) {
+      // Sessão expirada já redireciona para o login dentro de `pedir`.
+      if (e instanceof SessaoExpirada) return;
+      toast.error('Não deu para gerar a tag agora.', {
+        description: `${e instanceof Error ? `${e.message} ` : ''}Tente de novo em instantes.`,
+      });
+    } finally {
+      setCopiando(false);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface-0/82 backdrop-blur-md">
-      {/* UMA linha, 56px, em qualquer largura. O cabeçalho anterior tinha três
-          (linha de controles + tira de 5 abas + faixa de status) e chegava a
-          305px no celular: a dobra inteira era casca. A navegação das telas
-          estreitas desceu para a barra de abas do rodapé, que é onde o polegar
-          alcança, e o estado do automático entrou na pílula de ambiente. */}
-      <div className="mx-auto flex h-[var(--altura-cabecalho)] w-full max-w-cabecalho items-center gap-2.5 px-4 sm:px-6 lg:px-8">
-        {/* Marca do produto: o vetor oficial (`ui/app-mark.tsx`) desenhado na
-            cor do texto forte, e mais nada.
+      <div className="flex h-[var(--altura-cabecalho)] w-full items-center gap-2.5 px-4 sm:px-6">
+        {gaveta}
 
-            FASE 3b, como estava previsto: caiu a moldura de 26px — quadrado de
-            superfície, cantos arredondados e realce interno — que sobrou da
-            FASE 1, quando só o gradiente azul de dentro dela tinha saído.
-            "Ícone dentro de quadradinho" é a assinatura de template do §8: o
-            quadrado não distinguia marca nenhuma (qualquer produto tem um), e
-            ainda fazia a marca disputar peso com o nome escrito ao lado. Sem
-            caixa, o vetor cresce de 16 para 22px e vira a coisa que ele é. */}
-        <Link
-          href="/painel"
-          aria-label={`${NOME_PRODUTO} — ir para o Painel`}
-          className="flex shrink-0 items-center gap-2 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
-        >
-          <AppMark size={22} className="shrink-0 text-fg-strong" />
-          {/* Some só na faixa de 80rem a 92rem: é onde o menu já está na linha
-              e o espaço acaba. A marca fica, e o `aria-label` do link continua
-              dizendo o nome por extenso. */}
-          <span className="hidden text-label font-semibold tracking-tight text-fg-strong sm:inline xl:hidden barra:inline">
-            {NOME_PRODUTO}
-          </span>
-        </Link>
-
-        <span aria-hidden className="h-5 w-px shrink-0 bg-line-strong" />
-
-        {/* Quem é a empresa dona da tela — visível em TODA largura, inclusive
-            no celular, onde o nome vivia escondido. Errar de empresa custa um
-            evento real no Pixel errado. */}
-        <SeletorDeEmpresa />
-
-        {/* A navegação de cima só cabe a partir de 80rem. Abaixo disso quem
-            navega é a barra de abas do rodapé — nunca as duas ao mesmo tempo,
-            e nunca nenhuma das duas. */}
-        <nav aria-label="Seções" className="ml-1 hidden items-center xl:flex">
-          {SECOES.map((item) => {
-            const Icon = item.icon;
-            const ativo = secaoAtiva(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-area={item.area}
-                aria-current={ativo ? 'page' : undefined}
-                className={cn(
-                  // A linha de 2px assenta na borda de baixo do cabeçalho: é a
-                  // régua que diz onde você está, e não um retângulo de fundo
-                  // (cor cheia é ação, não localização — a pílula nunca volta).
-                  // Ela é `--tinta-texto`, e não `--tinta`: a tinta de fundo
-                  // mora entre 6% e 16% e, numa linha de 2px sobre o cabeçalho,
-                  // ficava fraca demais para ser lida como marca de lugar. A de
-                  // texto é a versão que existe justamente para aguentar pouco
-                  // pixel — é a mesma cor do link e do anel de foco da área.
-                  'group relative flex h-[var(--altura-cabecalho)] items-center px-0.5',
-                  ativo &&
-                    'after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-tinta-texto'
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex items-center gap-2 rounded-control px-2.5 py-1.5 text-label font-medium whitespace-nowrap transition-colors',
-                    ativo
-                      ? 'text-fg-strong'
-                      : 'text-fg-muted group-hover:bg-surface-2 group-hover:text-fg-body'
+        {/* A trilha. O último pedaço é a página aberta (`aria-current`), e os
+            anteriores são links para subir um nível. Abaixo de `lg` o botão da
+            gaveta, logo à esquerda, já diz a empresa: a trilha fica só com a
+            aba, e o nome não aparece duas vezes na mesma linha. */}
+        <nav aria-label="Trilha" className="min-w-0 flex-1">
+          <ol className="flex min-w-0 items-center gap-1.5 text-label">
+            {pathname.startsWith('/guia') ? (
+              <li className="truncate font-medium text-fg-strong" aria-current="page">
+                Ajuda
+              </li>
+            ) : (
+              <>
+                <li className={slug ? 'hidden shrink-0 lg:block' : 'shrink-0'}>
+                  {slug ? (
+                    <Link
+                      href="/empresas"
+                      className="rounded-control text-fg-muted transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+                    >
+                      Empresas
+                    </Link>
+                  ) : (
+                    <span
+                      className="font-medium text-fg-strong"
+                      aria-current={pathname === '/empresas' ? 'page' : undefined}
+                    >
+                      Empresas
+                    </span>
                   )}
-                >
-                  <Icon className="size-4 shrink-0" aria-hidden />
-                  {item.rotulo}
-                </span>
-              </Link>
-            );
-          })}
+                </li>
+                {slug && (
+                  <>
+                    <li aria-hidden className="hidden shrink-0 text-fg-muted lg:block">
+                      /
+                    </li>
+                    <li className="hidden min-w-0 truncate lg:block">
+                      <Link
+                        href={`/e/${slug}`}
+                        className="rounded-control font-medium text-fg-body transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+                      >
+                        {nomeDaEmpresa}
+                      </Link>
+                    </li>
+                  </>
+                )}
+                {slug && aba && (
+                  <>
+                    <li aria-hidden className="hidden shrink-0 text-fg-muted lg:block">
+                      /
+                    </li>
+                    <li className="truncate font-medium text-fg-strong" aria-current="page">
+                      {aba}
+                    </li>
+                  </>
+                )}
+              </>
+            )}
+          </ol>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {carregado && ativa && (
-            <Link
-              href={`/pixels#${ativa.id}`}
-              aria-label={ambienteFalado}
-              title={ambienteFalado}
-              className={cn(
-                'flex h-control-sm shrink-0 items-center gap-2 rounded-full border px-2.5 text-caption font-semibold tracking-wide uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
-                emTeste
-                  ? 'border-tinta-texto/40 bg-tinta/10 text-tinta-texto hover:bg-tinta/15'
-                  : 'border-warning/40 bg-warning/10 text-warning hover:bg-warning/15'
-              )}
-            >
-              {/* Ponto com halo, e não ponto que pulsa: nada se move parado
-                  nesta casa. O halo é um anel fixo. */}
-              <span
-                aria-hidden
-                className={cn(
-                  'size-[0.4375rem] shrink-0 rounded-full ring-3',
-                  emTeste
-                    ? 'bg-tinta-texto ring-tinta-texto/20'
-                    : 'bg-warning ring-warning/20'
-                )}
-              />
-              {/* Mesma faixa, mesmo motivo. O `title` e o `aria-label` do link
-                  seguem com a frase inteira, então o leitor de tela e o
-                  passar do mouse continuam dizendo quantas regras estão em
-                  disparo automático mesmo quando o selo está curto. */}
-              <span className="hidden sm:inline xl:hidden barra:inline">{ambienteLongo}</span>
-              <span className="sm:hidden xl:inline barra:hidden">{ambienteCurto}</span>
-            </Link>
-          )}
+        {/* O estado da empresa: ponto + texto, nunca só a cor. Sem medida (fora
+            da Visão geral, ou antes de ela medir), "—" por extenso para o
+            leitor de tela, e nunca um verde que ninguém conferiu. */}
+        {slug && estado ? (
+          <span
+            title={estado.frase}
+            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-caption font-medium text-fg-body sm:inline-flex"
+          >
+            <span aria-hidden className={cn('size-1.5 rounded-full', PONTO_DO_ESTADO[estado.tom])} />
+            <span aria-hidden>{estado.rotulo}</span>
+            <span className="sr-only">Estado da empresa: {estado.frase}</span>
+          </span>
+        ) : slug ? (
+          <span
+            title="Estado da empresa: aparece na Visão geral"
+            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-caption text-fg-muted sm:inline-flex"
+          >
+            <span aria-hidden className="size-1.5 rounded-full bg-fg-muted" />
+            <span aria-hidden>—</span>
+            <span className="sr-only">Estado da empresa: aparece na Visão geral</span>
+          </span>
+        ) : null}
 
-          {/* Busca — o mesmo botão em três tamanhos, pela conta do espaço.
-              A linha tem 78rem úteis (container de 82rem menos o respiro) e o
-              menu de cinco seções come 41,6rem deles. Com o campo por extenso
-              (15rem) a conta dá 95,6rem: não cabe em largura nenhuma, porque
-              quem limita é o container, não a janela. O flex então esmagava o
-              único que podia encolher — o seletor de empresa, de 10,5rem para
-              0,1rem, com o nome da empresa sumindo.
-              Então: de 80rem para cima, onde o menu está na tela, a busca é
-              ícone + ⌘K (5,5rem) e sobram 4rem. Abaixo de 80rem o menu desceu
-              para a barra de abas e o campo por extenso volta a caber. */}
-          <button
-            type="button"
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))
-            }
-            aria-label="Buscar pedido, e-mail ou regra"
-            className="hidden h-control-sm w-60 shrink items-center gap-2 rounded-control border border-line bg-surface-1 px-2.5 text-label text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:flex xl:hidden"
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))}
+          aria-label="Buscar pedido, e-mail ou regra"
+          title="Buscar pedido, e-mail ou regra (⌘K)"
+          className="flex h-control-sm shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface-1 px-2 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+        >
+          <Search className="size-4 shrink-0" aria-hidden />
+          {/* O atalho fica à vista a partir de `lg`: é ele que conta que dá para
+              buscar digitando. */}
+          <kbd
+            aria-hidden
+            className="hidden rounded-sm border border-line-control px-1.5 font-mono text-caption lg:inline"
           >
-            <Search className="size-4 shrink-0" aria-hidden />
-            <span className="truncate">Buscar pedido, e-mail, regra</span>
-            <kbd
-              aria-hidden
-              className="ml-auto rounded-sm border border-line-control px-1.5 font-mono text-caption"
-            >
-              ⌘K
-            </kbd>
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))
-            }
-            aria-label="Buscar pedido, e-mail ou regra"
-            title="Buscar pedido, e-mail ou regra (⌘K)"
-            className="grid size-control-sm shrink-0 place-items-center gap-1.5 rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto lg:hidden xl:flex xl:h-control-sm xl:w-auto xl:items-center xl:px-2"
-          >
-            <Search className="size-4 shrink-0" aria-hidden />
-            {/* O atalho fica à vista de propósito: sem o campo por extenso, é
-                ele que conta que dá para buscar digitando. */}
-            <kbd
-              aria-hidden
-              className="hidden rounded-sm border border-line-control px-1.5 font-mono text-caption xl:inline"
-            >
-              ⌘K
-            </kbd>
-          </button>
+            ⌘K
+          </kbd>
+        </button>
 
-          {/* Avisos leva para os retornos do disparo automático — é lá que o
-              erro de entrega aparece por escrito. O sino não abre uma caixa de
-              notificação que o produto não tem. */}
-          <Link
-            href="/automatico#retornos"
-            aria-label="Avisos: retornos e erros do disparo automático"
-            title="Avisos: retornos e erros do disparo automático"
-            className="grid size-control-sm shrink-0 place-items-center rounded-control border border-line bg-surface-1 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+        {/* A ação primária da Visão geral: o verbo do próximo passo. Antes de
+            a Visão geral medir, nenhum botão (e não um verbo que trocaria
+            logo depois). */}
+        {proximo?.acao === 'copiar-tag' ? (
+          <Button
+            onClick={() => void copiarTag()}
+            disabled={copiando}
+            ocupado={copiando}
+            aria-label={proximo.verbo}
           >
-            <Bell className="size-4" aria-hidden />
+            {!copiando && <Copy aria-hidden />}
+            <span className="hidden sm:inline">{proximo.verbo}</span>
+          </Button>
+        ) : proximo ? (
+          <Link href={proximo.href} className={buttonVariants()} aria-label={proximo.verbo} title={proximo.frase}>
+            <span className="hidden sm:inline">{proximo.verbo}</span>
+            <ArrowRight aria-hidden />
           </Link>
-
-          {/* Menu do operador. Os três botões soltos que moravam aqui (Guia,
-              Preferências, Sair) mais "Pixel e token" e "Adicionar empresa"
-              cabem num menu só — era esse aglomerado que quebrava em cinco
-              linhas em 1536px. */}
-          <Menu.Root>
-            <Menu.Trigger
-              render={
-                <button
-                  type="button"
-                  aria-label={
-                    nomeOperador
-                      ? `Menu do operador: ${nomeOperador}`
-                      : 'Menu do operador'
-                  }
-                  className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full border border-line-control bg-surface-3 text-caption font-semibold text-fg-strong transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
-                />
-              }
-            >
-              {iniciais ?? <User className="size-4" aria-hidden />}
-            </Menu.Trigger>
-
-            <Menu.Portal>
-              <Menu.Positioner
-                side="bottom"
-                align="end"
-                sideOffset={6}
-                className="isolate z-50"
-              >
-                <Menu.Popup className="min-w-56 origin-(--transform-origin) rounded-panel border border-line-control bg-surface-3 p-1 shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-                  <Menu.Item
-                    onClick={() => router.push('/pixels')}
-                    className={ITEM_MENU}
-                  >
-                    <Target className="size-4 shrink-0" aria-hidden />
-                    Pixel e token
-                  </Menu.Item>
-                  <Menu.Item
-                    onClick={() =>
-                      window.dispatchEvent(
-                        new CustomEvent('capi:adicionar-empresa')
-                      )
-                    }
-                    className={ITEM_MENU}
-                  >
-                    <Plus className="size-4 shrink-0" aria-hidden />
-                    Adicionar empresa
-                  </Menu.Item>
-                  <Menu.Item
-                    onClick={() => router.push('/guia')}
-                    className={ITEM_MENU}
-                  >
-                    <BookOpen className="size-4 shrink-0" aria-hidden />
-                    Abrir o guia
-                  </Menu.Item>
-                  <Menu.Item
-                    onClick={() => setPrefsAbertas(true)}
-                    className={ITEM_MENU}
-                  >
-                    <Settings className="size-4 shrink-0" aria-hidden />
-                    Preferências
-                  </Menu.Item>
-
-                  <Menu.Separator className="my-1 h-px bg-line-strong" />
-
-                  <Menu.Item
-                    onClick={() => void sair()}
-                    className={cn(ITEM_MENU, 'text-danger')}
-                  >
-                    <LogOut className="size-4 shrink-0" aria-hidden />
-                    Sair do console
-                  </Menu.Item>
-                </Menu.Popup>
-              </Menu.Positioner>
-            </Menu.Portal>
-          </Menu.Root>
-        </div>
+        ) : null}
       </div>
 
-      <SettingsDialog open={prefsAbertas} onOpenChange={setPrefsAbertas} />
-      {/* "Pixel e token" na paleta deixou de abrir um modal e passou a ser o
-          que o nome sempre prometeu: ir para o lugar onde o Pixel mora. */}
-      <CommandPalette onAbrirMarcas={() => router.push('/pixels')} />
+      {/* "Pixel e token" na paleta leva ao lugar onde o Pixel mora: a aba
+          Pixels da empresa aberta, ou a rota antiga, que redireciona para a da
+          empresa ativa, quando não há empresa no endereço. */}
+      <CommandPalette
+        onAbrirMarcas={() => router.push(slug ? `/e/${slug}/pixels` : '/pixels')}
+      />
     </header>
   );
 }

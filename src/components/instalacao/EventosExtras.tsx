@@ -107,8 +107,8 @@ export function EventosExtras({ tags, regras, copiar, copiado }: EventosExtrasPr
         <div id="eventos-extras-conteudo" className="mt-3 flex flex-col gap-3">
           <p className="text-body text-fg-body">
             Tags para estes eventos <strong className="text-fg-strong">já existem</strong>{' '}
-            — o que falta não é gerar mais código, é ligar o disparo. Nenhum
-            deles dispara sozinho: no GTM, use o acionador indicado; direto no
+            — o que falta não é gerar mais código, é ligar o envio. Nenhum
+            deles sai sozinho: no GTM, use o acionador indicado; direto no
             site, chame a função no momento certo.
           </p>
 

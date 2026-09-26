@@ -76,7 +76,7 @@ const CAMINHOS: Caminho[] = [
       </>,
       <>
         Salve, clique em <strong>Visualizar</strong> e abra o site: o modo de
-        depuração precisa mostrar a tag como <em>disparada</em>.
+        depuração precisa mostrar a tag como <em>acionada</em>.
       </>,
       <>
         Só então clique em <strong>Enviar</strong> para publicar a versão. Tag
@@ -109,9 +109,9 @@ const CAMINHOS: Caminho[] = [
         erro em vermelho vindo do endereço do coletor.
       </>,
       <>
-        Confira na <strong>caixa de entrada</strong> do disparo automático que o
-        evento chegou. Se não chegou, o domínio provavelmente não está na lista
-        de domínios autorizados, mais abaixo nesta página.
+        Confira em <strong>Eventos → Fila</strong> que o evento chegou. Se não
+        chegou, o domínio provavelmente não está na lista de sites permitidos,
+        mais abaixo nesta página.
       </>,
     ],
   },
@@ -282,7 +282,7 @@ export function OndeInstalarTag({
                         id={`codigo-pageview-${caminho.id}`}
                         label="Código pronto — Visita à página (PageView)"
                         helper={ajudaComDestino(
-                          'Dispara sozinho assim que a página abre. É o primeiro evento a colar.',
+                          'Sai sozinho assim que a página abre. É o primeiro evento a colar.',
                           regras,
                           pageview.evento.origem
                         )}
@@ -320,7 +320,7 @@ export function OndeInstalarTag({
                         id={`codigo-viewcontent-${caminho.id}`}
                         label="Código pronto — Visualização de página (ViewContent)"
                         helper={ajudaComDestino(
-                          'Também dispara sozinho: alguns segundos depois, ou quando o visitante rola a página.',
+                          'Também sai sozinho: alguns segundos depois, ou quando o visitante rola a página.',
                           regras,
                           viewcontent.evento.origem
                         )}

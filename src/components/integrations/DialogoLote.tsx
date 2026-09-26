@@ -49,7 +49,7 @@ export type MotivoFora = MotivoInelegivel | 'sem-evento-meta';
 export const TEXTO_MOTIVO: Record<MotivoFora, string> = {
   'ja-enviado': 'já foram enviados à Meta',
   ignorado: 'estão marcados para não enviar',
-  'teste-interno': 'são teste da equipe ou ping da plataforma',
+  'teste-interno': 'são teste interno ou ping da plataforma',
   'sem-evento-meta': 'ainda não têm evento padrão da Meta (falta regra)',
 };
 
@@ -129,11 +129,11 @@ export function DialogoLote({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-heading font-semibold text-fg-strong">
             <Send className="size-5 text-tinta-texto" aria-hidden />
-            Disparar {elegiveis.length} evento{elegiveis.length === 1 ? '' : 's'} para a Meta
+            Enviar {elegiveis.length} evento{elegiveis.length === 1 ? '' : 's'} para a Meta
           </DialogTitle>
           <DialogDescription className="text-caption text-fg-muted">
             Um envio por evento, na ordem da lista, um de cada vez. Cada um passa pelas mesmas
-            travas do botão &ldquo;Disparar direto&rdquo;.
+            travas do botão &ldquo;Enviar agora&rdquo;.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +146,7 @@ export function DialogoLote({
             <Insignia empresa={empresa} className="size-8 overflow-hidden" />
             <div className="min-w-0">
               <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
-                Disparando pela empresa
+                Enviando pela empresa
               </p>
               <p className="truncate text-label font-semibold text-fg-strong">
                 {empresa.nome}
@@ -164,7 +164,7 @@ export function DialogoLote({
 
         <SeletorDePixel
           modo="varios"
-          rotulo="Pixels de destino"
+          rotulo="Pixels que recebem"
           valor={escolhidasVisiveis}
           onChange={onMarcas}
         />
@@ -209,7 +209,7 @@ export function DialogoLote({
         ) : marcas.length > 0 ? (
           // Sem nada marcado, "todos em teste" seria mentira: nao ha nenhum.
           <Callout tone="info">
-            Nenhum Pixel marcado. Marque pelo menos um Pixel desta empresa para disparar.
+            Nenhum Pixel marcado. Marque pelo menos um Pixel desta empresa para enviar.
           </Callout>
         ) : null}
 
@@ -243,7 +243,7 @@ export function DialogoLote({
             }}
           >
             <Send className="size-4" aria-hidden />
-            Disparar {elegiveis.length}
+            Enviar {elegiveis.length}
           </Button>
         </DialogFooter>
       </DialogContent>

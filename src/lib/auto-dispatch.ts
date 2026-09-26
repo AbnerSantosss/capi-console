@@ -30,7 +30,9 @@ import { normalizarTelefone } from './telefone';
  *   3.  validacao        -> janela de 7 dias e campos obrigatorios
  *   4.  deduplicacao     -> o mesmo pedido no mesmo pixel nunca vai duas vezes,
  *                           por `event_id`, por `order_id` ou por
- *                           `e-mail|valor|dia` quando nao ha nenhum dos dois
+ *                           `e-mail|valor|dia` quando nao ha nenhum dos dois.
+ *                           Envio em modo teste (`test_event_code`) nao conta:
+ *                           nao marca e nao barra o real depois (C8, D12)
  *
  * Sobre a trava do Pixel da FASE 6 (autoDisparo): quem DECIDE e
  * `modo-por-marca.ts`, chamado pelos handlers; esta funcao recebe a lista de
@@ -367,6 +369,8 @@ export async function dispararItem(params: {
     }
 
     try {
+      // `modoTeste` (acima) e o `testEventCode` saem da MESMA leitura de
+      // `marca.testCode`: o log e o dedup (C8) dizem exatamente o que foi enviado.
       const r = await enviarParaMeta({
         pixelId,
         accessToken,
@@ -397,9 +401,14 @@ export async function dispararItem(params: {
         atribuicao,
         pixelId,
         marcaId,
+        // C8 (D12): o mesmo `modoTeste` que decidiu o `testEventCode` acima.
+        // Linha de teste fica fora do indice de deduplicacao (`dedup.ts`).
+        modoTeste,
       }).catch((e) => console.error('[auto-dispatch] falha ao gravar log:', e));
 
-      if (ok) await marcarEnviado(pixelId, evento.event_name, identidade);
+      // Envio em modo teste nao e conversao: nao marca, e a mesma venda pode
+      // sair de verdade quando o Pixel for para producao (C8, D12).
+      if (ok) await marcarEnviado(pixelId, evento.event_name, identidade, { modoTeste });
 
       resultados.push({
         ...base,

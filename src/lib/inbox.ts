@@ -100,6 +100,21 @@ export interface ItemInbox {
   nomeCliente?: string;
   /** E-mail mascarado. O valor inteiro fica so no payload. */
   emailMascarado?: string;
+  /**
+   * SHA-256 (hex) do e-mail inteiro, depois de `trim` + minusculas — ver
+   * `hashDoEmail`. Serve SO para contar compras do mesmo comprador
+   * (`contarComprasDoEmail`).
+   *
+   * 🔴 Nunca vai para a tela. Todo ponto que devolve item para fora deste
+   * modulo passa por `paraTela`, que tira este campo: a lista, o `acharEntrada`,
+   * o retorno de `marcarStatus`/`anotarResultado`/`registrarEntrada` e o aviso
+   * aos ouvintes do SSE. Ele fica na memoria e no `logs/inbox.jsonl` (que ja
+   * guarda o payload inteiro, com o e-mail em claro), e em nenhum outro lugar.
+   *
+   * Opcional: item gravado antes desta correcao nao tem o campo e fica FORA da
+   * contagem — nunca reescrevemos linha antiga para encaixa-lo (append-only).
+   */
+  emailHash?: string;
   orderId?: string;
   temFbc: boolean;
   temFbp: boolean;
@@ -212,9 +227,12 @@ export function assinar(fn: Ouvinte): () => void {
  * canal morreu.
  */
 function avisar(item: ItemInbox, tipo: 'novo' | 'atualizado') {
+  // O SSE serializa o que recebe e manda para o navegador: o ouvinte ganha a
+  // copia de tela, sem `emailHash`, e nunca o objeto da memoria.
+  const limpo = paraTela(item);
   for (const fn of ouvintes) {
     try {
-      fn(item, tipo);
+      fn(limpo, tipo);
     } catch {
       /* um ouvinte quebrado nao derruba o recebimento */
     }
@@ -226,6 +244,39 @@ export function mascararEmail(email?: string): string | undefined {
   const [usuario, dominio] = email.split('@');
   const visivel = usuario.slice(0, 2);
   return `${visivel}${'*'.repeat(Math.max(1, usuario.length - 2))}@${dominio}`;
+}
+
+/**
+ * Chave de contagem por comprador: SHA-256 (hex) do e-mail INTEIRO, depois de
+ * `trim` e minusculas. `undefined` quando nao ha e-mail (vazio ou sem `@`).
+ *
+ * Por que nao a mascara: `mascararEmail` guarda so as duas primeiras letras e o
+ * tamanho do nome, entao `maria@gmail.com`, `marta@gmail.com` e
+ * `mauro@gmail.com` viram todos `ma***@gmail.com` — tres pessoas contadas como
+ * uma, e o automatico travado por "e-mail repetido" numa venda legitima. O
+ * hash do e-mail inteiro separa as tres e junta `Maria@Gmail.com ` com
+ * `maria@gmail.com`, que e a mesma pessoa.
+ *
+ * Usa o `node:crypto` deste modulo, de proposito sem importar `meta-capi.ts`:
+ * a caixa de entrada descreve um arquivo e nao deve puxar o motor de envio.
+ */
+export function hashDoEmail(email?: string): string | undefined {
+  const e = (email ?? '').trim().toLowerCase();
+  if (!e || !e.includes('@')) return undefined;
+  return crypto.createHash('sha256').update(e).digest('hex');
+}
+
+/**
+ * Copia do item para sair deste modulo: tudo, menos `emailHash`.
+ *
+ * 🔴 Obrigatoria em todo ponto de saida (lista, `acharEntrada`, retorno de
+ * `registrarEntrada`/`marcarStatus`/`anotarResultado` e aviso do SSE). A copia
+ * e rasa: quem recebe nao muda a memoria trocando um campo de primeiro nivel.
+ */
+export function paraTela(item: ItemInbox): ItemInbox {
+  const copia: ItemInbox = { ...item };
+  delete copia.emailHash;
+  return copia;
 }
 
 /**
@@ -349,35 +400,36 @@ export async function registrarEntrada(
 
   avisar(item, 'novo');
 
-  return item;
+  return paraTela(item);
 }
 
 /**
  * Quantas COMPRAS ja existem na caixa com este mesmo e-mail — o numero que
  * `avaliarTeste` usa para desconfiar de um checkout sendo martelado.
  *
- * 🔴 A chave e o e-mail MASCARADO, e isso e o ponto. `mascararEmail` e
- * deterministica (`jairo@x.com` sempre vira `ja***@x.com`), entao ela serve de
- * chave de agrupamento sem que e-mail em texto claro precise existir em lugar
- * nenhum alem do payload que ja esta gravado. Somar por e-mail cru obrigaria a
- * decifrar 1000 payloads a cada webhook, e ainda espalharia PII pela memoria.
+ * 🔴 A chave e o `emailHash` (SHA-256 do e-mail inteiro, ver `hashDoEmail`),
+ * e NAO a mascara. A mascara guarda so as duas primeiras letras e o tamanho do
+ * nome: `maria@gmail.com`, `marta@gmail.com` e `mauro@gmail.com` davam todos
+ * `ma***@gmail.com` e contavam como uma pessoa so — tres compradoras diferentes
+ * e o automatico travado por "e-mail repetido" numa venda real. Com o hash,
+ * cada e-mail conta so as proprias compras.
  *
- * O preco e uma colisao teorica: dois e-mails com as mesmas duas primeiras
- * letras E o mesmo dominio (`joao@x.com` e `jose@x.com`) contam juntos. Como o
- * resultado de uma suspeita e "espera um clique humano" — nunca "descarta" —,
- * o pior caso e uma venda a mais na fila, que e o lado seguro do erro.
+ * Item sem `emailHash` (gravado antes desta correcao, ou sem e-mail) fica FORA
+ * da contagem. O efeito e contar a menos por um tempo — no pior caso uma
+ * suspeita que so aparece mais tarde —, o que e melhor que reescrever o
+ * historico append-only para encaixar o campo.
  *
  * Nao conta o item que esta chegando: quem chama soma 1 se quiser incluir.
  */
 export async function contarComprasDoEmail(
-  emailMascarado: string | undefined,
+  emailHash: string | undefined,
   empresaId?: string
 ): Promise<number> {
-  if (!emailMascarado) return 0;
+  if (!emailHash) return 0;
   await carregarDoDisco();
   let n = 0;
   for (const i of memoria) {
-    if (i.emailMascarado !== emailMascarado) continue;
+    if (!i.emailHash || i.emailHash !== emailHash) continue;
     if (empresaId !== undefined && (i.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) continue;
     // `ehCompra` olha o evento da Meta, a mesma regua do painel: duas contas de
     // "compra" diferentes no mesmo produto seriam duas respostas para a mesma
@@ -400,12 +452,34 @@ export async function listarEntradas(limite = 50, empresaId?: string): Promise<I
     empresaId === undefined
       ? memoria
       : memoria.filter((i) => (i.empresaId ?? EMPRESA_DEFAULT_ID) === empresaId);
-  return [...base].reverse().slice(0, limite);
+  return [...base].reverse().slice(0, limite).map(paraTela);
+}
+
+/**
+ * O instante em que a memória da caixa começa, SE ela está no teto (R2 da V4).
+ *
+ * A memória guarda os últimos `LIMITE_MEMORIA` itens de TODAS as empresas, e
+ * `listarEntradas` filtra por empresa depois: uma empresa quieta ao lado de
+ * outra com muito page view recebe uma lista curta, mas os itens antigos dela
+ * já saíram. Com a memória no teto, antes deste instante pode faltar item de
+ * qualquer empresa — o resumo usa isso para não mostrar "0" num dia que não
+ * leu. `null`: a memória não chegou ao teto e tem tudo o que o arquivo tem.
+ */
+export async function inicioDaMemoriaNoTeto(): Promise<number | null> {
+  await carregarDoDisco();
+  if (memoria.length < LIMITE_MEMORIA) return null;
+  let inicio = Number.POSITIVE_INFINITY;
+  for (const i of memoria) {
+    const t = Date.parse(i.recebidoEm);
+    if (Number.isFinite(t) && t < inicio) inicio = t;
+  }
+  return Number.isFinite(inicio) ? inicio : null;
 }
 
 export async function acharEntrada(id: string): Promise<ItemInbox | undefined> {
   await carregarDoDisco();
-  return memoria.find((i) => i.id === id);
+  const item = memoria.find((i) => i.id === id);
+  return item ? paraTela(item) : undefined;
 }
 
 export async function marcarStatus(id: string, status: StatusEntrada) {
@@ -415,7 +489,7 @@ export async function marcarStatus(id: string, status: StatusEntrada) {
   item.status = status;
   await anotar({ tipo: 'status', id, status }).catch(() => {});
   avisar(item, 'atualizado');
-  return item;
+  return paraTela(item);
 }
 
 /** Guarda o resultado por pixel do disparo e avisa a tela pelo SSE. */
@@ -426,7 +500,7 @@ export async function anotarResultado(id: string, resultados: ResultadoPorPixel[
   item.resultados = resultados;
   await anotar({ tipo: 'resultado', id, resultados }).catch(() => {});
   avisar(item, 'atualizado');
-  return item;
+  return paraTela(item);
 }
 
 /**

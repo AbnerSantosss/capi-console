@@ -197,11 +197,13 @@ export function ListaDeTestes({
   const vazia = emails.length === 0 && nomes.length === 0;
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    // `id="testes-internos"` (V7): a âncora que outras telas usam para trazer
+    // o operador direto a esta lista.
+    <div id="testes-internos" className="flex min-w-0 scroll-mt-32 flex-col gap-5">
       <Callout tone="danger" icon={FlaskConical} title="O que cai nesta lista não chega à Meta">
-        E-mail ou nome cadastrado aqui vira <strong>teste</strong>: o evento fica registrado na caixa
-        de entrada, some de todas as porcentagens e <strong>nunca é enviado</strong> — nem por clique,
-        nem em modo automático. Cadastre só quem é da equipe.
+        E-mail ou nome cadastrado aqui vira <strong>teste</strong>: o evento fica registrado na Fila,
+        some de todas as porcentagens e <strong>nunca é enviado</strong> — nem por clique, nem em
+        modo automático. Cadastre só quem é da equipe.
       </Callout>
 
       {/* ---------------- e-mails ---------------- */}
@@ -341,7 +343,7 @@ export function ListaDeTestes({
       <Panel title="E-mail repetido em várias compras" icon={Repeat2}>
         <p className="text-caption text-fg-muted">
           Comprador de infoproduto compra uma vez. Quando o mesmo e-mail aparece em várias{' '}
-          <strong className="text-fg-body">compras</strong>, o console para de disparar sozinho e
+          <strong className="text-fg-body">compras</strong>, o console para de enviar sozinho e
           espera você conferir.
         </p>
 
@@ -350,8 +352,8 @@ export function ListaDeTestes({
             console só REPAROU num padrão, e descartar sozinho uma venda que ele
             apenas acha que é teste é o erro caro do outro lado. */}
         <Callout tone="warning" icon={Repeat2} className="mt-3">
-          Isto <strong>não descarta nada</strong>: o evento fica na fila, continua contando nos
-          números e pode ser disparado por você a qualquer momento. Só o automático é suspenso.
+          Isto <strong>não descarta nada</strong>: o evento fica na Fila, continua contando nos
+          números e pode ser enviado por você a qualquer momento. Só o automático é suspenso.
         </Callout>
 
         <div className="mt-3 max-w-64">

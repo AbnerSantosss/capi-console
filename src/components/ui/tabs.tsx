@@ -81,8 +81,10 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         // A correcao de §13.4.2: sobe de superficie e ganha limite visivel.
         // Sem sombra — DS-2.4 reserva sombra para camada flutuante.
         "data-active:border-line-control data-active:bg-surface-2 data-active:text-fg-strong",
-        // Variante `line`: a aba ativa e marcada pelo risco de acento.
-        "after:absolute after:bg-tinta-texto after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        // Variante `line`: a aba ativa e marcada pelo risco de acento. Na
+        // horizontal o risco tem 3px (v7, o design do dono); a cor continua
+        // a tinta da area.
+        "after:absolute after:bg-tinta-texto after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-[3px] group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
         className
       )}
       {...props}

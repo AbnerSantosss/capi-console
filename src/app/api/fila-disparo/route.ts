@@ -1,95 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { montarFilaDisparo, dispararFila } from '@/lib/batch-processor';
-import { acharMarca } from '@/lib/config-store';
 import { exigirSessao } from '@/lib/sessao';
+
+/**
+ * Disparo em lote — APOSENTADO em 23/09/2026 (D14, D15, T5; tarefa C11 do
+ * plano de correções do pacote 16).
+ *
+ * Esta rota recebia entregas de webhook coladas no corpo, montava uma fila e
+ * mandava tudo para a Meta pelo processador de lote de `src/lib/` (apagado
+ * junto; está no histórico do git). No
+ * caminho ela inventava compra: o evento que não era reconhecido caía em
+ * `Lead`, e a marca pedida nunca dava 404 (caía no Pixel padrão). Nenhuma tela
+ * a chamava.
+ *
+ * Agora ela só responde 410 (Gone): não lê o corpo e não importa nada que
+ * envie, grave disparo ou consulte o dedup. Venda que precisa sair vai pela
+ * caixa de entrada do console. A sessão continua sendo exigida primeiro, como
+ * nas outras rotas: quem não entrou recebe 401 e não descobre nada.
+ */
+const MENSAGEM = 'O disparo em lote foi aposentado. Use a caixa de entrada do console.';
 
 export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
-    const body = await request.json();
-
-    // Pode receber entregas como: { deliveries: [...] }, { data: [...] } ou diretamente [...]
-    let rawEntregas = body.deliveries || body.data || body.itens || body;
-    if (!Array.isArray(rawEntregas)) {
-      if (typeof rawEntregas === 'object' && rawEntregas !== null) {
-        rawEntregas = [rawEntregas];
-      } else {
-        return NextResponse.json(
-          { erro: 'Formato inválido. Esperava um array de entregas de webhook.' },
-          { status: 400 }
-        );
-      }
-    }
-
-    const brandId = String(body.brandId || 'default');
-    const marca = await acharMarca(brandId);
-    if (!marca) {
-      return NextResponse.json({ erro: 'Marca não encontrada.' }, { status: 404 });
-    }
-
-    // 1. Monta a fila com deduplicação por (usuário, evento) e enriquecimento de atribuição cruzada
-    const resumo = montarFilaDisparo(rawEntregas);
-
-    const dryRun = body.dryRun !== false; // Padrão é dryRun: true para segurança
-
-    if (dryRun) {
-      return NextResponse.json({
-        modo: 'dryRun',
-        mensagem: 'Fila montada e deduplicada com sucesso. Nenhum evento foi disparado.',
-        resumo: {
-          totalEntregasBrutas: resumo.totalEntregasBrutas,
-          totalIgnoradosTestes: resumo.totalIgnoradosTestes,
-          totalEventosFila: resumo.totalEventosFila,
-          usuariosUnicos: resumo.usuariosUnicos,
-          porEvento: resumo.porEvento,
-        },
-        fila: resumo.fila.map((ev) => ({
-          id: ev.id,
-          metaEventName: ev.metaEventName,
-          rawEvent: ev.rawEvent,
-          userEmail: ev.userEmail,
-          userName: ev.userName,
-          userPhone: ev.userPhone,
-          orderId: ev.orderId,
-          value: ev.value,
-          currency: ev.currency,
-          eventTimeIso: ev.eventTimeIso,
-          temFbc: ev.temFbc,
-          temFbp: ev.temFbp,
-          emqNota: ev.emq.nota,
-          valido: ev.valido,
-          expirado7Dias: ev.expirado7Dias,
-          errosValidacao: ev.errosValidacao,
-          atribuicao: {
-            campaignId: ev.atribuicao.campaignId,
-            adsetId: ev.atribuicao.adsetId,
-            adId: ev.atribuicao.adId,
-            placement: ev.atribuicao.placement,
-            links: ev.atribuicao.links,
-          },
-        })),
-      });
-    }
-
-    // Disparo real
-    const testEventCode =
-      body.testEventCode !== undefined ? body.testEventCode : marca.testCode;
-
-    const resultadoDisparo = await dispararFila({
-      fila: resumo.fila,
-      brandId,
-      testEventCode,
-      delayMs: typeof body.delayMs === 'number' ? body.delayMs : 250,
-    });
-
-    return NextResponse.json({
-      modo: testEventCode ? 'teste' : 'producao',
-      testEventCode: testEventCode || null,
-      resultado: resultadoDisparo,
-    });
   } catch (err) {
     if (err instanceof Response) return err;
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ erro: 'Falha no processamento da fila: ' + msg }, { status: 500 });
+    return NextResponse.json({ erro: 'Falha ao conferir a sessão: ' + msg }, { status: 500 });
   }
+  return NextResponse.json(
+    { erro: MENSAGEM },
+    { status: 410, headers: { 'Cache-Control': 'no-store' } }
+  );
 }
