@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { acharEntrada } from '@/lib/inbox';
-import { parseWebhook } from '@/lib/parser';
+import { parseWebhook, eventoDeduzidoDoNome } from '@/lib/parser';
 import {
   EMPRESA_DEFAULT_ID,
   lerIntegracoes,
@@ -75,7 +75,10 @@ export async function POST(request: NextRequest) {
 
     // `r.eventName` so existe para nome mapeado; NUNCA cair no nome de origem:
     // "ping" viraria um evento personalizado na Meta com HTTP 200 e ninguem veria.
-    const eventoMeta = String(body.eventoMeta || regra?.eventoMeta || r.eventName || '');
+    // Nome novo: o mesmo evento deduzido com que o item entrou na fila.
+    const eventoMeta = String(
+      body.eventoMeta || regra?.eventoMeta || r.eventName || eventoDeduzidoDoNome(r) || ''
+    );
     if (!eventoMeta) {
       return NextResponse.json(
         { erro: 'Não sei qual evento da Meta usar. Informe eventoMeta.' },

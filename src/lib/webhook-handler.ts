@@ -15,6 +15,7 @@ import { avaliarTeste } from '@/lib/deteccao-de-teste';
 import { sinaisDoPayload } from '@/lib/inbox-sinais';
 import {
   parseWebhook,
+  eventoDeduzidoDoNome,
   ehTesteInterno,
   ehPayloadPlano,
   type ClassificacaoEvento,
@@ -251,6 +252,7 @@ export async function processarWebhook(
   let eventoMetaSugerido: string | undefined;
   let pagamentoNaoConfirmado = false;
   let moedaNaoReconhecida = false;
+  let eventoDeduzido: string | undefined;
   try {
     const r = parseWebhook(JSON.stringify(payload));
     pagamentoNaoConfirmado = r.pagamentoNaoConfirmado;
@@ -264,6 +266,7 @@ export async function processarWebhook(
     motivoDoParser = r.motivoIgnorar;
     testePlataforma = r.testePlataforma;
     eventoMetaSugerido = r.eventoMetaSugerido;
+    eventoDeduzido = eventoDeduzidoDoNome(r);
   } catch {
     /* segue com o payload cru */
   }
@@ -301,17 +304,23 @@ export async function processarWebhook(
   // 🔴 Pagamento NAO confirmado (status pendente, recusado, estornado) passa
   // por cima da regra: a regra diz "este NOME vira Purchase", e sem isto um
   // deposito ainda pendente sairia como compra (regra 1 do CLAUDE.md).
+  //
+  // Nome NOVO (06/10/2026, decisao do dono): quando da para deduzir o evento
+  // pelo nome, o item deixa de ser ignorado e entra na FILA ja com o evento
+  // padrao da Meta, esperando a aprovacao. As duas travas do automatico nao
+  // mudam: so sai sozinho com regra em `auto` (a exata ou a curinga '*') e o
+  // interruptor do Pixel ligado.
   const regra = nomeOriginal ? acharRegra(cfg, nomeOriginal) : undefined;
   const modoPelaRegra: 'auto' | 'fila' | 'ignorar' = regra
     ? regra.modo
-    : ignorarPeloParser
+    : ignorarPeloParser && !eventoDeduzido
       ? 'ignorar'
       : 'fila';
   const modoDaRegra: 'auto' | 'fila' | 'ignorar' = pagamentoNaoConfirmado ? 'ignorar' : modoPelaRegra;
   const eventoDaRegra =
     !pagamentoNaoConfirmado && regra && regra.modo !== 'ignorar' && regra.eventoMeta
       ? regra.eventoMeta
-      : evento;
+      : (evento ?? eventoDeduzido);
   const marcas = regra?.marcas?.length ? regra.marcas : ['default'];
 
   // A sonda de conexao. O botao "Testar" do backoffice manda `ping`: sem
@@ -453,6 +462,9 @@ export async function processarWebhook(
     eventoOrigem: nomeOriginal,
     eventoMeta: eventoFinal,
     eventoMetaSugerido,
+    // So `true`, e so quando o evento que vale saiu da deducao do nome (regra
+    // com evento proprio passa por cima). A tela usa para pedir a conferencia.
+    ...(eventoFinal && eventoFinal === eventoDeduzido && !sonda ? { eventoDeduzido: true } : {}),
     regraId: regra?.id,
     modo,
     // Aditivo: o modo da regra continua em "modo", o que de fato aconteceu com

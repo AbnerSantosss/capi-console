@@ -174,6 +174,7 @@ export interface ItemInbox {
   rotuloRecebido?: string | null;
   rotuloDivergente?: boolean;
   eventoMetaSugerido?: string;
+  eventoDeduzido?: boolean;
 }
 
 /** Estado REAL do canal ao vivo. O selo da tela lê daqui, nunca de um enfeite. */
@@ -1706,6 +1707,17 @@ function LinhaEntrada({
                     <span className="text-fg-body">{classificacao.rotulo}. </span>
                   ) : null}
                   {motivo}
+                </span>
+              </MenuDetalhe>
+            )}
+
+            {item.eventoDeduzido && par && vaiParaMeta && (
+              <MenuDetalhe>
+                <span>
+                  Nome novo, fora do catálogo. O console leu como{' '}
+                  <span className="font-mono text-fg-body">{par.tecnico}</span> ({par.pt}) pelo
+                  nome. Confira antes de aprovar; para trocar o evento ou enviar sozinho, crie a
+                  regra na aba Regras.
                 </span>
               </MenuDetalhe>
             )}

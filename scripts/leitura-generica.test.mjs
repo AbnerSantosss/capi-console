@@ -2,7 +2,7 @@
 // plataformas. Estes payloads são FICTÍCIOS, no formato de plataformas que o
 // parser não conhecia. Roda sem servidor e não manda nada a ninguém.
 import { readFileSync } from 'node:fs';
-import { parseWebhook } from '../src/lib/parser.ts';
+import { parseWebhook, eventoDeduzidoDoNome } from '../src/lib/parser.ts';
 import { lerGenerico, nomeDoEventoGenerico, ehPrimeiroDeposito } from '../src/lib/leitura-generica.ts';
 
 let falhas = 0;
@@ -107,6 +107,20 @@ ok(ehPrimeiroDeposito({ approved_deposits: 1 }) === true, 'approved_deposits 1 =
 ok(ehPrimeiroDeposito({ approved_deposits: 4 }) === undefined, 'approved_deposits 4 não é');
 ok(ehPrimeiroDeposito({ data: { is_first_deposit: true } }) === true, 'marca is_first_deposit de outra origem');
 ok(ehPrimeiroDeposito({ ftd: false }) === undefined && ehPrimeiroDeposito({}) === undefined, 'sem marca = não informado');
+
+// 7. Nome novo entra na fila com o evento deduzido (decisão do dono, 06/10)
+console.log('7. Evento deduzido do nome');
+ok(eventoDeduzidoDoNome(aninhado) === 'Purchase', 'PURCHASE_APPROVED (nome novo) é lido como Purchase', String(eventoDeduzidoDoNome(aninhado)));
+ok(eventoDeduzidoDoNome(g) === undefined, 'nome do catálogo não passa pela dedução');
+ok(eventoDeduzidoDoNome(curto) === undefined, 'nome sem pista (venda_ficticia) não é deduzido: continua esperando a regra');
+const naoPago = ler({ event: 'order_approved_ficticio', status: 'pending', email: 'e@cliente-ficticio.invalid', value: '50.00' });
+ok(naoPago.pagamentoNaoConfirmado === true && eventoDeduzidoDoNome(naoPago) === undefined, 'compra deduzida com status pendente NÃO vira Purchase', `${naoPago.pagamentoNaoConfirmado}/${eventoDeduzidoDoNome(naoPago)}`);
+const recusado = ler({ event: 'payment_refused_ficticio', email: 'e@cliente-ficticio.invalid' });
+ok(eventoDeduzidoDoNome(recusado) === undefined, 'nome com palavra negativa (refused) não é deduzido');
+const pingNovo = ler({ event: 'webhook_test_ficticio' });
+ok(eventoDeduzidoDoNome(pingNovo) === undefined, 'teste da plataforma não é deduzido');
+const cadastro = ler({ event: 'user_registered_ficticio', email: 'e@cliente-ficticio.invalid' });
+ok(eventoDeduzidoDoNome(cadastro) === 'CompleteRegistration', 'cadastro é lido como CompleteRegistration', String(eventoDeduzidoDoNome(cadastro)));
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);

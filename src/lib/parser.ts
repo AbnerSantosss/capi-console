@@ -160,17 +160,19 @@ export interface ResultadoMapeamento {
   conhecido: boolean;
   classificacao: ClassificacaoEvento;
   testePlataforma: boolean;
-  /** Palpite para nome novo. Vai para a tela, nunca para a Meta. */
+  /**
+   * Evento deduzido do nome, para nome novo. Desde 06/10/2026 (decisao do
+   * dono) e o evento com que o item entra na FILA — ver `eventoDeduzidoDoNome`.
+   */
   sugestao?: NomeEventoMetaPadrao;
 }
 
 /**
  * Classifica o nome do evento de origem.
  *
- * Regra de ouro: nome que nao esta na TABELA nao produz evento da Meta. A
- * heuristica so escreve `sugestao`, que a tela mostra como "parece um X — crie
- * a regra". Antes ela preenchia o proprio evento e um clique humano podia
- * mandar para a Meta uma compra que nunca aconteceu.
+ * Nome que nao esta na TABELA nao preenche `eventoMeta`: a heuristica so
+ * escreve `sugestao`. Quem decide o que fazer com ela e `eventoDeduzidoDoNome`
+ * (abaixo), usado pelo recebimento e pelo disparo manual.
  */
 export function mapearEventoOrigem(nome: string): ResultadoMapeamento {
   const n = String(nome || '').trim();
@@ -204,6 +206,28 @@ export function mapearEventoOrigem(nome: string): ResultadoMapeamento {
   if (l.includes('checkout')) return { ...desconhecido, sugestao: 'InitiateCheckout' };
   if (l.includes('regist')) return { ...desconhecido, sugestao: 'CompleteRegistration' };
   return desconhecido;
+}
+
+/**
+ * O evento da Meta de um nome NOVO, deduzido do proprio nome.
+ *
+ * Decisao do dono em 06/10/2026 (console white-label): "receba, organize no
+ * evento padrao da Meta e repasse; se o automatico estiver desligado, deixe
+ * enfileirado esperando a aprovacao". Antes o nome novo entrava como
+ * `ignorado` e so saia depois de alguem criar a regra.
+ *
+ * O que NAO mudou: as duas travas do automatico. Sem regra o item entra em
+ * FILA; so sai sozinho com regra em `auto` (a exata ou a curinga '*') E o
+ * interruptor do Pixel ligado. Nome sem deducao possivel, teste da plataforma
+ * e pagamento nao confirmado continuam sem evento.
+ *
+ * UM lugar so, para o recebimento e o disparo manual nao divergirem.
+ */
+export function eventoDeduzidoDoNome(
+  r: Pick<ParseResult, 'eventName' | 'classificacao' | 'eventoMetaSugerido' | 'pagamentoNaoConfirmado'>
+): NomeEventoMetaPadrao | undefined {
+  if (r.eventName || r.pagamentoNaoConfirmado) return undefined;
+  return r.classificacao === 'desconhecido' ? r.eventoMetaSugerido : undefined;
 }
 
 /**
@@ -370,18 +394,21 @@ export function parseWebhook(bruto: string): ParseResult {
   // isso com todas as letras: status ausente ou desconhecido segue como veio,
   // porque descartar venda real por nao reconhecer uma palavra e o erro caro.
   const statusBruto = String(raiz.status ?? '').trim();
+  // Vale tambem para a compra DEDUZIDA do nome (`sugestao`): ela entra na fila
+  // como Purchase, entao o status que diz "nao pago" tem de barrar igual.
   const pagamentoNaoConfirmado =
-    mapaDoNome.eventoMeta === 'Purchase' && STATUS_NAO_PAGO.has(statusBruto.toLowerCase());
+    (mapaDoNome.eventoMeta ?? mapaDoNome.sugestao) === 'Purchase' &&
+    STATUS_NAO_PAGO.has(statusBruto.toLowerCase());
   const mapa: ResultadoMapeamento = pagamentoNaoConfirmado
-    ? { ...mapaDoNome, eventoMeta: null, classificacao: 'sem-equivalente' }
+    ? { ...mapaDoNome, eventoMeta: null, sugestao: undefined, classificacao: 'sem-equivalente' }
     : mapaDoNome;
   const eventoOrigem = evName || undefined;
   const eventoConhecido = mapa.conhecido;
   const classificacao = mapa.classificacao;
   const testePlataforma = mapa.testePlataforma;
   const eventoMetaSugerido = mapa.sugestao;
-  // 'desconhecido' tambem entra como ignorar: nome novo nao tem caminho
-  // automatico para a Meta, so ganha um depois que o operador criar a regra.
+  // 'desconhecido' sai daqui como ignorar; quem recebe (webhook-handler) troca
+  // por FILA quando `eventoDeduzidoDoNome` consegue deduzir o evento.
   const ignorar = Boolean(evName) && mapa.eventoMeta === null;
   const motivoIgnorar: MotivoIgnorar | undefined =
     pagamentoNaoConfirmado
@@ -405,7 +432,9 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push(`Evento ${evName}: ignorar (a Meta não tem evento padrão equivalente)`);
   } else if (evName) {
     preenchidos.push(
-      `Evento ${evName}: nome novo, sem regra${eventoMetaSugerido ? ` — parece ${eventoMetaSugerido}` : ''}`
+      eventoMetaSugerido
+        ? `Evento ${evName}: nome novo, lido como ${eventoMetaSugerido} pelo nome (confira antes de aprovar)`
+        : `Evento ${evName}: nome novo, sem regra e sem como deduzir o evento da Meta`
     );
   }
 

@@ -205,8 +205,10 @@ export interface ItemInbox {
   rotuloRecebido?: string | null;
   /** true quando o apelido da URL difere do configurado. Nunca recusa a entrega. */
   rotuloDivergente?: boolean;
-  /** Palpite da heuristica para nome novo. Texto de tela: nao e disparavel. */
+  /** O que a heuristica deduziu do nome, para nome novo. */
   eventoMetaSugerido?: string;
+  /** true quando `eventoMeta` veio dessa deducao (nome fora do catalogo). */
+  eventoDeduzido?: boolean;
   /** Um resultado por pixel, preenchido depois do disparo. */
   resultados?: unknown[];
 }

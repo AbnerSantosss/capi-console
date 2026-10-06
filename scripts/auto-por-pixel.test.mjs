@@ -216,7 +216,7 @@ ok(
 console.log('\n  -- T5: evento sem regra correspondente --');
 
 ok(
-  /= regra\s*\r?\n?\s*\? regra\.modo\s*\r?\n?\s*: ignorarPeloParser\s*\r?\n?\s*\? 'ignorar'\s*\r?\n?\s*: 'fila';/.test(
+  /= regra\s*\r?\n?\s*\? regra\.modo\s*\r?\n?\s*: ignorarPeloParser && !eventoDeduzido\s*\r?\n?\s*\? 'ignorar'\s*\r?\n?\s*: 'fila';/.test(
     fonteWebhook
   ),
   'T5: sem regra o modo cai em `fila` (ou `ignorar` pelo parser), nunca em `auto`'

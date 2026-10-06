@@ -171,7 +171,7 @@ export function motivoLegivel(dados: DadosDoMotivo): string {
   }
 
   if (dados.classificacao === 'desconhecido' || dados.motivoIgnorar === 'sem-regra') {
-    return 'Nome novo, fora do catálogo conhecido. Nada é enviado por palpite: crie uma regra na aba Regras para decidir se ele vai à Meta e para qual Pixel.';
+    return 'Nome novo, fora do catálogo conhecido, e o console não conseguiu deduzir o evento da Meta pelo nome. Crie uma regra na aba Regras para dizer qual evento ele é.';
   }
 
   if (dados.classificacao === 'sem-evento') {
