@@ -91,6 +91,8 @@ const CAMINHOS_DE_NOME: readonly string[][] = [
   ['data', 'lead', 'nome'],
   ['name'],
   ['nome'],
+  // Payload plano (Globaltech): tudo na raiz, com prefixo.
+  ['user_name'],
   ['lead', 'name'],
   ['customer', 'name'],
   ['buyer', 'name'],

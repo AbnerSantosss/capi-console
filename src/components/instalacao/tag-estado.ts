@@ -63,7 +63,7 @@ export function estadoDaRegra(regras: RegraRoteamento[], origem: string): Estado
   }
   if (regra.modo === 'ignorar') {
     return {
-      texto: 'Ignorada',
+      texto: 'Regra em Ignorar',
       tom: 'neutral',
       explicacao:
         'O evento chega e fica só no registro. Nunca vai para a Meta enquanto a regra estiver em Ignorar.',

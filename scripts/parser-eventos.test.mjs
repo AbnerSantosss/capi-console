@@ -87,7 +87,15 @@ ok(pingParse.eventName === undefined, 'ping nao recebe evento da Meta');
 // 4c. Cobertura: todo nome da tabela tem regra semente em config-store.
 const sementes = REGRAS_SEMENTE();
 const origensSemeadas = new Set(sementes.map((r) => r.eventoOrigem));
-const semRegra = Object.keys(MAPA_EVENTOS_ORIGEM).filter((e) => !origensSemeadas.has(e));
+// Os nomes da Globaltech ficam SO na tabela, de proposito (D-14): as sementes
+// de webhook sao o vocabulario da empresa padrao (xWinner) e empresa nova nao
+// nasce com regra de plataforma nenhuma. Sem regra o webhook poe o evento na
+// fila ja com o evento certo da Meta, e a aba Regras oferece "Criar regra".
+const SO_NA_TABELA = new Set([
+  'DEPOSIT_PAYMENT', 'DEPOSIT_CREATED', 'USER_CREATED',
+  'PAGAMENTO_DEPÓSITO', 'PAGAMENTO_DEPOSITO', 'DEPÓSITO_CRIADO', 'DEPOSITO_CRIADO', 'USUÁRIO_CRIADO', 'USUARIO_CRIADO',
+]);
+const semRegra = Object.keys(MAPA_EVENTOS_ORIGEM).filter((e) => !origensSemeadas.has(e) && !SO_NA_TABELA.has(e));
 ok(semRegra.length === 0, 'todo evento da tabela tem regra semente', semRegra.join(','));
 
 // Nenhuma semente nasce em automatico: disparar sem humano e decisao do operador,

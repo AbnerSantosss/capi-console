@@ -42,6 +42,7 @@ import { InboxList } from '@/components/integrations/InboxList';
 import { parMeta, type ParMeta } from '@/components/integrations/eventos-legiveis';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { cn } from '@/lib/utils';
+import { formatarDinheiro } from '@/lib/moeda';
 
 /**
  * Painel de eventos — a primeira tela do console.
@@ -328,6 +329,30 @@ function eventoDaMeta(eventoOrigem: string): ParMeta | null {
  * que a Meta usa. Traduzir o nome técnico seria esconder justamente a palavra
  * que o operador vai procurar no Gerenciador de Eventos.
  */
+/** O pedaco da regra que o cartao precisa. O tipo inteiro mora no servidor. */
+interface RegraDoCartao {
+  eventoOrigem: string;
+  eventoMeta: string;
+  modo: 'auto' | 'fila' | 'ignorar';
+  ativo: boolean;
+}
+
+/**
+ * UX-13: o destino do evento sai da REGRA, a mesma conta do servidor
+ * (`acharRegra`: a regra ativa do nome, senao o curinga `*`). Antes o cartao
+ * lia so o catalogo e dizia "Vai para a Meta" sobre evento sem regra.
+ */
+function destinoPelaRegra(evento: string, regras: RegraDoCartao[]): string {
+  const ativas = regras.filter((r) => r.ativo);
+  const regra =
+    ativas.find((r) => r.eventoOrigem === evento) ?? ativas.find((r) => r.eventoOrigem === '*');
+  if (!regra) return 'Sem regra: nada sai sozinho para a Meta. Crie a regra na aba Regras.';
+  if (regra.modo === 'ignorar' || !regra.eventoMeta) return 'Regra em Ignorar: não vai para a Meta.';
+  return regra.modo === 'auto'
+    ? `Vira ${regra.eventoMeta} na Meta · automático, sem revisão.`
+    : `Vira ${regra.eventoMeta} na Meta · em fila, com revisão manual.`;
+}
+
 function CardDeEvento({
   evento,
   total,
@@ -335,7 +360,10 @@ function CardDeEvento({
   valor,
   aoClicar,
   ativo,
+  regras,
 }: {
+  /** `null` enquanto as regras nao chegaram (ou a leitura falhou). */
+  regras: RegraDoCartao[] | null;
   evento: string;
   total: number;
   pct: number | null;
@@ -384,9 +412,11 @@ function CardDeEvento({
       <BarraAnimada percentual={pct ?? 0} corBarra={BARRA_DO_MATIZ[matiz]} className="h-1.5 w-full" />
 
       <span className="min-w-0 text-caption break-words text-fg-muted">
-        {par ? (
+        {regras ? (
+          destinoPelaRegra(evento, regras)
+        ) : par ? (
           <>
-            Vai para a Meta como {par.pt} · <span className="font-mono">{par.tecnico}</span>.
+            Equivale na Meta a {par.pt} · <span className="font-mono">{par.tecnico}</span>.
           </>
         ) : (
           'Não vira conversão na Meta: não existe evento padrão equivalente.'
@@ -409,8 +439,7 @@ function CardDeEvento({
  * pequena logo abaixo, em `AvisoDeMoedasDiferentes`.
  */
 function dinheiro(valor: number | null, moeda: string | null): string {
-  if (valor === null) return '—';
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: moeda ?? 'BRL' });
+  return formatarDinheiro(valor, moeda);
 }
 
 /**
@@ -588,6 +617,20 @@ export function PainelDeEventos() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [recorte, setRecorte] = useState<Recorte | null>(null);
+  const [regras, setRegras] = useState<RegraDoCartao[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    pedir<{ integracoes?: { regras?: RegraDoCartao[] } }>('/api/integracoes', { cache: 'no-store' })
+      .then((d) => {
+        if (vivo) setRegras(d.integracoes?.regras ?? []);
+      })
+      .catch(() => {
+        if (vivo) setRegras(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [empresaAtivaId]);
   /**
    * Volume, atribuição e qualidade começam fechados. São a saúde do console, e
    * a primeira pergunta de quem abre a tela é o negócio, não o encanamento.
@@ -894,6 +937,7 @@ export function PainelDeEventos() {
                         ? valorDoEventoDeCompra.texto
                         : null
                     }
+                    regras={regras}
                     aoClicar={() => alternarEvento(e.evento)}
                     ativo={recorte?.evento === e.evento}
                   />
@@ -1063,10 +1107,7 @@ export function PainelDeEventos() {
                           </span>
                         </span>
                         <span className="text-data font-semibold text-fg-strong tabular-nums">
-                          {receitaEnviada.total.toLocaleString('pt-BR', {
-                            style: 'currency',
-                            currency: receitaEnviada.moeda,
-                          })}
+                          {formatarDinheiro(receitaEnviada.total, receitaEnviada.moeda)}
                         </span>
                         <span className="text-caption text-fg-muted">
                           Soma do valor dos eventos que a Meta aceitou no período.

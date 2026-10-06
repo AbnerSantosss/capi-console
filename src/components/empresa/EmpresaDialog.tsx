@@ -222,6 +222,17 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
   /** Modo criação: empresa → empresa ativa → primeiro Pixel. Nesta ordem. */
   const salvarTudo = async () => {
     if (!form.pixelId.trim()) return toast.error('Informe o Pixel ID.');
+    // UX-07: senha colada (ou preenchida pelo navegador) no lugar do token e
+    // barrada antes de ir para o servidor. Token da Meta e longo e sem espaco.
+    if (!/^\d{6,20}$/.test(form.pixelId.trim())) {
+      return toast.error('O Pixel ID tem só números. Confira o que foi colado.');
+    }
+    const tokenColado = form.token.trim();
+    if (tokenColado && (tokenColado.length < 50 || /\s/.test(tokenColado))) {
+      return toast.error(
+        'Isto não parece um token da Meta: ele é longo (mais de 50 caracteres) e em geral começa com EAA. Confira se o navegador não preencheu uma senha.'
+      );
+    }
 
     setSalvando(true);
     setErro('');
@@ -438,7 +449,10 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
                 onChange={(e) => setForm({ ...form, token: e.target.value })}
                 placeholder="EAAG..."
                 className="font-mono"
-                autoComplete="off"
+                name="pixel_access_token"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
                 spellCheck={false}
                 aria-describedby={descrito('empresa-pixel-token', true, false)}
               />

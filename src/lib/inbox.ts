@@ -4,8 +4,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import type { ClassificacaoEvento, MotivoIgnorar } from './parser';
-import type { MotivoDeTeste } from './deteccao-de-teste';
+import { parseWebhook, ehPayloadPlano, type ClassificacaoEvento, type MotivoIgnorar } from './parser';
+import { qualPadraoConhecido, type MotivoDeTeste } from './deteccao-de-teste';
+import { limparPayload } from './payload-sensivel';
+import { normalizarMoeda } from './moeda';
 import { ehCompra } from './inbox-resumo';
 import { sinaisDoPayload } from './inbox-sinais';
 import { gravarAtomico, naFila } from './arquivo-atomico';
@@ -198,7 +200,7 @@ export interface ItemInbox {
    */
   autoBloqueadoPorSuspeita?: boolean;
   /** Formato do payload reconhecido: A (plataforma, ex. xWinner), B (gateway) ou outro. */
-  formato?: 'A' | 'B' | 'outro';
+  formato?: 'A' | 'B' | 'plano' | 'outro';
   /** Apelido que veio na URL. null = chegou pela URL antiga, de um segmento so. */
   rotuloRecebido?: string | null;
   /** true quando o apelido da URL difere do configurado. Nunca recusa a entrega. */
@@ -300,6 +302,66 @@ async function carregarDoDisco() {
   return leituraEmVoo;
 }
 
+/**
+ * Conserta, SO EM MEMORIA, o item gravado antes de 06/10/2026 (UX-01/02/03/14).
+ *
+ * O arquivo e append-only e nao e reescrito; o que muda e o que a tela e o
+ * disparo enxergam:
+ *
+ * - o payload perde credencial, codigo do PIX e documento (`limparPayload`);
+ * - a moeda gravada como `R$` vira `BRL`;
+ * - o item de payload PLANO (Globaltech), que foi gravado com o valor dividido
+ *   por 100 e sem identidade, e relido pelo parser de hoje: valor, moeda,
+ *   pedido, nome, e-mail e cookies. E se ele so era "teste" por causa do valor
+ *   errado, deixa de ser.
+ *
+ * 🔴 Nao mexe em `status`, `modo` nem `motivoIgnorar`: o que aconteceu com o
+ * item (foi ignorado por falta de regra) e historia, e historia nao se reescreve.
+ */
+function reavaliarItemAntigo(item: ItemInbox): void {
+  try {
+    item.payload = limparPayload(item.payload);
+    if (typeof item.moeda === 'string') {
+      const m = normalizarMoeda(item.moeda);
+      if (m.codigo && m.codigo !== item.moeda) item.moeda = m.codigo;
+    }
+    if (item.formato === 'plano' || !ehPayloadPlano(item.payload)) return;
+
+    const r = parseWebhook(JSON.stringify(item.payload));
+    const texto = (k: string) =>
+      typeof r.fields[k] === 'string' && r.fields[k] !== '' ? (r.fields[k] as string) : undefined;
+
+    const valor = texto('value') !== undefined ? Number(texto('value')) : undefined;
+    if (valor !== undefined && Number.isFinite(valor)) item.valor = valor;
+    if (texto('currency')) item.moeda = texto('currency');
+    if (!item.orderId && texto('orderId')) item.orderId = texto('orderId');
+    if (!item.emailMascarado) item.emailMascarado = mascararEmail(texto('email'));
+    if (!item.emailHash) item.emailHash = hashDoEmail(texto('email'));
+    const nome = [texto('firstName'), texto('lastName')].filter(Boolean).join(' ');
+    if (!item.nomeCliente && nome) item.nomeCliente = nome;
+    if (!item.temFbp && texto('fbp')) item.temFbp = true;
+    if (!item.temFbc && texto('fbc')) item.temFbc = true;
+
+    // "Teste" marcado so pelo padrao conhecido e reconferido com o valor certo.
+    // O que o OPERADOR cadastrou (e-mail ou nome na lista) nao e tocado.
+    if (item.testeInterno && item.motivoDeTeste === 'padrao-conhecido') {
+      const ainda = qualPadraoConhecido({
+        email: texto('email'),
+        nome,
+        valor: item.valor,
+        eventId: texto('eventId'),
+      });
+      if (ainda === null) {
+        item.testeInterno = false;
+        delete item.motivoDeTeste;
+        delete item.explicacaoDeTeste;
+      }
+    }
+  } catch {
+    /* item antigo que nao da para reler fica como estava */
+  }
+}
+
 async function lerTudoDoDisco() {
   try {
     const txt = await fs.readFile(ARQ, 'utf8');
@@ -330,6 +392,8 @@ async function lerTudoDoDisco() {
     // Item gravado entre a FASE B (13/09) e o plano do painel ja tem
     // `temFbclid` mas NAO tem `temTtclid`: por isso o `continue` exige os dois
     // marcadores, e cada atribuicao e protegida por `=== undefined`.
+    for (const item of memoria) reavaliarItemAntigo(item);
+
     for (const item of memoria) {
       if (item.temFbclid !== undefined && item.temTtclid !== undefined) continue;
       const sinais = sinaisDoPayload(item.payload);
@@ -385,8 +449,12 @@ export async function registrarEntrada(
   // Espalha primeiro e deriva depois: com `...entrada` no fim, um chamador que
   // passe `status: undefined` explicitamente apagava o padrao e gravava item sem
   // status — que a tela nao sabe pintar.
+  //
+  // 🔴 O payload e limpo ANTES de ir para a memoria e para o disco (UX-14):
+  // credencial do jogador, codigo do PIX e documento nao sao gravados.
   const item: ItemInbox = {
     ...entrada,
+    payload: limparPayload(entrada.payload),
     id: crypto.randomUUID(),
     recebidoEm: new Date().toISOString(),
     status: entrada.status ?? 'novo',

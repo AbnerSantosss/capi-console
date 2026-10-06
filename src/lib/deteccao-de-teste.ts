@@ -84,6 +84,15 @@ export interface ListaDeTeste {
 
 export const COMPRAS_PARA_SUSPEITAR = 3;
 
+/**
+ * Até que valor (na moeda do evento) uma compra repetida conta como "valor
+ * baixo". Regra do dono (06/10/2026): o mesmo e-mail em várias compras é
+ * normal — jogador que deposita de novo, cliente que recompra. A repetição só
+ * levanta suspeita quando a compra é o PRIMEIRO depósito (que só acontece uma
+ * vez por pessoa) ou tem valor baixo (o jeito comum de testar um checkout).
+ */
+export const VALOR_BAIXO_PARA_SUSPEITAR = 5;
+
 /** Piso de 2: `1` transformaria toda primeira compra em suspeita e travaria o produto. */
 export function limiteDeCompras(lista?: ListaDeTeste): number {
   const n = Number(lista?.comprasParaSuspeitar);
@@ -139,6 +148,12 @@ export interface EventoSuspeitavel {
    * aplica a régua. `undefined` = ninguém contou, e aí não há suspeita.
    */
   comprasDoMesmoEmail?: number;
+  /**
+   * A origem disse que esta compra é o primeiro depósito da pessoa (na
+   * Globaltech, `approved_deposits === 1` num pagamento). `undefined` = a
+   * origem não informa, e aí só o valor baixo decide.
+   */
+  primeiroDeposito?: boolean;
 }
 
 const DOMINIOS_DE_TESTE = /@(example\.com|exemplo\.com\.br|example\.org|test\.com)$/;
@@ -246,15 +261,27 @@ export function avaliarTeste(ev: EventoSuspeitavel, lista?: ListaDeTeste): Vered
   // Só vale para COMPRA: o mesmo e-mail em vários Lead ou ViewContent é
   // normal (a pessoa voltou ao site), e barrar isso seria inventar suspeita
   // onde só há um visitante interessado.
+  //
+  // E, desde 06/10/2026 (regra do dono), só quando a compra repetida é um
+  // primeiro depósito ou tem valor baixo: recompra e novo depósito de valor
+  // normal são o dia a dia e saem sozinhos.
   const limite = limiteDeCompras(lista);
   const compras = Number(ev.comprasDoMesmoEmail);
-  if (ev.ehCompra === true && email && Number.isFinite(compras) && compras >= limite) {
+  const valor = Number(ev.valor);
+  const valorBaixo = Number.isFinite(valor) && valor > 0 && valor <= VALOR_BAIXO_PARA_SUSPEITAR;
+  const porque =
+    ev.primeiroDeposito === true
+      ? 'esta veio como primeiro depósito'
+      : valorBaixo
+        ? `esta é de valor baixo (${emReais(valor)})`
+        : null;
+  if (ev.ehCompra === true && email && Number.isFinite(compras) && compras >= limite && porque) {
     return {
       ehTeste: false,
       bloqueiaAutomatico: true,
       motivo: 'email-repetido',
       explicacao:
-        `Este e-mail já aparece em ${compras} compras. ` +
+        `Este e-mail já aparece em ${compras} compras e ${porque}. ` +
         'O envio automático ficou em espera para você conferir; a venda continua na fila e pode ser enviada.',
     };
   }

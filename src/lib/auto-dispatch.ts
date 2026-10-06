@@ -12,6 +12,7 @@ import { ehTesteInterno } from './parser';
 import { avaliarTeste } from './deteccao-de-teste';
 import { pixelAceitaAuto } from './modo-por-marca';
 import { normalizarTelefone } from './telefone';
+import { normalizarMoeda } from './moeda';
 
 /**
  * Disparo de um item da caixa de entrada para um ou mais pixels.
@@ -252,6 +253,10 @@ export async function dispararItem(params: {
     ? normalizarTelefone(t('phone') as string, { url: t('sourceUrl'), moeda: t('currency') })
     : undefined;
 
+  // A moeda vai SEMPRE em ISO 4217. `R$` vira BRL; o que o console nao
+  // reconhece nao vira BRL por palpite — o envio e recusado logo abaixo.
+  const moeda = normalizarMoeda(t('currency'));
+
   const eventInput: EventInput = {
     event_name: eventoMeta,
     event_time: paraUnix(t('eventTime')),
@@ -272,14 +277,23 @@ export async function dispararItem(params: {
     },
     custom: {
       value: t('value') !== undefined ? Number(t('value')) : undefined,
-      currency: t('currency') || 'BRL',
+      currency: moeda.codigo ?? undefined,
       orderId: t('orderId'),
-      contentName: t('contentName') || 'Acesso Código Vencedor',
+      // O nome do produto padrao e da empresa padrao. Em outra empresa ele
+      // carimbaria "Acesso Código Vencedor" no deposito de um cliente.
+      contentName:
+        t('contentName') || (empresaDoItem === EMPRESA_DEFAULT_ID ? 'Acesso Código Vencedor' : undefined),
     },
   };
 
   const evento = montarEvento(eventInput);
   const erros = validar(evento);
+  if (moeda.codigo === null && t('value') !== undefined) {
+    erros.push(
+      `A moeda veio como "${moeda.original}", que não é um código reconhecido (ex.: BRL, USD). ` +
+        'Nada foi enviado: valor na moeda errada ensina a campanha com um faturamento que não existe.'
+    );
+  }
   const emq = calcularEmq({
     email: t('email'),
     phone: t('phone'),

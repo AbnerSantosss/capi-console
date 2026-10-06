@@ -172,7 +172,10 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
               onChange={(e) => setForm({ ...form, token: e.target.value })}
               placeholder={!novo ? '••••••••••••' : 'EAAG...'}
               className="font-mono"
-              autoComplete="off"
+              name="pixel_access_token"
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               spellCheck={false}
             />
           </Field>

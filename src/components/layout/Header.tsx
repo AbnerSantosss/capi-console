@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -62,6 +62,14 @@ export function Header({
   gaveta?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  // "⌘K" só existe no teclado da Apple; no resto é Ctrl K (UX-21). No
+  // servidor não há teclado para perguntar, então sai o mais comum.
+  const ehApple = useSyncExternalStore(
+    () => () => {},
+    () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent),
+    () => false
+  );
+  const atalhoDaBusca = ehApple ? '⌘K' : 'Ctrl K';
   const router = useRouter();
 
   const carregar = useBrandStore((s) => s.carregar);
@@ -254,7 +262,7 @@ export function Header({
           type="button"
           onClick={() => window.dispatchEvent(new CustomEvent('capi:abrir-paleta'))}
           aria-label="Buscar pedido, e-mail ou regra"
-          title="Buscar pedido, e-mail ou regra (⌘K)"
+          title={`Buscar pedido, e-mail ou regra (${atalhoDaBusca})`}
           className="flex h-control-sm shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface-1 px-2 text-fg-muted shadow-realce transition-colors hover:border-line-control hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
         >
           <Search className="size-4 shrink-0" aria-hidden />
@@ -264,7 +272,7 @@ export function Header({
             aria-hidden
             className="hidden rounded-sm border border-line-control px-1.5 font-mono text-caption lg:inline"
           >
-            ⌘K
+            {atalhoDaBusca}
           </kbd>
         </button>
 

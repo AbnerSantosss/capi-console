@@ -318,7 +318,7 @@ ok(
 const SEGREDO = cfgPadrao.entrada.segredo;
 
 let seq = 0;
-async function receberCompra(email, nome) {
+async function receberCompra(email, nome, centavos = 4990) {
   seq += 1;
   const agora = new Date().toISOString();
   const corpo = JSON.stringify({
@@ -329,7 +329,7 @@ async function receberCompra(email, nome) {
       purchase_id: `compra-c7-${seq}`,
       order_id: `pedido-c7-${seq}`,
       product: { name: 'Produto C7' },
-      amount: 4990,
+      amount: centavos,
       currency: 'BRL',
       buyer: { external_id: `comprador-c7-${seq}` },
       approved_at: agora,
@@ -376,10 +376,19 @@ ok(
   `motivo=${r4.item?.motivoDeTeste ?? '-'}`
 );
 
-const r5 = await receberCompra('Maria@Gmail.com ', 'Maria Aparecida Souza');
+// Regra do dono (06/10/2026): recompra de valor normal e o dia a dia e nao
+// levanta suspeita; a repeticao so pesa em valor baixo ou primeiro deposito.
+const r4b = await receberCompra('maria@gmail.com', 'Maria Aparecida Souza');
+ok(
+  r4b.item?.autoBloqueadoPorSuspeita !== true && r4b.item?.motivoDeTeste !== 'email-repetido',
+  '🔴 D4b: 3ª compra de Maria com valor normal (R$ 49,90) NÃO levanta suspeita',
+  `motivo=${r4b.item?.motivoDeTeste ?? '-'}`
+);
+
+const r5 = await receberCompra('Maria@Gmail.com ', 'Maria Aparecida Souza', 300);
 ok(
   r5.item?.autoBloqueadoPorSuspeita === true && r5.item?.motivoDeTeste === 'email-repetido',
-  '🔴 D5: a 3ª compra da MESMA Maria (com maiúsculas e espaço) ainda levanta a suspeita',
+  '🔴 D5: compra repetida da MESMA Maria (com maiúsculas e espaço) de valor baixo (R$ 3,00) levanta a suspeita',
   `motivo=${r5.item?.motivoDeTeste ?? '-'}`
 );
 ok(r5.item?.testeInterno !== true, 'D5: suspeita não vira teste: a venda continua valendo');
@@ -435,8 +444,8 @@ try {
 ok(
   Boolean(recarregado) &&
     typeof recarregado.contarComprasDoEmail === 'function' &&
-    (await recarregado.contarComprasDoEmail(sha256('maria@gmail.com'), 'default')) === 3,
-  'D13: depois de um reinício (módulo novo lendo o disco), Maria continua com 3 compras na empresa padrão'
+    (await recarregado.contarComprasDoEmail(sha256('maria@gmail.com'), 'default')) === 4,
+  'D13: depois de um reinício (módulo novo lendo o disco), Maria continua com 4 compras na empresa padrão'
 );
 ok(
   Boolean(recarregado) && !vazaHash(await recarregado.listarEntradas(1000)),
@@ -530,9 +539,10 @@ console.log('\n  F. explicação da suspeita por e-mail repetido');
 const veredito = deteccao.avaliarTeste({
   email: 'comprador@loja-ficticia.invalid',
   ehCompra: true,
+  valor: 3,
   comprasDoMesmoEmail: 3,
 });
-ok(veredito.motivo === 'email-repetido' && veredito.bloqueiaAutomatico && !veredito.ehTeste, 'F1: controle — 3 compras do mesmo e-mail é suspeita, não teste');
+ok(veredito.motivo === 'email-repetido' && veredito.bloqueiaAutomatico && !veredito.ehTeste, 'F1: controle — 3 compras de valor baixo do mesmo e-mail é suspeita, não teste');
 ok(
   !String(veredito.explicacao).includes('compra uma vez'),
   '🔴 F2: a explicação não contém "compra uma vez"',
@@ -540,11 +550,11 @@ ok(
 );
 ok(
   veredito.explicacao ===
-    'Este e-mail já aparece em 3 compras. O envio automático ficou em espera para você conferir; a venda continua na fila e pode ser enviada.',
+    'Este e-mail já aparece em 3 compras e esta é de valor baixo (R$ 3,00). O envio automático ficou em espera para você conferir; a venda continua na fila e pode ser enviada.',
   'F3: é a frase do plano, com o número de compras'
 );
 ok(
-  deteccao.avaliarTeste({ email: 'x@loja-ficticia.invalid', ehCompra: true, comprasDoMesmoEmail: 5 }).explicacao?.includes('em 5 compras'),
+  deteccao.avaliarTeste({ email: 'x@loja-ficticia.invalid', ehCompra: true, valor: 3, comprasDoMesmoEmail: 5 }).explicacao?.includes('em 5 compras'),
   'F4: o número acompanha a contagem'
 );
 

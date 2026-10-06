@@ -257,7 +257,36 @@ console.log('\n  Detecção de lead de teste\n');
 
 /* ---------------- 4. Suspeita por e-mail repetido ---------------- */
 {
-  const base = { email: 'comprador@gmail.com', nome: 'Carlos Lima', ehCompra: true };
+  // Regra do dono (06/10/2026): repeticao so e suspeita em primeiro deposito
+  // ou em valor baixo. A base e uma compra repetida de valor baixo.
+  const base = { email: 'comprador@gmail.com', nome: 'Carlos Lima', ehCompra: true, valor: 2 };
+
+  ok(
+    avaliarTeste({ ...base, valor: 497, comprasDoMesmoEmail: 9 }).bloqueiaAutomatico === false,
+    '🔴 recompra de valor normal sai sozinha, por mais que o e-mail se repita'
+  );
+  ok(
+    avaliarTeste({ ...base, valor: undefined, comprasDoMesmoEmail: 9 }).bloqueiaAutomatico === false,
+    'sem valor e sem primeiro deposito nao ha suspeita'
+  );
+  ok(
+    avaliarTeste({ ...base, valor: 5, comprasDoMesmoEmail: 3 }).bloqueiaAutomatico === true,
+    'o teto do valor baixo (5) ainda conta como baixo'
+  );
+  ok(
+    avaliarTeste({ ...base, valor: 5.01, comprasDoMesmoEmail: 3 }).bloqueiaAutomatico === false,
+    'logo acima do teto ja e valor normal'
+  );
+  const ftd = avaliarTeste({ ...base, valor: 200, primeiroDeposito: true, comprasDoMesmoEmail: 3 });
+  ok(
+    ftd.bloqueiaAutomatico === true && ftd.ehTeste === false && ftd.explicacao.includes('primeiro depósito'),
+    '🔴 primeiro deposito repetido levanta suspeita mesmo com valor alto',
+    ftd.explicacao
+  );
+  ok(
+    avaliarTeste({ ...base, valor: 200, primeiroDeposito: true, comprasDoMesmoEmail: 1 }).bloqueiaAutomatico === false,
+    'primeiro deposito de verdade (1a compra do e-mail) sai sozinho'
+  );
 
   ok(avaliarTeste({ ...base, comprasDoMesmoEmail: 1 }).bloqueiaAutomatico === false, 'primeira compra passa');
   ok(avaliarTeste({ ...base, comprasDoMesmoEmail: 2 }).bloqueiaAutomatico === false, 'segunda compra ainda pode ser upsell');
@@ -305,6 +334,7 @@ console.log('\n  Detecção de lead de teste\n');
   const v = avaliarTeste({
     email: 'comprador@gmail.com',
     ehCompra: true,
+    valor: 2,
     comprasDoMesmoEmail: 5,
   });
   ok(v.bloqueiaAutomatico === true, 'suspeito perde o automatico');

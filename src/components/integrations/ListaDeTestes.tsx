@@ -342,9 +342,10 @@ export function ListaDeTestes({
       {/* ---------------- e-mail repetido ---------------- */}
       <Panel title="E-mail repetido em várias compras" icon={Repeat2}>
         <p className="text-caption text-fg-muted">
-          Comprador de infoproduto compra uma vez. Quando o mesmo e-mail aparece em várias{' '}
-          <strong className="text-fg-body">compras</strong>, o console para de enviar sozinho e
-          espera você conferir.
+          Comprar ou depositar de novo é normal e sai sozinho. O console só para de enviar
+          sozinho e espera você conferir quando o mesmo e-mail aparece em várias{' '}
+          <strong className="text-fg-body">compras</strong> e a compra é um primeiro depósito ou
+          tem valor baixo (até 5,00).
         </p>
 
         {/* 🔴 A diferença entre os dois blocos desta tela, dita na tela: lá em

@@ -506,7 +506,11 @@ export function FiltrosInbox({
               disabled={totalElegiveis === 0}
             >
               <Send className="size-3.5" aria-hidden />
-              Enviar {totalElegiveis > 0 ? `os ${totalElegiveis} ` : ''}filtrados
+              {totalElegiveis === 1
+                ? 'Enviar 1 evento filtrado'
+                : totalElegiveis > 0
+                  ? `Enviar os ${totalElegiveis} eventos filtrados`
+                  : 'Enviar filtrados'}
             </Button>
             {totalElegiveis === 0 && totalVisiveis > 0 && (
               <span className="text-caption text-fg-muted">

@@ -39,6 +39,7 @@ import {
   type PeriodoEscolhido,
 } from '@/components/common/SeletorDePeriodo';
 import { cn } from '@/lib/utils';
+import { formatarDinheiro } from '@/lib/moeda';
 
 /**
  * Quem foram as pessoas por trás de um número do Painel.
@@ -116,10 +117,7 @@ interface RespostaPessoas {
 /* Vocabulário da linha                                                */
 /* ------------------------------------------------------------------ */
 
-const dinheiro = (v?: number, moeda = 'BRL') =>
-  v === undefined || !Number.isFinite(v)
-    ? '—'
-    : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(v);
+const dinheiro = (v?: number, moeda?: string) => formatarDinheiro(v, moeda);
 
 const quando = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', {
@@ -641,10 +639,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
           {rotuloDoPeriodo(periodo)}
           {dados && ` · ${pessoas.length} ${pessoas.length === 1 ? 'pessoa' : 'pessoas'}`}
           {somaVisivel &&
-            ` · ${somaVisivel.total.toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: somaVisivel.moeda,
-            })}`}
+            ` · ${formatarDinheiro(somaVisivel.total, somaVisivel.moeda)}`}
           {!comTestes && ' · teste da equipe fora da lista'}
           {atualizando && (
             <span className="text-fg-body"> Refazendo a lista para a nova janela…</span>

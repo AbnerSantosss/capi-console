@@ -7,6 +7,8 @@
 // que nao existe em EVENTOS_META.
 import type { NomeEventoMetaPadrao } from './meta-events';
 import { jaEhSha256 } from './hash-detect';
+import { normalizarMoeda } from './moeda';
+import { lerGenerico, nomeDoEventoGenerico, type LeituraGenerica } from './leitura-generica';
 
 /**
  * Tres estados, sem ambiguidade:
@@ -25,7 +27,14 @@ export type ClassificacaoEvento =
   | 'sem-evento';
 
 /** Por que este item nao vai para a Meta. 'regra' e decidido fora do parser. */
-export type MotivoIgnorar = 'regra' | 'sem-equivalente-meta' | 'teste-plataforma' | 'sem-regra' | 'nao-lido';
+export type MotivoIgnorar =
+  | 'regra'
+  | 'sem-equivalente-meta'
+  | 'teste-plataforma'
+  | 'sem-regra'
+  | 'nao-lido'
+  /** Evento de pagamento cujo `status` diz que o dinheiro ainda nao entrou. */
+  | 'pagamento-nao-confirmado';
 
 interface ParseResult {
   fields: Record<string, string | boolean>;
@@ -44,6 +53,14 @@ interface ParseResult {
   motivoIgnorar?: MotivoIgnorar;
   /** true para o botao "Testar" da plataforma (ping) e afins. */
   testePlataforma: boolean;
+  /**
+   * true quando o evento e de pagamento mas o `status` do corpo diz que ele
+   * NAO foi pago (pendente, cancelado, expirado...). Vale mais que a regra:
+   * regra nenhuma transforma pagamento pendente em compra.
+   */
+  pagamentoNaoConfirmado: boolean;
+  /** true quando veio moeda e o console nao soube ler (`$`, `XYZ`). Nunca vira BRL por palpite. */
+  moedaNaoReconhecida: boolean;
 }
 
 /**
@@ -93,6 +110,17 @@ export const MAPA_EVENTOS_ORIGEM: Record<string, NomeEventoMetaPadrao | null> = 
   begin_checkout: 'InitiateCheckout',
   pre_checkout_opened: 'Lead',
   pre_checkout_abandoned: null,
+  // --- Globaltech (payload plano, 06/10/2026). O nome vem em `event` ou
+  // `evento`, em ingles ou traduzido, conforme a versao do painel deles. ---
+  DEPOSIT_PAYMENT: 'Purchase',
+  DEPOSIT_CREATED: 'InitiateCheckout',
+  USER_CREATED: 'CompleteRegistration',
+  'PAGAMENTO_DEPÓSITO': 'Purchase',
+  PAGAMENTO_DEPOSITO: 'Purchase',
+  'DEPÓSITO_CRIADO': 'InitiateCheckout',
+  DEPOSITO_CRIADO: 'InitiateCheckout',
+  'USUÁRIO_CRIADO': 'CompleteRegistration',
+  USUARIO_CRIADO: 'CompleteRegistration',
   // --- testes da propria plataforma: entrega OK, NUNCA vao para a Meta ---
   // O botao "Testar" do backoffice do xWinner manda `ping` (entrega comprovada
   // em 12/09/2026). Estar aqui e o que separa "teste de conexao, tudo certo" de
@@ -178,17 +206,73 @@ export function mapearEventoOrigem(nome: string): ResultadoMapeamento {
   return desconhecido;
 }
 
-/** Regra 1 e 4 do CLAUDE.md + payload de teste do xWinner: nunca vai para a Meta. */
+/**
+ * Regra 1 e 4 do CLAUDE.md + payload de teste do xWinner: nunca vai para a Meta.
+ *
+ * 🔴 A regua do valor (ate R$ 0,10 = cupom de teste) e a regra 4 do CLAUDE.md
+ * e fica como esta. O que descartou deposito real em 06/10/2026 (UX-03) nao
+ * foi ela: foi o valor chegar dividido por 100 (R$ 10 lido como R$ 0,10,
+ * UX-02), corrigido em `parseWebhook`. Item gravado com o valor errado e
+ * reavaliado na leitura (`inbox.ts`).
+ */
 export function ehTesteInterno(fields: Record<string, string | boolean>, eventId?: string): boolean {
   const email = String(fields.email || '').toLowerCase();
   const nome = `${fields.firstName || ''} ${fields.lastName || ''}`.toLowerCase().trim();
-  const valor = Number(fields.value || 0);
   if (eventId && /^evt_preview/i.test(eventId)) return true;
   if (/@(example\.com|exemplo\.com\.br|example\.org|test\.com)$/.test(email)) return true;
   if (email.startsWith('teste@') || email.startsWith('testador@') || email.includes('jairo')) return true;
   if (nome.includes('jairo') || nome === 'lead convidado' || nome.includes('simulação teste')) return true;
+  const valor = Number(fields.value || 0);
   if (valor > 0 && valor <= 0.1) return true;
   return false;
+}
+
+/**
+ * Payload PLANO (Globaltech): tudo na raiz, com prefixo no nome do campo
+ * (`user_email`, `deposit_id`) e a atribuicao em `tracker`. Nao tem `lead`,
+ * `buyer` nem `attribution`.
+ *
+ * Reconhecer o formato importa por causa da UNIDADE do valor: aqui `amount`
+ * vem em unidade de moeda (10 = R$ 10,00). No xWinner vem em centavos.
+ */
+export function ehPayloadPlano(raiz: any): boolean {
+  if (!raiz || typeof raiz !== 'object') return false;
+  if (raiz.lead || raiz.buyer || raiz.attribution) return false;
+  return (
+    raiz.deposit_id !== undefined ||
+    raiz.user_email !== undefined ||
+    (raiz.tracker !== null && typeof raiz.tracker === 'object')
+  );
+}
+
+/** `status` que diz, sem duvida, que o dinheiro NAO entrou. Status desconhecido nao barra nada. */
+const STATUS_NAO_PAGO = new Set([
+  'pending', 'pendent', 'pendente', 'waiting', 'aguardando', 'created', 'criado', 'open', 'aberto',
+  'processing', 'processando', 'canceled', 'cancelled', 'cancelado', 'failed', 'falhou',
+  'error', 'erro', 'expired', 'expirado', 'refunded', 'estornado', 'reembolsado',
+  'rejected', 'recusado', 'denied', 'negado', 'chargeback', 'unpaid', 'nao_pago',
+]);
+
+/** Telefone como o parser sempre gravou: so digitos, ou o hash intacto. */
+function limparTelefone(bruto: unknown, ddiBruto?: unknown): string {
+  const telefone = String(bruto);
+  if (jaEhSha256(telefone)) return telefone.trim().toLowerCase();
+  const ddi = String(ddiBruto || '').replace(/\D+/g, '');
+  const digitos = telefone.replace(/\D+/g, '');
+  return ddi && !digitos.startsWith(ddi) ? ddi + digitos : digitos;
+}
+
+/** Data como veio: ISO, ou numero em segundos / milissegundos. */
+function lerData(bruto: unknown): Date | null {
+  if (bruto === undefined || bruto === null || bruto === '') return null;
+  let d: Date;
+  if (typeof bruto === 'number' || (typeof bruto === 'string' && /^\d{9,13}$/.test(bruto.trim()))) {
+    const n = Number(bruto);
+    d = new Date(n < 1e11 ? n * 1000 : n);
+  } else {
+    d = new Date(String(bruto));
+  }
+  return isNaN(d.getTime()) ? null : d;
 }
 
 /**
@@ -221,7 +305,7 @@ function encontrarRaiz(j: any): any {
 }
 
 function construirUrlComUtms(baseUrl: string, utms: Record<string, string>): string {
-  let url = baseUrl || 'https://codigovencedor.com/';
+  let url = baseUrl;
   if (url.includes('utm_source=')) return url;
   const params: string[] = [];
   if (utms.source) params.push(`utm_source=${encodeURIComponent(utms.source)}`);
@@ -266,8 +350,31 @@ export function parseWebhook(bruto: string): ParseResult {
   // "checkout_abandoned" viraria InitiateCheckout — evento que nunca aconteceu.
   // "pre.checkout.session.opened" contem "checkout", mas a propria plataforma o
   // chama de "Pre-checkout iniciado (lead)": e a CAPTURA DO CONTATO, nao o checkout.
-  const evName = (j.event || raiz.event || raiz.eventName || j.eventName || '') as string;
-  const mapa = mapearEventoOrigem(evName);
+  // `evento` e o nome do campo na versao traduzida do painel da Globaltech.
+  // White-label (06/10/2026): cada empresa recebe de varias plataformas, e o
+  // nome do evento nem sempre vem em `event`. O ultimo recurso procura nos
+  // campos que as outras usam (`type`, `event_type`, `webhook_event_type`).
+  const evBruto =
+    j.event || raiz.event || raiz.eventName || j.eventName || j.evento || raiz.evento || nomeDoEventoGenerico(j) || '';
+  const evName = (typeof evBruto === 'string' ? evBruto.trim() : '') as string;
+  const plano = ehPayloadPlano(raiz);
+  // Formato nativo do xWinner (`lead` ou `attribution`): leitura fechada e
+  // conferida com entrega real. Nele a rede generica NAO entra — `amount`
+  // aninhado ali e centavo, e um palpite trocaria o que ja esta certo.
+  const nativoXwinner = Boolean(raiz.lead || raiz.attribution);
+  const generico: LeituraGenerica = nativoXwinner ? {} : lerGenerico(j);
+  const tracker = (plano && raiz.tracker && typeof raiz.tracker === 'object' ? raiz.tracker : {}) as any;
+  const mapaDoNome = mapearEventoOrigem(evName);
+
+  // Pagamento que ainda nao foi pago nao e compra. So barra com status que diz
+  // isso com todas as letras: status ausente ou desconhecido segue como veio,
+  // porque descartar venda real por nao reconhecer uma palavra e o erro caro.
+  const statusBruto = String(raiz.status ?? '').trim();
+  const pagamentoNaoConfirmado =
+    mapaDoNome.eventoMeta === 'Purchase' && STATUS_NAO_PAGO.has(statusBruto.toLowerCase());
+  const mapa: ResultadoMapeamento = pagamentoNaoConfirmado
+    ? { ...mapaDoNome, eventoMeta: null, classificacao: 'sem-equivalente' }
+    : mapaDoNome;
   const eventoOrigem = evName || undefined;
   const eventoConhecido = mapa.conhecido;
   const classificacao = mapa.classificacao;
@@ -277,7 +384,9 @@ export function parseWebhook(bruto: string): ParseResult {
   // automatico para a Meta, so ganha um depois que o operador criar a regra.
   const ignorar = Boolean(evName) && mapa.eventoMeta === null;
   const motivoIgnorar: MotivoIgnorar | undefined =
-    classificacao === 'teste-plataforma'
+    pagamentoNaoConfirmado
+      ? 'pagamento-nao-confirmado'
+      : classificacao === 'teste-plataforma'
       ? 'teste-plataforma'
       : classificacao === 'sem-equivalente'
         ? 'sem-equivalente-meta'
@@ -288,6 +397,8 @@ export function parseWebhook(bruto: string): ParseResult {
   if (mapa.eventoMeta) {
     eventName = mapa.eventoMeta;
     preenchidos.push(`Evento: ${eventName}`);
+  } else if (pagamentoNaoConfirmado) {
+    preenchidos.push(`Evento ${evName} com status "${statusBruto}": pagamento ainda não confirmado, nada a enviar`);
   } else if (testePlataforma) {
     preenchidos.push(`Evento ${evName}: teste da plataforma — entrega OK, nada a enviar`);
   } else if (classificacao === 'sem-equivalente') {
@@ -369,21 +480,127 @@ export function parseWebhook(bruto: string): ParseResult {
     preenchidos.push('external_id (buyer)');
   }
 
+  // Payload plano (Globaltech): o contato vem na raiz, com prefixo `user_`.
+  // Sem ler daqui o evento ia para a Meta sem e-mail, sem telefone e sem
+  // cookie nenhum — e a compra, que chega sem navegador, nao herdava nada do
+  // DEPOSIT_CREATED porque o perfil de atribuicao ficava sem chave.
+  if (plano) {
+    const emailPlano = raiz.user_email || raiz.email;
+    if (!fields.email && emailPlano) {
+      fields.email = String(emailPlano).trim();
+      preenchidos.push('e-mail (user_email)');
+    }
+    const telefonePlano = raiz.user_phone || raiz.phone;
+    if (!fields.phone && telefonePlano) {
+      const tel = limparTelefone(telefonePlano, raiz.user_phone_country_code || raiz.phone_country_code);
+      if (tel) {
+        fields.phone = tel;
+        preenchidos.push('telefone (user_phone)');
+      }
+    }
+    const nomePlano = String(raiz.user_name || raiz.name || '').trim();
+    if (!fields.firstName && nomePlano) {
+      if (jaEhSha256(nomePlano)) {
+        fields.firstName = nomePlano.toLowerCase();
+      } else {
+        const partes = nomePlano.split(/\s+/);
+        fields.firstName = partes[0];
+        if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+      }
+      preenchidos.push('nome (user_name)');
+    }
+    // O id do usuario na plataforma, e nao o documento: e estavel, repete em
+    // todos os eventos da mesma pessoa e nao e dado sensivel.
+    if (!fields.externalId && raiz.user_id !== undefined && raiz.user_id !== null && raiz.user_id !== '') {
+      fields.externalId = String(raiz.user_id);
+      preenchidos.push('external_id (user_id)');
+    }
+  }
+
+  // Qualquer outra plataforma: o que os formatos conhecidos nao acharam e
+  // procurado pelo NOME do campo, em qualquer nivel (`customer.email`,
+  // `Customer.mobile`, `buyer_email`). So preenche o que esta vazio.
+  if (!fields.email && generico.email) {
+    fields.email = generico.email;
+    preenchidos.push('e-mail (leitura genérica)');
+  }
+  if (!fields.phone && generico.phone) {
+    const tel = limparTelefone(generico.phone);
+    if (tel) {
+      fields.phone = tel;
+      preenchidos.push('telefone (leitura genérica)');
+    }
+  }
+  if (!fields.firstName) {
+    const nomeGenerico = String(generico.nome || `${generico.firstName || ''} ${generico.lastName || ''}`).trim();
+    if (nomeGenerico) {
+      if (jaEhSha256(nomeGenerico)) {
+        fields.firstName = nomeGenerico.toLowerCase();
+      } else {
+        const partes = nomeGenerico.split(/\s+/);
+        fields.firstName = partes[0];
+        if (partes.length > 1) fields.lastName = partes.slice(1).join(' ');
+      }
+      preenchidos.push('nome (leitura genérica)');
+    }
+  }
+  if (!fields.externalId && generico.externalId) {
+    fields.externalId = generico.externalId;
+    preenchidos.push('external_id (leitura genérica)');
+  }
+
+  // 🔴 A UNIDADE do valor e da origem, nao do console. `amountMinor` e os
+  // formatos do xWinner/gateway vem em CENTAVOS; o payload plano da Globaltech
+  // vem em unidade de moeda (10 = R$ 10,00). Dividir tudo por 100 mandava a
+  // Meta um centesimo do faturamento real (UX-02). Valor com casa decimal
+  // tambem nunca e centavo.
   if (raiz.amountMinor !== undefined && raiz.amountMinor !== null) {
     fields.value = (Number(raiz.amountMinor) / 100).toFixed(2);
     preenchidos.push('valor');
-  } else if (raiz.amount !== undefined && raiz.amount !== null) {
-    fields.value = (Number(raiz.amount) / 100).toFixed(2);
-    preenchidos.push('valor');
+  } else if (raiz.amount !== undefined && raiz.amount !== null && raiz.amount !== '') {
+    const recebido = Number(raiz.amount);
+    if (!Number.isFinite(recebido)) {
+      preenchidos.push(`valor "${String(raiz.amount).slice(0, 20)}" não é número — ficou sem valor`);
+    } else if (plano || !Number.isInteger(recebido)) {
+      fields.value = recebido.toFixed(2);
+      preenchidos.push(`valor (recebido ${raiz.amount}, já em unidade de moeda)`);
+    } else {
+      fields.value = (recebido / 100).toFixed(2);
+      preenchidos.push('valor');
+    }
   } else if (raiz.pricing?.originalAmountMinor !== undefined) {
     fields.value = (Number(raiz.pricing.originalAmountMinor) / 100).toFixed(2);
     preenchidos.push('valor (pricing)');
+  } else if (generico.value) {
+    fields.value = generico.value;
+    preenchidos.push(
+      generico.valorEraCentavos
+        ? `valor (campo "${generico.valorCampo}", em centavos)`
+        : `valor (campo "${generico.valorCampo}", lido como unidade de moeda — confira)`
+    );
+  } else if (generico.valorAmbiguo) {
+    preenchidos.push(
+      `valor não lido: o campo "${generico.valorAmbiguo}" veio inteiro e não diz se é centavo — confira antes de enviar`
+    );
   }
 
-  fields.currency = (raiz.currency as string) || 'BRL';
-  preenchidos.push('moeda');
+  // Moeda sempre em ISO 4217 (UX-01). `R$` vira BRL; o que o console nao
+  // reconhece fica COMO VEIO, marcado — o item vai para a fila, sem automatico,
+  // e a tela mostra o texto original. Presumir BRL mandaria valor na moeda errada.
+  const moeda = normalizarMoeda(raiz.currency ?? raiz.moeda ?? generico.currency);
+  let moedaNaoReconhecida = false;
+  if (moeda.codigo) {
+    fields.currency = moeda.codigo;
+    preenchidos.push(moeda.convertida ? `moeda (recebido "${moeda.original}" → ${moeda.codigo})` : 'moeda');
+  } else {
+    fields.currency = moeda.original;
+    moedaNaoReconhecida = true;
+    preenchidos.push(`moeda "${moeda.original}" não reconhecida — confira antes de enviar`);
+  }
 
-  const orderId = (raiz.order_id || raiz.orderId || raiz.sessionId || '') as string;
+  const orderId = String(
+    raiz.order_id || raiz.orderId || raiz.sessionId || (plano ? raiz.deposit_id ?? '' : '') || generico.orderId || ''
+  );
   if (orderId) {
     fields.orderId = orderId;
     preenchidos.push('pedido');
@@ -393,10 +610,17 @@ export function parseWebhook(bruto: string): ParseResult {
   // fbq('track','Purchase',{...},{eventID}). E o que faz a Meta deduplicar
   // browser + CAPI; divergindo, a mesma compra e contada duas vezes.
   // Cai para order_<id> so quando o webhook nao traz id canonico.
-  const idCanonico = (j.eventId || raiz.eventId || j.event_id || raiz.event_id || '') as string;
+  const idCanonico = (j.eventId || raiz.eventId || j.event_id || raiz.event_id || tracker.event_id || tracker.eventId || '') as string;
   if (idCanonico) {
     fields.eventId = String(idCanonico);
     preenchidos.push('event_id do webhook (dedup)');
+  } else if (plano && evName && (orderId || fields.externalId)) {
+    // No payload plano o MESMO deposit_id aparece em dois eventos (criado e
+    // pago). O nome do evento entra no id para cada um ter o seu, e o id e
+    // previsivel: a pagina do cliente consegue mandar o mesmo no Pixel do
+    // navegador e a Meta junta os dois em vez de contar em dobro.
+    fields.eventId = `${orderId || 'user_' + String(fields.externalId)}_${evName}`;
+    preenchidos.push('event_id derivado do depósito + evento');
   } else if (orderId) {
     fields.eventId = 'order_' + orderId;
     preenchidos.push('event_id derivado do pedido');
@@ -405,33 +629,62 @@ export function parseWebhook(bruto: string): ParseResult {
   const product = raiz.product as any;
   if (product?.name) { fields.contentName = product.name; preenchidos.push('produto'); }
 
-  const quando = (raiz.occurredAt || raiz.occurred_at || raiz.approved_at || raiz.generated_at || raiz.opened_at || j.created_at) as string;
+  const quando = (raiz.occurredAt || raiz.occurred_at || raiz.approved_at || raiz.paid_at || raiz.generated_at || raiz.opened_at || j.created_at) as string;
   if (quando) {
-    const d = new Date(quando);
-    if (!isNaN(d.getTime())) {
+    const d = lerData(quando);
+    if (d) {
       const p = (n: number) => String(n).padStart(2, '0');
       fields.eventTime = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       preenchidos.push('data/hora');
     }
   }
 
-  const attr = (raiz.attribution || {}) as any;
-  const cookies = (attr.cookies || {}) as any;
-  const utms = (attr.utm || {}) as Record<string, string>;
+  // No payload plano a atribuicao vem em `tracker`, tudo no mesmo nivel
+  // (`tracker.fbp`, `tracker.utm_source`). Montamos aqui o MESMO formato que o
+  // resto da funcao ja le, para existir um caminho so daqui para baixo.
+  const attr = (raiz.attribution || {
+    eventSourceUrl: tracker.event_source_url || tracker.page_url || tracker.url || tracker.landing_page,
+    referrer: tracker.referrer || tracker.referer,
+    user_agent: tracker.user_agent || tracker.userAgent,
+    ip: tracker.ip || tracker.ip_address || tracker.client_ip || tracker.client_ip_address,
+  }) as any;
+  const cookies = (attr.cookies || {
+    fbc: tracker.fbc || tracker._fbc,
+    fbp: tracker.fbp || tracker._fbp,
+    fbclid: tracker.fbclid,
+    gclid: tracker.gclid,
+    ttclid: tracker.ttclid,
+    msclkid: tracker.msclkid,
+  }) as any;
+  const utmsDoTracker: Record<string, string> = {};
+  for (const k of ['source', 'medium', 'campaign', 'content', 'term'] as const) {
+    const v = tracker['utm_' + k];
+    if (typeof v === 'string' && v.trim()) utmsDoTracker[k] = v.trim();
+  }
+  const utms = (attr.utm || (Object.keys(utmsDoTracker).length ? utmsDoTracker : generico.utms) || {}) as Record<string, string>;
 
-  const urlBruta = (attr.eventSourceUrl || attr.event_source_url || attr.landing_page || '') as string;
+  // Site de onde o evento veio. Sem isto a URL-base caia no dominio do Codigo
+  // Vencedor para QUALQUER empresa.
+  const dominio = String((plano ? raiz.domain : '') || generico.dominio || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/[/?#].*$/, '');
+  const urlBase = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(dominio) ? `https://${dominio}/` : '';
+
+  const urlBruta = (attr.eventSourceUrl || attr.event_source_url || attr.landing_page || generico.sourceUrl || '') as string;
 
   // fbc e o UNICO campo que liga a conversao a campanha / conjunto / anuncio no
   // Gerenciador. A Meta resolve pelo fbclid que vive dentro dele — utm_source,
   // utm_campaign, utm_content e ad_id na URL NAO atribuem nada.
   // Por isso: se o cookie _fbc nao vier, reconstroi no formato fb.1.<ms>.<fbclid>,
   // pegando o fbclid do cookie ou da propria eventSourceUrl.
-  const fbclid = (cookies.fbclid || extrairParam(urlBruta, 'fbclid') || '') as string;
-  if (cookies.fbc) {
-    fields.fbc = cookies.fbc;
+  const fbclid = (cookies.fbclid || extrairParam(urlBruta, 'fbclid') || generico.fbclid || '') as string;
+  const fbcLido = cookies.fbc || generico.fbc;
+  if (fbcLido) {
+    fields.fbc = fbcLido;
     preenchidos.push('fbc');
   } else if (fbclid) {
-    const msClique = new Date(quando || '').getTime() || Date.now();
+    const msClique = lerData(quando)?.getTime() || Date.now();
     fields.fbc = 'fb.1.' + msClique + '.' + fbclid;
     preenchidos.push('fbc reconstruido do fbclid');
   }
@@ -441,7 +694,8 @@ export function parseWebhook(bruto: string): ParseResult {
   // do disparo. Sem ele um replay antigo perde a atribuicao do anuncio.
   if (fbclid) { fields.fbclid = fbclid; preenchidos.push('fbclid'); }
 
-  if (cookies.fbp) { fields.fbp = cookies.fbp; preenchidos.push('fbp'); }
+  const fbpLido = cookies.fbp || generico.fbp;
+  if (fbpLido) { fields.fbp = fbpLido; preenchidos.push('fbp'); }
 
   // Click ids das outras redes e o referrer NAO vao para a Meta. Ficam no perfil
   // de atribuicao e no log porque sao a unica prova de qual canal trouxe a venda
@@ -457,8 +711,9 @@ export function parseWebhook(bruto: string): ParseResult {
   if (referrer) { fields.referrer = referrer; preenchidos.push('referrer'); }
   if (attr.userAgent) { fields.userAgent = attr.userAgent; preenchidos.push('user agent'); }
   if (attr.user_agent) { fields.userAgent = attr.user_agent; preenchidos.push('user agent'); }
+  if (!fields.userAgent && generico.userAgent) { fields.userAgent = generico.userAgent; preenchidos.push('user agent'); }
 
-  const ipBruto = String(attr.ipAddress || attr.ip_address || attr.ip || '').replace(/^::ffff:/i, '').trim();
+  const ipBruto = String(attr.ipAddress || attr.ip_address || attr.ip || generico.ip || '').replace(/^::ffff:/i, '').trim();
   if (ipBruto && !ehIpNaoRoteavel(ipBruto)) {
     fields.ip = ipBruto;
     preenchidos.push('IP do cliente');
@@ -468,8 +723,13 @@ export function parseWebhook(bruto: string): ParseResult {
 
   let sourceUrl = urlBruta;
   if (!sourceUrl && Object.keys(utms).length) {
-    sourceUrl = construirUrlComUtms('https://codigovencedor.com/', utms);
+    // O endereco do Codigo Vencedor so vale para o formato do xWinner, que e
+    // a plataforma dele. Outra origem sem site no payload fica sem URL em vez
+    // de sair para a Meta com o dominio de outra empresa.
+    const base = urlBase || (nativoXwinner ? 'https://codigovencedor.com/' : '');
+    if (base) sourceUrl = construirUrlComUtms(base, utms);
   }
+  if (!sourceUrl && urlBase) sourceUrl = urlBase;
   if (sourceUrl) {
     if (fbclid && !sourceUrl.includes('fbclid=')) {
       sourceUrl += (sourceUrl.includes('?') ? '&' : '?') + 'fbclid=' + encodeURIComponent(fbclid);
@@ -487,7 +747,7 @@ export function parseWebhook(bruto: string): ParseResult {
   //
   // A tag tambem propaga ?cv_visit=<id> nos links de checkout, entao a URL de
   // origem e a segunda fonte quando o gateway nao repassa o bloco `tracking`.
-  const tracking = (raiz.tracking || j.tracking || {}) as any;
+  const tracking = (raiz.tracking || j.tracking || tracker || {}) as any;
   const visitId = String(
     tracking.cv_visit ||
       tracking.visit_id ||
@@ -511,5 +771,7 @@ export function parseWebhook(bruto: string): ParseResult {
     classificacao,
     motivoIgnorar,
     testePlataforma,
+    pagamentoNaoConfirmado,
+    moedaNaoReconhecida,
   };
 }

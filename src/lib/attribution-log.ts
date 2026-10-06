@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { formatarDinheiro } from './moeda';
 
 const DIR_LOG = path.join(process.cwd(), 'logs');
 const ARQ_JSONL = path.join(DIR_LOG, 'disparos.jsonl');
@@ -186,7 +187,7 @@ export async function registrarDisparo(e: EntradaLogNova): Promise<{ jsonl: stri
 
   const brl =
     e.value !== undefined
-      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: e.currency || 'BRL' }).format(e.value)
+      ? formatarDinheiro(e.value, e.currency)
       : '—';
   const ok = e.httpStatus === 200 && (e.eventsReceived ?? 0) > 0;
 

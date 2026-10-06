@@ -85,6 +85,7 @@ import {
   type ProgressoLote,
 } from './FiltrosInbox';
 import { DialogoPayload } from './DialogoPayload';
+import { formatarDinheiro } from '@/lib/moeda';
 import { DialogoLote, type MotivoFora } from './DialogoLote';
 
 interface ResultadoDisparo {
@@ -169,7 +170,7 @@ export interface ItemInbox {
   testeInterno?: boolean;
   /** A frase do detector de teste interno (`deteccao-de-teste.ts`), quando houver. */
   explicacaoDeTeste?: string;
-  formato?: 'A' | 'B' | 'outro';
+  formato?: 'A' | 'B' | 'plano' | 'outro';
   rotuloRecebido?: string | null;
   rotuloDivergente?: boolean;
   eventoMetaSugerido?: string;
@@ -181,10 +182,9 @@ type EstadoConexao = 'conectando' | 'conectado' | 'reconectando' | 'desconectado
 /** Sem sinal nenhum por mais que isto, a conexão é dada como morta e refeita. */
 const SILENCIO_MAXIMO_MS = 45_000;
 
-const dinheiro = (v?: number, moeda = 'BRL') =>
-  v === undefined
-    ? '—'
-    : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(v);
+// `formatarDinheiro` nunca lança: moeda que o console não reconhece vira
+// "10,00 XYZ" em vez de derrubar a caixa de entrada inteira (UX-01).
+const dinheiro = (v?: number, moeda?: string) => formatarDinheiro(v, moeda);
 
 const hora = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', {
@@ -242,9 +242,10 @@ const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
   'pixel-de-outra-empresa': 'recusado: Pixel de outra empresa',
 };
 
-const FORMATO_TEXTO: Record<'A' | 'B' | 'outro', string> = {
+const FORMATO_TEXTO: Record<'A' | 'B' | 'plano' | 'outro', string> = {
   A: 'formato da plataforma (A)',
   B: 'formato gateway',
+  plano: 'formato plano (Globaltech)',
   outro: 'formato não reconhecido',
 };
 
@@ -1452,7 +1453,11 @@ function LinhaEntrada({
   const falhas = (item.resultados ?? []).filter((r) => TOM_RESULTADO[r.status] === 'danger');
 
   /** Quem comprou: o nome quando existe, senão o e-mail mascarado. */
-  const quem = item.nomeCliente ?? item.emailMascarado ?? 'sem identificação';
+  // Visita sem cadastro e o normal da tag do site, nao um erro (UX-21).
+  const quem =
+    item.nomeCliente ??
+    item.emailMascarado ??
+    (item.eventoOrigem?.startsWith('tag.') ? 'visitante anônimo' : 'sem identificação');
 
   /**
    * Uma coluna de ação comporta UM botão. O escolhido é o passo mais provável

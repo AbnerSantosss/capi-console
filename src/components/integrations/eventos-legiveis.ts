@@ -105,6 +105,7 @@ export const TEXTO_MOTIVO: Record<MotivoIgnorar, string> = {
   'teste-plataforma': 'é teste da própria plataforma, não é venda',
   'sem-regra': 'é um nome novo e ainda não há regra dizendo para qual Pixel ele vai',
   'nao-lido': 'o corpo não pôde ser lido (não é JSON ou passou de 1 MB)',
+  'pagamento-nao-confirmado': 'o pagamento ainda não foi confirmado pela plataforma (pendente, recusado ou estornado)',
 };
 
 /** Categorias de nome que a Meta nao tem como representar. */
@@ -207,6 +208,10 @@ export function motivoDaRegraIgnorar(eventoOrigem: string): string {
     }
     const par = parMeta(equivalente);
     return `Tem equivalente na Meta (${par?.pt} · ${equivalente}), mas está desligado por decisão do projeto.`;
+  }
+
+  if (nome.startsWith('tag.')) {
+    return 'Tag gerada pelo console. Enquanto a regra estiver em Ignorar ela não envia nada: mude o modo para Fila e confira o evento da Meta para começar a enviar.';
   }
 
   return 'Nome fora do catálogo conhecido. Enquanto estiver em Ignorar, nada vai para a Meta.';

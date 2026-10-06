@@ -13,7 +13,14 @@ import { respostaConfigIndisponivel } from '@/lib/erro-api';
 import { registrarEntrada, mascararEmail, contarComprasDoEmail, hashDoEmail } from '@/lib/inbox';
 import { avaliarTeste } from '@/lib/deteccao-de-teste';
 import { sinaisDoPayload } from '@/lib/inbox-sinais';
-import { parseWebhook, ehTesteInterno, type ClassificacaoEvento, type MotivoIgnorar } from '@/lib/parser';
+import {
+  parseWebhook,
+  ehTesteInterno,
+  ehPayloadPlano,
+  type ClassificacaoEvento,
+  type MotivoIgnorar,
+} from '@/lib/parser';
+import { ehPrimeiroDeposito } from '@/lib/leitura-generica';
 import { calcularEmq } from '@/lib/emq';
 import { transmitir } from '@/lib/relay';
 import { guardarPerfil } from '@/lib/perfil-atribuicao';
@@ -118,8 +125,13 @@ export function tentativasComSegredoInvalido(): number {
 }
 
 /** Formato do payload, só para a caixa de entrada dizer por onde o evento veio. */
-function formatoDoEvento(nome: string | undefined, conhecido: boolean): 'A' | 'B' | 'outro' {
+function formatoDoEvento(
+  nome: string | undefined,
+  conhecido: boolean,
+  payload?: unknown
+): 'A' | 'B' | 'plano' | 'outro' {
   if (!nome || !conhecido) return 'outro';
+  if (ehPayloadPlano(payload)) return 'plano';
   return nome.includes('.') ? 'B' : 'A';
 }
 
@@ -237,8 +249,12 @@ export async function processarWebhook(
   let motivoDoParser: MotivoIgnorar | undefined;
   let testePlataforma = false;
   let eventoMetaSugerido: string | undefined;
+  let pagamentoNaoConfirmado = false;
+  let moedaNaoReconhecida = false;
   try {
     const r = parseWebhook(JSON.stringify(payload));
+    pagamentoNaoConfirmado = r.pagamentoNaoConfirmado;
+    moedaNaoReconhecida = r.moedaNaoReconhecida;
     campos = r.fields;
     evento = r.eventName;
     eventoOrigem = r.eventoOrigem;
@@ -281,14 +297,21 @@ export async function processarWebhook(
   // O fallback é 'fila' por decisão de projeto (regra 3 do CLAUDE.md): não
   // existe interruptor global de automático, `cfg.entrada.modo` não é lido.
   // Ligar automático é sempre por regra nomeada, na tela de Integrações.
+  //
+  // 🔴 Pagamento NAO confirmado (status pendente, recusado, estornado) passa
+  // por cima da regra: a regra diz "este NOME vira Purchase", e sem isto um
+  // deposito ainda pendente sairia como compra (regra 1 do CLAUDE.md).
   const regra = nomeOriginal ? acharRegra(cfg, nomeOriginal) : undefined;
-  const modoDaRegra: 'auto' | 'fila' | 'ignorar' = regra
+  const modoPelaRegra: 'auto' | 'fila' | 'ignorar' = regra
     ? regra.modo
     : ignorarPeloParser
       ? 'ignorar'
       : 'fila';
+  const modoDaRegra: 'auto' | 'fila' | 'ignorar' = pagamentoNaoConfirmado ? 'ignorar' : modoPelaRegra;
   const eventoDaRegra =
-    regra && regra.modo !== 'ignorar' && regra.eventoMeta ? regra.eventoMeta : evento;
+    !pagamentoNaoConfirmado && regra && regra.modo !== 'ignorar' && regra.eventoMeta
+      ? regra.eventoMeta
+      : evento;
   const marcas = regra?.marcas?.length ? regra.marcas : ['default'];
 
   // A sonda de conexao. O botao "Testar" do backoffice manda `ping`: sem
@@ -332,7 +355,13 @@ export async function processarWebhook(
         : await resolverModoPorMarca(modoDaRegra, marcas);
 
   const motivoIgnorar: MotivoIgnorar | undefined =
-    modo !== 'ignorar' ? undefined : regra ? 'regra' : motivoDoParser;
+    modo !== 'ignorar'
+      ? undefined
+      : pagamentoNaoConfirmado
+        ? 'pagamento-nao-confirmado'
+        : regra
+          ? 'regra'
+          : motivoDoParser;
 
   // Qualquer evento que traga fbc/fbp/ip/ua alimenta o perfil do comprador.
   // É isso que salva o Purchase do PIX, que chega sem atribuição nenhuma.
@@ -389,6 +418,10 @@ export async function processarWebhook(
       eventId: texto('eventId'),
       ehCompra: compraChegando,
       comprasDoMesmoEmail,
+      // `approved_deposits` (ou a marca de primeiro depósito de outra origem,
+      // ver `ehPrimeiroDeposito`) já conta o depósito corrente, então 1
+      // num pagamento é o primeiro depósito da pessoa.
+      primeiroDeposito: compraChegando ? ehPrimeiroDeposito(payload) : undefined,
     },
     cfg.testes
   );
@@ -401,7 +434,17 @@ export async function processarWebhook(
    * sendo um evento real, conta nas métricas, aparece na fila — e apenas não
    * sai sozinho. Um clique humano ainda o envia.
    */
-  const autoBloqueadoPorSuspeita = veredicto.bloqueiaAutomatico && !veredicto.ehTeste;
+  //
+  // Moeda que o console nao reconheceu entra na mesma trava: o valor esta
+  // certo, mas mandar "10" na moeda errada ensina a campanha com um
+  // faturamento que nao existe. Fica na fila ate alguem corrigir na origem.
+  const moedaBarraAuto = moedaNaoReconhecida && !veredicto.ehTeste && Boolean(texto('value'));
+  const autoBloqueadoPorSuspeita =
+    (veredicto.bloqueiaAutomatico && !veredicto.ehTeste) || moedaBarraAuto;
+  const explicacaoDaMoeda = moedaBarraAuto
+    ? `A moeda veio como "${texto('currency') ?? ''}", que o console não reconhece. ` +
+      'O evento ficou na fila e não sai para a Meta até a origem mandar um código como BRL ou USD.'
+    : undefined;
 
   const item = await registrarEntrada({
     origem,
@@ -429,11 +472,11 @@ export async function processarWebhook(
     // mesmo padrão, mas entre duas réguas quem ganha é a que BARRA.
     testeInterno: veredicto.ehTeste || ehTesteInterno(campos, texto('eventId')),
     motivoDeTeste: veredicto.motivo,
-    explicacaoDeTeste: veredicto.explicacao,
+    explicacaoDeTeste: veredicto.explicacao ?? explicacaoDaMoeda,
     // Só gravado quando é `true`: um `false` em todo item seria ruído no
     // histórico de uma coisa que quase nunca acontece.
     ...(autoBloqueadoPorSuspeita ? { autoBloqueadoPorSuspeita: true } : {}),
-    formato: formatoDoEvento(nomeOriginal, conhecido),
+    formato: formatoDoEvento(nomeOriginal, conhecido, payload),
     rotuloRecebido,
     rotuloDivergente,
     valor: texto('value') ? Number(texto('value')) : undefined,

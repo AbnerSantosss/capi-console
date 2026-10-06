@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { MarcaPublica } from '@/stores/useBrandStore';
+import { formatarDinheiro } from '@/lib/moeda';
 
 /**
  * Confirmação de envio em produção.
@@ -51,10 +52,7 @@ export function ConfirmDialog({
 
   const valorFormatado =
     value && !Number.isNaN(Number(value))
-      ? new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: currency || 'BRL',
-        }).format(Number(value))
+      ? formatarDinheiro(Number(value), currency)
       : null;
 
   return (

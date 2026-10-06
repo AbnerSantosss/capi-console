@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
+import { pedir } from '@/lib/cliente-api';
 import { motivoDaRegraIgnorar, parMeta } from './eventos-legiveis';
 import {
   Accordion,
@@ -132,6 +133,68 @@ export function RulesSection({
     return daEmpresa.length === 1 ? [daEmpresa[0].id] : [];
   };
 
+  /**
+   * UX-04: o que CHEGOU pelo webhook e ainda nao tem regra.
+   *
+   * Antes o dono colava o webhook, os eventos chegavam e a aba Regras nao dizia
+   * nada: a lista so mostra regra que existe. Aqui a tela le a caixa de entrada
+   * da empresa aberta e conta, por nome, o que entrou sem regra. Falha de
+   * leitura nao mostra aviso nenhum — o aviso e ajuda, nao pode virar erro.
+   */
+  const [chegaramSemRegra, setChegaramSemRegra] = useState<
+    Array<{ nome: string; total: number; sugestao?: string }>
+  >([]);
+  useEffect(() => {
+    let vivo = true;
+    pedir<{
+      itens: Array<{ eventoOrigem?: string; regraId?: string; origem?: string; eventoMetaSugerido?: string; testePlataforma?: boolean }>;
+    }>('/api/inbox?limite=500')
+      .then((d) => {
+        if (!vivo) return;
+        const porNome = new Map<string, { nome: string; total: number; sugestao?: string }>();
+        for (const i of d.itens ?? []) {
+          const nome = (i.eventoOrigem ?? '').trim();
+          if (!nome || i.regraId || i.testePlataforma || nome.startsWith('tag.')) continue;
+          const atual = porNome.get(nome) ?? { nome, total: 0, sugestao: i.eventoMetaSugerido };
+          atual.total += 1;
+          porNome.set(nome, atual);
+        }
+        setChegaramSemRegra([...porNome.values()].sort((a, b) => b.total - a.total));
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [empresaAtivaId]);
+
+  const comRegra = new Set(regras.map((r) => r.eventoOrigem.trim()));
+  const temCuringa = comRegra.has('*');
+  const semRegraAgora = temCuringa ? [] : chegaramSemRegra.filter((e) => !comRegra.has(e.nome));
+
+  // UX-21: o exemplo dos campos e um nome que ESTA empresa recebe.
+  const exemploDeNome =
+    semRegraAgora[0]?.nome ??
+    regras.find((r) => r.eventoOrigem && r.eventoOrigem !== '*' && !r.eventoOrigem.startsWith('tag.'))
+      ?.eventoOrigem ??
+    'nome_do_evento';
+
+  /** Cria a regra ja com o nome que chegou e o evento da Meta que a tabela conhece. Nasce em Fila. */
+  const criarRegraPara = (nome: string, sugestao?: string) => {
+    // O id sai do nome do evento (e de um contador, se ja existir um igual).
+    const base = `r_${nome.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40) || 'evento'}`;
+    const usados = new Set(regras.map((r) => r.id));
+    let id = base;
+    for (let n = 2; usados.has(id); n++) id = `${base}_${n}`;
+    const eventoMeta = MAPA_EVENTOS_ORIGEM[nome] || sugestao || 'Purchase';
+    onChange([
+      ...regras,
+      { id, eventoOrigem: nome, eventoMeta, marcas: pixelsDaRegraNova(), modo: 'fila', ativo: true },
+    ]);
+    setBusca('');
+    setFiltro('todas');
+    setAbertas((atuais) => [...new Set([...atuais, id])]);
+  };
+
   const adicionar = () => {
     const id = `r_${Date.now().toString(36)}`;
     onChange([
@@ -210,6 +273,32 @@ export function RulesSection({
 
   return (
     <div className="flex flex-col gap-4">
+      {semRegraAgora.length > 0 && (
+        <Callout
+          tone="warning"
+          icon={ShieldAlert}
+          title={`Chegaram eventos de ${semRegraAgora.length} tipo${semRegraAgora.length === 1 ? '' : 's'} sem regra`}
+        >
+          <p>
+            Eles estão parados na fila (ou foram ignorados) porque nenhuma regra diz o que
+            fazer com eles. Crie a regra, confira o evento da Meta e o Pixel, e salve.
+          </p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {semRegraAgora.slice(0, 8).map((e) => (
+              <li key={e.nome} className="flex flex-wrap items-center gap-2">
+                <code className="font-mono text-caption">{e.nome}</code>
+                <span className="text-caption text-fg-muted">
+                  {e.total} recebido{e.total === 1 ? '' : 's'}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => criarRegraPara(e.nome, e.sugestao)}>
+                  <Plus className="size-4" aria-hidden />
+                  Criar regra
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Callout>
+      )}
       {autoEmProducao.length > 0 ? (
         <Callout tone="danger" icon={Zap} title="Há regras automáticas em PRODUÇÃO">
           {autoEmProducao.map((r) => r.eventoOrigem).join(', ')} envia
@@ -236,7 +325,7 @@ export function RulesSection({
             <Input
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar por purchase_approved, Purchase ou compra"
+              placeholder={`Buscar por ${exemploDeNome}, Purchase ou compra`}
               className="w-full pl-9"
             />
           </label>
@@ -331,6 +420,8 @@ export function RulesSection({
           const foraDoCatalogo =
             r.eventoOrigem.trim() !== '' &&
             r.eventoOrigem !== '*' &&
+            // `tag.*` e nome do proprio console (UX-06).
+            !r.eventoOrigem.startsWith('tag.') &&
             !NOMES_CATALOGO.includes(r.eventoOrigem);
           const par = r.modo === 'ignorar' ? null : parMeta(r.eventoMeta);
           const personalizado = r.modo !== 'ignorar' && r.eventoMeta !== '' && par?.padrao === false;
@@ -439,7 +530,7 @@ export function RulesSection({
                       id={`origem-${r.id}`}
                       list="eventos-origem"
                       value={r.eventoOrigem}
-                      placeholder="purchase_approved"
+                      placeholder={exemploDeNome}
                       onChange={(e) => trocar(i, { eventoOrigem: e.target.value.trim() })}
                       className="font-mono"
                     />
