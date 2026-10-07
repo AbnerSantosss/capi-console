@@ -421,8 +421,9 @@ export function CardDePixel({
                       e sem nenhuma regra em `auto` nao e "funcionando". */}
                   {autoLigado && marca.temToken && regrasAuto === 0 && (
                     <p className="text-warning">
-                      Ligado, mas nenhuma regra está no modo automático — então
-                      nada sai sozinho ainda.
+                      Ligado, mas nenhuma regra está em Automático, então tudo
+                      fica na fila. Na aba Regras, ponha em Automático a regra
+                      de cada evento que deve sair sozinho.
                     </p>
                   )}
 

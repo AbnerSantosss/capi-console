@@ -58,7 +58,7 @@ const TEXTO: Record<FaixaDePixel, Omit<EstadoDePixel, 'faixa'>> = {
   'ligado-sem-regra': {
     rotulo: 'Automático ligado, mas nada acontece',
     explicacao:
-      'O envio automático está ligado neste Pixel, mas nenhuma regra está no modo automático. Nada será enviado sozinho.',
+      'O envio automático está ligado neste Pixel, mas nenhuma regra está em Automático. Tudo fica na fila até você pôr em Automático, na aba Regras, a regra de cada evento que deve sair sozinho.',
     tom: 'warning',
   },
   disparando: {

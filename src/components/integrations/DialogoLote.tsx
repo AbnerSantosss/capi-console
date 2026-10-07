@@ -110,6 +110,14 @@ export function DialogoLote({
     itens: fora.filter((f) => f.motivo === motivo),
   })).filter((g) => g.itens.length > 0);
 
+  // Todos os Pixels marcados têm Código de teste: o lote inteiro vai só para o
+  // Testar eventos da Meta. A caixa de confirmação não pode dizer "reais" aqui,
+  // senão o operador confirma uma coisa e a Meta recebe outra.
+  const todosEmTeste = escolhidasVisiveis.length > 0 && escolhidasEmProducao.length === 0;
+  const textoCiente = todosEmTeste
+    ? 'Entendo que estes eventos vão só para o Testar eventos da Meta e não contam nas campanhas.'
+    : 'Entendo que são eventos reais e serão contados nas campanhas.';
+
   const podeDisparar = ciente && escolhidasVisiveis.length > 0 && elegiveis.length > 0;
 
   return (
@@ -201,10 +209,15 @@ export function DialogoLote({
             {elegiveis.length} evento{elegiveis.length === 1 ? '' : 's'} vão contar como conversão
             de verdade na campanha, e não há como desfazer.
           </Callout>
-        ) : escolhidasVisiveis.length > 0 ? (
-          <Callout tone="info" icon={FlaskConical} title="Todos os Pixels estão em modo de teste">
-            Com Código de teste preenchido, os eventos aparecem em Testar Eventos e não contam na
-            campanha.
+        ) : todosEmTeste ? (
+          <Callout tone="warning" icon={FlaskConical} title="Todos os Pixels estão em modo de teste">
+            Com Código de teste preenchido, os eventos aparecem só em Testar eventos e não contam na
+            campanha. Para enviar de verdade, abra a aba Pixels, escolha Editar no menu ⋯ de{' '}
+            {marcas
+              .filter((m) => escolhidasVisiveis.includes(m.id))
+              .map((m) => m.nome)
+              .join(', ')}{' '}
+            e apague o Código de teste.
           </Callout>
         ) : marcas.length > 0 ? (
           // Sem nada marcado, "todos em teste" seria mentira: nao ha nenhum.
@@ -218,11 +231,9 @@ export function DialogoLote({
             checked={ciente}
             onCheckedChange={(v) => setCiente(v === true)}
             className="mt-0.5"
-            aria-label="Entendo que são eventos reais e serão contados nas campanhas"
+            aria-label={textoCiente}
           />
-          <span className="text-caption text-fg-body">
-            Entendo que são eventos reais e serão contados nas campanhas.
-          </span>
+          <span className="text-caption text-fg-body">{textoCiente}</span>
         </label>
 
         <DialogFooter>
