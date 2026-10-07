@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Radio,
@@ -75,6 +76,8 @@ import { separarParaLote } from '@/lib/inbox-lote';
 // "Enviado só em teste": a MESMA leitura que o resumo usa (C9), importada
 // e não copiada. Módulo neutro, sem `server-only`.
 import { enviadoSoEmTeste } from '@/lib/inbox-resumo';
+// Por que a linha está parada na Fila, e a chave que falta. Neutro, como os de cima.
+import { explicarFila, modoEfetivoDoItem, type MotivoDaFila } from '@/lib/motivo-da-fila';
 import {
   FiltrosInbox,
   FILTROS_VAZIOS,
@@ -104,7 +107,9 @@ interface ResultadoDisparo {
     | 'sem-token'
     | 'pixel-desligado'
     /** Recusado sem envio: o Pixel é de outra empresa, não a do item (F1). */
-    | 'pixel-de-outra-empresa';
+    | 'pixel-de-outra-empresa'
+    /** O automático não enviou: o console desconfiou de teste e espera um clique. */
+    | 'suspeita-de-teste';
   httpStatus?: number;
   eventsReceived?: number;
   fbtraceId?: string;
@@ -136,6 +141,13 @@ export interface ItemInbox {
    */
   empresaId?: string;
   modo?: 'auto' | 'fila' | 'ignorar';
+  /**
+   * O que aconteceu em cada Pixel, depois das duas chaves (regra e Pixel).
+   * Ausentes em item gravado antes da FASE 6: a tela cai de volta em `modo`.
+   */
+  modoPorMarca?: Record<string, 'auto' | 'fila'>;
+  /** Por que cada Pixel ficou na fila. Só texto de tela (`motivo-da-fila.ts`). */
+  motivoFila?: Record<string, MotivoDaFila>;
   conhecido?: boolean;
   valor?: number;
   moeda?: string;
@@ -223,6 +235,8 @@ const TOM_RESULTADO: Record<ResultadoDisparo['status'], 'success' | 'danger' | '
   'pixel-desligado': 'neutral',
   // Vermelho: alguem pediu destino errado. Nada saiu, mas o pedido estava mal.
   'pixel-de-outra-empresa': 'danger',
+  // Neutro: não é defeito, é o console pedindo um olhar humano antes.
+  'suspeita-de-teste': 'neutral',
 };
 
 /**
@@ -241,6 +255,7 @@ const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
   'sem-token': 'sem Pixel ID ou token',
   'pixel-desligado': 'automático deste Pixel desligado',
   'pixel-de-outra-empresa': 'recusado: Pixel de outra empresa',
+  'suspeita-de-teste': 'parece teste, esperando você conferir',
 };
 
 const FORMATO_TEXTO: Record<'A' | 'B' | 'plano' | 'outro', string> = {
@@ -789,22 +804,32 @@ export function InboxList({
 
       const enviados = (d.resultados ?? []).filter((x) => x.status === 'enviado');
       if (enviados.length) {
-        toast.success(`Aceito pela Meta em ${enviados.length} pixel(s)`, {
-          description: enviados
-            .map(
-              (x) =>
-                `${nomeDoPixel(
-                  marcas.find((m) => m.id === x.marcaId),
-                  x.pixelId
-                )}: ${x.httpStatus} · EMQ ${x.emq.toFixed(1)}`
-            )
-            .join(' · '),
-        });
+        // Aceito em modo teste não é venda contada: o título diz isso, senão
+        // "Aceito pela Meta" parece sucesso e a campanha continua sem a venda.
+        const soTeste = enviados.every((x) => x.modoTeste);
+        const titulo = soTeste
+          ? `Enviado só em teste em ${enviados.length} Pixel(s)`
+          : `Aceito pela Meta em ${enviados.length} Pixel(s)`;
+        const detalhe = enviados
+          .map(
+            (x) =>
+              `${nomeDoPixel(
+                marcas.find((m) => m.id === x.marcaId),
+                x.pixelId
+              )}: ${x.httpStatus} · EMQ ${x.emq.toFixed(1)}${x.modoTeste ? ' · modo teste' : ''}`
+          )
+          .join(' · ');
+        const descricao = soTeste
+          ? `${detalhe}. Aparece só no Testar eventos e não conta na campanha. Para enviar de verdade, apague o Código de teste do Pixel na aba Pixels.`
+          : detalhe;
+        if (soTeste) toast.warning(titulo, { description: descricao });
+        else toast.success(titulo, { description: descricao });
       } else {
+        // Nunca o slug cru ("sem-token"): quem opera lê o rótulo em português.
         const primeiro = d.resultados?.[0];
         toast.warning('Nada foi enviado', {
           description: primeiro
-            ? `${primeiro.status}${primeiro.erro ? ': ' + primeiro.erro : ''}`
+            ? `${ROTULO_RESULTADO[primeiro.status] ?? primeiro.status}${primeiro.erro ? ': ' + primeiro.erro : ''}`
             : 'Sem resultado.',
         });
       }
@@ -1447,6 +1472,17 @@ function LinhaEntrada({
   const ehNovo = item.status === 'novo';
 
   /**
+   * Por que está parado, numa frase, e a chave que falta para os próximos
+   * saírem sozinhos. Só em linha que ainda pode sair: as outras já têm o
+   * motivo delas (`motivoLegivel`, selo de enviado).
+   */
+  const explicacao = disparavel ? explicarFila(item, marcas) : null;
+  const params = useParams<{ slug?: string }>();
+  const hrefDaAba = (aba: 'regras' | 'pixels') =>
+    params?.slug ? `/e/${params.slug}/${aba}` : `/${aba}`;
+  const modoMostrado = modoEfetivoDoItem(item);
+
+  /**
    * Envio que deu errado em algum Pixel. Antes isso só se via desdobrando a
    * lista de resultados no pé da linha; com a lista dentro do menu, a linha
    * precisa de um selo dizendo que há algo para abrir.
@@ -1582,10 +1618,10 @@ function LinhaEntrada({
               {enviadoSoEmTeste(item) ? 'enviado só em teste' : 'enviado à Meta'}
             </Badge>
           )}
-          {item.modo && (
+          {modoMostrado && (
             <Badge>
-              {React.createElement(ICONE_MODO[item.modo], { 'aria-hidden': true })}
-              {ROTULO_MODO[item.modo]}
+              {React.createElement(ICONE_MODO[modoMostrado], { 'aria-hidden': true })}
+              {ROTULO_MODO[modoMostrado]}
             </Badge>
           )}
           {/* A lista de resultados por Pixel foi para o menu. Sem este selo,
@@ -1597,6 +1633,39 @@ function LinhaEntrada({
             </Badge>
           )}
         </div>
+
+        {/* O porquê, na linha e não no menu: um evento parado sem motivo
+            escrito parece defeito. As três saídas cabem numa frase: enviar
+            agora (o botão ao lado), deixar esperando, ou ligar a chave que
+            faltou para os próximos. */}
+        {explicacao?.frase && (
+          <p className="text-caption text-fg-muted">
+            {explicacao.frase}{' '}
+            {explicacao.acao && (
+              <>
+                Envie agora, deixe esperando ou, para os próximos saírem sozinhos,{' '}
+                <Link
+                  href={hrefDaAba(explicacao.acao.aba)}
+                  className="font-medium text-tinta-texto underline underline-offset-2"
+                >
+                  {explicacao.acao.rotulo.charAt(0).toLowerCase() + explicacao.acao.rotulo.slice(1)}
+                </Link>
+                .
+              </>
+            )}
+          </p>
+        )}
+        {explicacao?.avisoTeste && (
+          <p className="text-caption text-warning">
+            {explicacao.avisoTeste}{' '}
+            <Link
+              href={hrefDaAba('pixels')}
+              className="font-medium underline underline-offset-2"
+            >
+              Tirar do modo teste
+            </Link>
+          </p>
+        )}
       </div>
 
       {/* COLUNA 3 — o valor da venda. Mono, tabular e alinhado à direita: é a

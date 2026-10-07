@@ -194,6 +194,10 @@ export function ChaveDoAutomatico({
   if (!ligadoNoServidor) {
     contexto =
       'Os eventos continuam chegando e ficam na fila; nada vai para a Meta.';
+  } else if (regrasAutoLigadas === 0) {
+    // "0 regras automáticas enviando" é uma frase que ninguém entende: diga o
+    // que acontece com os eventos.
+    contexto = 'nenhuma regra está em Automático, então tudo fica na fila esperando você.';
   } else if (ligadas.length > 1) {
     contexto =
       regrasAutoLigadas === 1
@@ -341,13 +345,27 @@ export function ChaveDoAutomatico({
                   </p>
                 )}
 
+                {/* Pixel ligado e com Código de teste: tudo o que sair vai só
+                    para o Testar eventos. Sem este aviso aqui, "ligado" parece
+                    "funcionando" e a venda real nunca chega à campanha. */}
+                {ligadoNoServidor &&
+                  ligadas.filter((m) => m.testCode?.trim()).map((m) => (
+                    <p key={m.id} className="text-caption text-warning">
+                      O Pixel {m.nome} está em modo teste: o que sair vai só para
+                      o Testar eventos da Meta e não conta na campanha. Para
+                      enviar de verdade, apague o Código de teste na aba Pixels.
+                    </p>
+                  ))}
+
                 {/* O terceiro estado, dito onde a chave está: ligado e sem
                     nenhuma regra em automático não é "funcionando". */}
                 {semRegraAutomatica && (
                   <div className="flex flex-col items-start gap-2 rounded-control border border-warning/40 bg-warning/8 p-3">
                     <p className="text-caption text-warning">
-                      Ligado, mas nenhuma regra está em automático — nada vai
-                      sair. Ajuste em Regras.
+                      Falta a segunda chave. Um evento só sai sozinho quando a
+                      regra dele também está em Automático (por exemplo, a de
+                      Purchase). Até lá, tudo fica na fila e você envia pelo
+                      botão Enviar agora.
                     </p>
                     <Button size="sm" variant="outline" onClick={onIrParaRegras}>
                       <GitBranch className="size-4" aria-hidden />
