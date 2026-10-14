@@ -1,18 +1,20 @@
 'use client';
 
-import React, { useId, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { CalendarRange } from '@/components/ui/icones';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dataIsoValida, dataLocalIso } from '@/lib/inbox-resumo';
 import { cn } from '@/lib/utils';
 
 /**
- * O filtro de período, em botões visíveis.
+ * O filtro de período, num controle segmentado só.
  *
  * Os cinco períodos ficam FORA de qualquer menu: quem abre a tela vê, sem
- * clicar, quais recortes existem e qual está valendo. Ao lado, o intervalo
- * livre — duas datas de calendário, inclusivas nas duas pontas.
+ * clicar, quais recortes existem e qual está valendo. O sexto pedaço, "Datas",
+ * abre o intervalo livre num painel por cima — duas datas de calendário,
+ * inclusivas nas duas pontas.
  *
  * Quem decide o que cada período significa é `janelaDoPeriodo`, no servidor.
  * Aqui só se escolhe e se passa adiante: `hoje` e `ontem` são dia de
@@ -134,20 +136,51 @@ export function SeletorDePeriodo({
 }) {
   const idDe = useId();
   const idAte = useId();
+  const idPainel = useId();
   const hoje = useHojeEmBrasilia();
+  const caixa = useRef<HTMLDivElement>(null);
 
   const meio = valor.de !== null && valor.ate !== null;
   const umSo = (valor.de !== null || valor.ate !== null) && !meio;
-  // No celular as datas ficam atrás de "Escolher datas" (13/10, pedido do
-  // dono: filtro grande ocupando a tela). Com uma data preenchida elas nunca
-  // se escondem, senão o filtro valeria sem ninguém ver.
-  const [datasAbertas, setDatasAbertas] = useState(false);
-  const mostrarDatas = datasAbertas || valor.de !== null || valor.ate !== null;
+  const livre = valor.dias === 'livre' && meio;
+
+  // 14/10 (pedido do dono: "filtros de data bagunçados, ocupando a página"):
+  // as duas datas saíram da linha e moram num painel que abre por cima, a
+  // partir do pedaço "Datas". A garantia de antes continua: filtro valendo
+  // nunca fica escondido — com as duas datas, o próprio pedaço vira o
+  // intervalo e fica marcado; com uma só, fechar o painel limpa a metade.
+  const [aberto, setAberto] = useState(false);
+
+  function fechar() {
+    // Data pela metade não vale para o número; fechar o painel com ela ali
+    // seria um campo escondido mentindo sobre o filtro. Então ela sai.
+    if (umSo) aoMudar({ dias: valor.dias === 'livre' ? 'hoje' : valor.dias, de: null, ate: null });
+    setAberto(false);
+  }
+
+  // Clique fora ou Esc fecham o painel. Sem lista de dependências de
+  // propósito: o `fechar` precisa enxergar a data da vez.
+  useEffect(() => {
+    if (!aberto) return;
+    function foraDaCaixa(e: PointerEvent) {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) fechar();
+    }
+    function tecla(e: KeyboardEvent) {
+      if (e.key === 'Escape') fechar();
+    }
+    document.addEventListener('pointerdown', foraDaCaixa);
+    document.addEventListener('keydown', tecla);
+    return () => {
+      document.removeEventListener('pointerdown', foraDaCaixa);
+      document.removeEventListener('keydown', tecla);
+    };
+  });
 
   function escolherFixo(dias: DiasEscolhidos) {
     // Limpar as datas junto é o que mantém a tela honesta: campo preenchido
     // que não está valendo é um filtro mentindo sobre o número ao lado.
     aoMudar({ dias, de: null, ate: null });
+    setAberto(false);
   }
 
   function trocarData(campo: 'de' | 'ate', bruto: string) {
@@ -161,20 +194,23 @@ export function SeletorDePeriodo({
     });
   }
 
-  // No estreito o campo divide a linha com o rotulo dentro da sua coluna; de
-  // `sm` para cima volta a ser a largura fixa de sempre.
-  const classeDoCampo = 'w-full min-w-0 flex-1 sm:w-40 sm:flex-none md:w-36';
+  const classeDoSegmento = (ativo: boolean) =>
+    cn(
+      'inline-flex h-control-md min-w-0 items-center justify-center gap-1.5 rounded-control px-2 text-label font-medium whitespace-nowrap transition-colors sm:h-full sm:px-3',
+      'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-tinta-texto',
+      ativo ? 'bg-tinta/15 text-tinta-texto' : 'text-fg-muted hover:bg-surface-2 hover:text-fg-body'
+    );
 
   return (
-    <div
-      className={cn('flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3', className)}
-      role="group"
-      aria-label={rotuloDoGrupo}
-    >
-      {/* No celular, régua de cinco colunas iguais com respiro entre elas: os
-          botões soltos com `gap-1` ficavam grandes e colados. De `sm` para
-          cima volta a ser a fileira de sempre. */}
-      <div className="grid min-w-0 grid-cols-5 gap-1.5 sm:flex sm:flex-wrap sm:gap-1">
+    <div ref={caixa} className={cn('relative min-w-0', className)}>
+      {/* Um controle só, segmentado: seis pedaços dentro da mesma moldura, em
+          vez de cinco botões soltos mais dois campos de data sempre abertos.
+          No celular vira 3 × 2: seis numa linha só deixavam os rótulos colados. */}
+      <div
+        role="group"
+        aria-label={rotuloDoGrupo}
+        className="grid min-w-0 grid-cols-3 gap-0.5 rounded-control border border-line bg-surface-1 p-0.5 sm:inline-flex sm:h-control-md"
+      >
         {FIXOS.map((f) => {
           const ativo = valor.dias === f.valor;
           return (
@@ -184,78 +220,77 @@ export function SeletorDePeriodo({
               aria-pressed={ativo}
               aria-label={f.longo}
               onClick={() => escolherFixo(f.valor)}
-              className={cn(
-                'h-control-md min-w-0 rounded-control border px-1 text-caption font-medium whitespace-nowrap transition-colors sm:px-3 sm:text-label',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
-                ativo
-                  ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
-                  : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
-              )}
+              className={classeDoSegmento(ativo)}
             >
               {f.curto}
             </button>
           );
         })}
-      </div>
-
-      {/* Grade de duas colunas no estreito, fila no resto. Antes era uma fila
-          unica com `flex-wrap`, e num telefone ela quebrava em QUATRO linhas —
-          icone+"De", campo inteiro, "até", campo inteiro — ~150px de formulario
-          vazio empurrando o primeiro numero para fora da tela. O `sm:contents`
-          dissolve os invólucros de `sm` para cima: o layout largo e o mesmo de
-          antes, elemento por elemento. */}
-      {!mostrarDatas && (
         <button
           type="button"
-          onClick={() => setDatasAbertas(true)}
-          className="flex min-h-control-md items-center gap-1.5 self-start text-caption font-medium text-tinta-texto sm:hidden"
+          aria-pressed={livre}
+          aria-expanded={aberto}
+          aria-controls={idPainel}
+          aria-label={livre ? `Datas: ${rotuloDoPeriodo(valor)}` : 'Escolher datas'}
+          onClick={() => (aberto ? fechar() : setAberto(true))}
+          className={classeDoSegmento(livre || aberto)}
         >
-          <CalendarRange className="size-4" aria-hidden />
-          Escolher datas
+          <CalendarRange className="hidden size-4 shrink-0 sm:block" aria-hidden />
+          {livre ? rotuloCurtoDasDatas(valor) : 'Datas'}
         </button>
-      )}
-      <div
-        className={cn(
-          mostrarDatas ? 'grid' : 'hidden',
-          'min-w-0 grid-cols-2 items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-2'
-        )}
-      >
-        <CalendarRange className="hidden size-4 shrink-0 text-fg-muted sm:block" aria-hidden />
-        <div className="flex min-w-0 items-center gap-1.5 sm:contents">
-          <label htmlFor={idDe} className="text-caption text-fg-muted">
-            De
-          </label>
-          <Input
-            id={idDe}
-            type="date"
-            value={valor.de ?? ''}
-            max={valor.ate ?? hoje ?? undefined}
-            onChange={(e) => trocarData('de', e.target.value)}
-            className={classeDoCampo}
-            aria-invalid={umSo && valor.de === null ? true : undefined}
-          />
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 sm:contents">
-          <label htmlFor={idAte} className="text-caption text-fg-muted">
-            até
-          </label>
-          <Input
-            id={idAte}
-            type="date"
-            value={valor.ate ?? ''}
-            min={valor.de ?? undefined}
-            max={hoje ?? undefined}
-            onChange={(e) => trocarData('ate', e.target.value)}
-            className={classeDoCampo}
-            aria-invalid={umSo && valor.ate === null ? true : undefined}
-          />
-        </div>
-        {umSo && (
-          <span role="status" className="col-span-2 text-caption text-fg-body sm:col-auto">
-            Falta a outra data para o intervalo valer.
-          </span>
-        )}
       </div>
+
+      {aberto && (
+        <div
+          id={idPainel}
+          role="group"
+          aria-label="Intervalo de datas"
+          className="absolute right-0 top-full z-30 mt-2 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-panel border border-line-strong bg-surface-1 p-4 shadow-realce"
+        >
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
+            <label htmlFor={idDe} className="text-caption text-fg-muted">
+              De
+            </label>
+            <Input
+              id={idDe}
+              type="date"
+              value={valor.de ?? ''}
+              max={valor.ate ?? hoje ?? undefined}
+              onChange={(e) => trocarData('de', e.target.value)}
+              className="w-full min-w-0"
+              aria-invalid={umSo && valor.de === null ? true : undefined}
+            />
+            <label htmlFor={idAte} className="text-caption text-fg-muted">
+              até
+            </label>
+            <Input
+              id={idAte}
+              type="date"
+              value={valor.ate ?? ''}
+              min={valor.de ?? undefined}
+              max={hoje ?? undefined}
+              onChange={(e) => trocarData('ate', e.target.value)}
+              className="w-full min-w-0"
+              aria-invalid={umSo && valor.ate === null ? true : undefined}
+            />
+          </div>
+          {umSo && (
+            <span role="status" className="text-caption text-fg-body">
+              Falta a outra data para o intervalo valer.
+            </span>
+          )}
+          <Button size="sm" variant="outline" className="self-end" onClick={fechar}>
+            {livre ? 'Pronto' : 'Fechar'}
+          </Button>
+        </div>
+      )}
     </div>
   );
+}
+
+/** "12/10 a 14/10": curto para caber no pedaço; o ano fica no rótulo longo. */
+function rotuloCurtoDasDatas(p: PeriodoEscolhido): string {
+  if (!p.de || !p.ate) return 'Datas';
+  const curto = (iso: string) => porExtenso(iso).slice(0, 5);
+  return p.de === p.ate ? curto(p.de) : `${curto(p.de)} a ${curto(p.ate)}`;
 }

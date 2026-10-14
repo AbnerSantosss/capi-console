@@ -192,9 +192,14 @@ export function VisaoGeral({
         description="O que chegou e o que a Meta aceitou."
         icon={Gauge}
         action={
-          <div className="flex flex-col items-start gap-1.5 sm:items-end">
-            <div className="flex flex-wrap items-start gap-2 sm:justify-end">
-              <SeletorDePeriodo valor={periodo} aoMudar={setPeriodo} rotuloDoGrupo="Período da Visão geral" />
+          <div className="flex min-w-0 flex-col items-start gap-1.5 max-sm:w-full">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+              <SeletorDePeriodo
+                valor={periodo}
+                aoMudar={setPeriodo}
+                rotuloDoGrupo="Período da Visão geral"
+                className="max-sm:w-full"
+              />
               <ExportarCsv empresa={{ nome, slug }} resumo={resumo} linhas={linhas} carregando={carregando} />
             </div>
             {/* O intervalo que o servidor usou de fato (`resumo.janela`), e não o

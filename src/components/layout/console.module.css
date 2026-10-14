@@ -288,6 +288,9 @@
 .pageHeader {
   position: relative;
   isolation: isolate;
+  /* Acima do conteúdo que vem depois: o painel "Datas" do filtro de período
+     abre por cima dos cartões, e o `isolate` prende o z-index dele aqui. */
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
