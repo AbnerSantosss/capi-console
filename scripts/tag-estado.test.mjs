@@ -94,7 +94,7 @@ const regra = (eventoOrigem, modo, ativo = true) => ({
 console.log('\n  A. Evento da tag sem regra (F9)');
 
 const EXPLICACAO_F9 =
-  'Sem regra, o evento não entra na fila nem vai à Meta. O fbc e o fbp dele ajudam a venda do webhook a achar a campanha.';
+  'Não entra na Fila nem vai à Meta; ainda ajuda a achar a campanha.';
 
 const semRegra = estadoDaRegra([], 'tag.pageview');
 ok(semRegra.explicacao === EXPLICACAO_F9, 'A1: a explicação é exatamente a do plano v6 T10 passo 3', mostra(semRegra.explicacao));

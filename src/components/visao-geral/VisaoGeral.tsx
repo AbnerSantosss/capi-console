@@ -9,10 +9,11 @@
  *     usou (`resumo.janela`), por extenso e em horário de Brasília, o único fuso
  *     que existe no console;
  *  2. a faixa Site → Pixel → CAPI → Meta;
- *  3. os 5 KPIs (com a linha de amostra incompleta acima deles, R5);
- *  4. funil (60%) + receita por dia (40%);
+ *  3. os 4 KPIs;
+ *  4. funil (60%, com o selo "Amostra parcial" da R5) + receita por dia (40%);
  *  5. últimas conversões + qualidade do rastreamento;
- *  6. a faixa "Configuração x de 6" no rodapé.
+ *  6. a faixa "Configuração x de 6" no rodapé — ou no topo, logo abaixo do
+ *     cabeçalho, enquanto faltar passo (HyperFrames E1).
  *
  * Os quatro estados da página inteira (spec :107):
  *  - carregando: um esqueleto no lugar de cada bloco;
@@ -50,7 +51,6 @@ import type { ResumoInbox } from '@/lib/inbox-resumo';
 import { cn } from '@/lib/utils';
 import { enderecoDaAba } from '@/lib/abas-empresa';
 import {
-  AVISO_DE_AMOSTRA,
   SEM_DADO,
   dataHoraDeBrasilia,
   intervaloPorExtenso,
@@ -182,12 +182,14 @@ export function VisaoGeral({
   const linhas = resumo ? (atual?.linhas ?? null) : null;
   const numeros = useMemo(() => (resumo ? numerosDaVisaoGeral(resumo) : null), [resumo]);
   const tentarDeNovo = () => setTentativa((t) => t + 1);
+  /** Menos de 6 de 6: o checklist sobe para logo abaixo do cabeçalho. */
+  const configuracaoIncompleta = checklist.feitos < checklist.total;
 
   return (
     <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
         title="Visão geral"
-        description={`${nome}: o que chegou, o que a Meta aceitou e o que falta configurar.`}
+        description="O que chegou e o que a Meta aceitou."
         icon={Gauge}
         action={
           <div className="flex flex-col items-start gap-1.5 sm:items-end">
@@ -205,6 +207,9 @@ export function VisaoGeral({
       />
 
       <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
+        {/* Configuração incompleta: a faixa sobe para o topo (o que falta vem antes dos números). */}
+        {configuracaoIncompleta ? <ChecklistEmpresa checklist={checklist} /> : null}
+
         <FluxoDoEvento
           sinais={checklist.sinais}
           envio={envio}
@@ -218,19 +223,13 @@ export function VisaoGeral({
           <EsqueletoDaPagina />
         ) : (
           <>
-            {resumo.amostraCobreJanela === false ? (
-              <p role="note" className="text-caption text-fg-muted">
-                {AVISO_DE_AMOSTRA}
-              </p>
-            ) : null}
-
             {resumo.base === 0 ? (
               <PeriodoVazio
                 rotulo={rotuloDoPeriodo(periodo)}
                 inicio={resumo.janela.inicio}
                 terminaAgora={periodo.dias !== 'ontem' && periodo.dias !== 'livre'}
-                verSeteDias={periodo.dias === 'hoje' || periodo.dias === 'ontem'}
-                aoVerSeteDias={() => setPeriodo({ dias: '7', de: null, ate: null })}
+                verNoventaDias={periodo.dias === 'hoje' || periodo.dias === 'ontem'}
+                aoVerNoventaDias={() => setPeriodo({ dias: '90', de: null, ate: null })}
                 proximo={proximo}
                 slug={slug}
               />
@@ -240,7 +239,8 @@ export function VisaoGeral({
 
             {/* `3fr 2fr` a partir de `lg`, uma coluna embaixo (`.gradeTresDois`, V9). */}
             <div className={consoleStyles.gradeTresDois}>
-              <Funil numeros={numeros} />
+              {/* A amostra incompleta (R5, `AVISO_DE_AMOSTRA`) vira o selo "Amostra parcial" dentro do funil. */}
+              <Funil numeros={numeros} amostraParcial={resumo.amostraCobreJanela === false} slug={slug} />
               <Receita resumo={resumo} />
             </div>
 
@@ -258,7 +258,7 @@ export function VisaoGeral({
           </>
         )}
 
-        <ChecklistEmpresa checklist={checklist} />
+        {configuracaoIncompleta ? null : <ChecklistEmpresa checklist={checklist} />}
       </div>
     </main>
   );
@@ -271,8 +271,8 @@ function EsqueletoDaPagina() {
       {/* As mesmas grades dos blocos de verdade, para nada pular quando os números chegam. */}
       <div className="@container">
         <div className={consoleStyles.gradeKpis}>
-          {Array.from({ length: 5 }, (_, i) => (
-            <Esqueleto key={i} className={cn('h-28', i === 4 && consoleStyles.kpiValor)} />
+          {Array.from({ length: 4 }, (_, i) => (
+            <Esqueleto key={i} className={cn('h-28', i === 3 && consoleStyles.kpiValor)} />
           ))}
         </div>
       </div>
@@ -319,7 +319,7 @@ function FalhaDaPagina({
     falha.tipo === 'servidor'
       ? `${falha.mensagem} Tente de novo.`
       : falha.tipo === 'outra-empresa'
-        ? 'A resposta veio de outra empresa e foi descartada. Tente de novo.'
+        ? 'Dados de outra empresa descartados. Tente de novo.'
         : 'Sem resposta do servidor. Tente de novo.';
   return (
     <EstadoVazio
@@ -339,7 +339,7 @@ function FalhaDaPagina({
  * Vazio (`base = 0`): os blocos continuam na tela, cada um com o seu "—", e
  * este aviso diz desde quando nada chega e o que fazer (V9, com o
  * `EstadoVazio` de sempre). Em Hoje/Ontem, o clique mais útil é abrir os
- * últimos 7 dias; senão, o próximo passo da configuração; e, com tudo
+ * últimos 90 dias (o mesmo botão da aba Eventos); senão, o próximo passo da configuração; e, com tudo
  * configurado, a aba Fontes, onde está a tag que manda os eventos.
  *
  * "Desde" só quando o período termina agora (Hoje e os últimos 7, 30 e 90
@@ -350,8 +350,8 @@ function PeriodoVazio({
   rotulo,
   inicio,
   terminaAgora,
-  verSeteDias,
-  aoVerSeteDias,
+  verNoventaDias,
+  aoVerNoventaDias,
   proximo,
   slug,
 }: {
@@ -359,8 +359,8 @@ function PeriodoVazio({
   /** Início da janela que o servidor usou (`resumo.janela.inicio`). */
   inicio: string;
   terminaAgora: boolean;
-  verSeteDias: boolean;
-  aoVerSeteDias: () => void;
+  verNoventaDias: boolean;
+  aoVerNoventaDias: () => void;
   proximo: ChecklistDaEmpresa['proximo'];
   slug: string;
 }) {
@@ -369,21 +369,18 @@ function PeriodoVazio({
     terminaAgora && desde !== SEM_DADO
       ? `Nenhum evento chegou desde ${desde}`
       : `Nenhum evento chegou neste período (${rotulo.toLowerCase()})`;
-  const oQueFazer =
-    !verSeteDias && proximo
-      ? `Próximo passo: ${proximo.verbo.toLowerCase()}.`
-      : 'Os números abaixo ficam em "—" até chegar o primeiro.';
+  const oQueFazer = !verNoventaDias && proximo ? `Próximo passo: ${proximo.verbo.toLowerCase()}. ` : '';
 
   return (
     <div role="status">
       <EstadoVazio
         titulo={titulo}
-        motivo={`${oQueFazer} Nada é enviado à Meta para testar: a tela só conta evento real.`}
+        motivo={`${oQueFazer}Nada é enviado à Meta para testar: só conta evento real.`}
         className="px-4 py-5"
         acao={
-          verSeteDias ? (
-            <Button variant="outline" size="sm" onClick={aoVerSeteDias}>
-              Ver os últimos 7 dias
+          verNoventaDias ? (
+            <Button variant="outline" size="sm" onClick={aoVerNoventaDias}>
+              Ver os últimos 90 dias
             </Button>
           ) : proximo ? (
             <Link href={proximo.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
@@ -394,7 +391,7 @@ function PeriodoVazio({
               href={enderecoDaAba(slug, 'fontes')}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
-              Abrir a aba Fontes
+              Abrir Instalação
             </Link>
           )
         }

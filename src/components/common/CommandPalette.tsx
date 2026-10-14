@@ -209,7 +209,7 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
                 que e o que ele virou depois que o recebimento saiu de la.
                 V2: os rótulos dizem o nome da aba para onde levam. */}
             <Item icone={Plug} onSelect={() => irPara('/fontes', '/instalacao')}>
-              Fontes (webhook e tag do site)
+              Instalação (tag do site e webhook)
             </Item>
             <Item
               icone={Target}
@@ -222,7 +222,7 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
                 }
               }}
             >
-              Pixel e token
+              Pixels
             </Item>
             <Item
               icone={Inbox}

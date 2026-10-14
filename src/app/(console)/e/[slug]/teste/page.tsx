@@ -42,7 +42,7 @@ export default async function TesteDaEmpresa({
     <main className={consoleStyles.page} data-area="manual">
       <ConsolePageHeader
         title="Eventos de teste"
-        description="Envie os eventos do funil em sequência, com dados de teste, e veja cada um chegar em Testar eventos."
+        description="Envie o funil com dados de teste."
         icon={FlaskConical}
       />
       <EventosDeTeste key={empresaId} empresaId={empresaId} dominio={dominio} />

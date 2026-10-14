@@ -86,6 +86,7 @@ const {
   numerosDaVisaoGeral,
   statusDaConversao,
   ultimasConversoes,
+  resumoTextualDoFunil,
   AVISO_DE_AMOSTRA,
 } = calc;
 
@@ -277,6 +278,38 @@ const itensDoPeriodo = [
     mostra(vazio)
   );
 
+  // HyperFrames E1 + O2: os campos novos do funil.
+  ok(n.pagamentos === 1 && n.leads === 0, 'E1: 1 AddPaymentInfo e nenhum Lead na fixture', mostra([n.pagamentos, n.leads]));
+  ok(n.abandonos === 1, 'O2: o checkout_abandoned da fixture conta 1 abandono', mostra(n.abandonos));
+  ok(
+    [vazio.leads, vazio.pagamentos, vazio.abandonos].every((v) => v === null),
+    'E1/O2: sem dado, leads, pagamentos e abandonos são null',
+    mostra([vazio.leads, vazio.pagamentos, vazio.abandonos])
+  );
+  {
+    const comLead = [
+      item({ status: 'disparado', eventoMeta: 'Lead', evento: 'Lead', eventoOrigem: 'lead', resultados: [ACEITO] }),
+      item({ status: 'disparado', eventoMeta: 'AddPaymentInfo', evento: 'AddPaymentInfo', eventoOrigem: 'payment_generated', resultados: [ACEITO] }),
+      item({ status: 'disparado', eventoMeta: 'AddPaymentInfo', evento: 'AddPaymentInfo', eventoOrigem: 'payment_generated', resultados: [ACEITO] }),
+    ];
+    const nl = numerosDaVisaoGeral(resumirInbox(comLead, AGORA, 'hoje'));
+    ok(nl.leads === 1 && nl.pagamentos === 2, 'E1: 1 Lead e 2 AddPaymentInfo → leads 1, pagamentos 2', mostra([nl.leads, nl.pagamentos]));
+    const fraseLead = resumoTextualDoFunil(nl);
+    ok(fraseLead.includes('Contato 1') && fraseLead.includes('Aguardando pagamento 2'), 'E1: a frase traz o Contato quando há Lead', fraseLead);
+    ok(!resumoTextualDoFunil(n).includes('Contato'), 'E1: sem Lead, a frase não traz o Contato');
+  }
+  {
+    const frase = resumoTextualDoFunil(n);
+    ok(
+      frase.includes('Páginas vistas 2') && frase.includes('Checkout iniciado 2') && frase.includes('Pago 4') && frase.includes('abandonou o checkout 1'),
+      'E1: resumoTextualDoFunil com os rótulos do O2 e o abandono',
+      frase
+    );
+    ok(frase.includes('Conta eventos') && !/cliques|pessoas que|seguiram/i.test(frase), 'E1: conta eventos, sem cliques, sem "pessoas que"', frase);
+    ok(resumoTextualDoFunil({ ...n, abandonos: null }).includes('sem sinal'), 'O2: abandono null → "sem sinal" na frase');
+    ok(resumoTextualDoFunil(vazio) === 'Nenhum evento real no período.', 'E1: sem dado, a frase curta', resumoTextualDoFunil(vazio));
+  }
+
   // R1 da V4: [produção erro 400, teste enviado] é recusa na lista e no resumo.
   // Fica fora da fixture acima: no volume ele é "só em teste", e a soma dos
   // disparados de lá deixaria de fechar.
@@ -387,10 +420,10 @@ console.log('\n(i)–(iii) estáticos da parte 5a');
   ok(kpis !== null, '(i) Kpis.tsx existe');
   if (kpis) {
     ok(
-      emOrdem(kpis, ['"Cliques"', '"Visualizações de página"', '"Inícios de checkout"', '"Compras"', '"Valor das compras"']),
-      '(i) os 5 KPIs, nesta ordem'
+      emOrdem(kpis, ['"Páginas vistas"', '"Checkouts"', '"Compras"', '"Faturado"']),
+      '(i) os 4 KPIs (HyperFrames E1), nesta ordem'
     );
-    ok(kpis.includes('indisponível') && kpis.includes('fbclid'), '(i) "indisponível" e "fbclid"');
+    ok(!kpis.includes('"Cliques"') && kpis.includes('fbclid'), '(i) sem o cartão Cliques, com a linha de "fbclid"');
     ok(!/rotulo="(Recebidos|Recusados|Enviados)"/.test(kpis) && !/>(Recebidos|Recusados|Enviados)</.test(kpis), '(i) nenhum cartão chamado Recebidos, Recusados ou Enviados');
     ok(kpis.includes('surface-success'), '(i) o cartão de valor usa surface-success');
   }
@@ -398,9 +431,13 @@ console.log('\n(i)–(iii) estáticos da parte 5a');
   const funil = ler(...PASTA_VG, 'Funil.tsx');
   ok(funil !== null, '(ii) Funil.tsx existe');
   if (funil) {
-    ok(funil.includes('<text'), '(ii) rótulos em <text> do SVG');
     ok(funil.includes('role="img"') && funil.includes('aria-describedby'), '(ii) role="img" e aria-describedby');
-    ok(funil.includes('Conversão total') && funil.includes('indisponível'), '(ii) "Conversão total" e "indisponível"');
+    ok(funil.includes('Página → compra') && funil.includes('Conta eventos do período, não pessoas.'), '(ii) "Página → compra" e a nota de eventos');
+    ok(funil.includes('indisponível') || funil.includes('sem sinal'), '(ii) "indisponível" ou "sem sinal"');
+    ok(funil.includes("from '@/components/cenas'") && funil.includes('<Palco'), '(ii) a cena vem de @/components/cenas');
+    ok(funil.includes('Amostra parcial') && funil.includes('AVISO_DE_AMOSTRA'), '(ii) o selo "Amostra parcial" com o aviso inteiro');
+    ok(funil.includes('Abandonou o checkout') && funil.includes('n.abandonos'), '(ii) O2: o ramo do abandono com a contagem real');
+    ok(!funil.includes('seguiram') && !funil.includes('vieram de anúncio'), '(ii) nada de "seguiram" nem "vieram de anúncio"');
     ok(!funil.includes('<image'), '(ii) nenhuma <image>');
     ok(!/cliques\s*[:=]\s*\d/i.test(funil), '(ii) nenhum literal numérico de cliques');
   }
@@ -464,7 +501,7 @@ console.log('\n(iv)–(xi) estáticos da parte 5b');
     ]) {
       ok(visao.includes(t), `(viii) contém ${t}`);
     }
-    ok(visao.includes('amostraCobreJanela') && visao.includes('AVISO_DE_AMOSTRA'), '(x) a linha de amostra incompleta (R5) na tela');
+    ok(visao.includes('amostraCobreJanela') && visao.includes('amostraParcial='), '(x) a amostra incompleta (R5) chega ao selo do funil');
     ok(visao.includes('respostaEhDoPeriodo') && /resumo\.value\.empresaId !== empresaId/.test(visao), '(viii) descarta outro período e outra empresa (T2)');
     ok(/'X-Empresa-Id': empresaId/.test(visao), '(viii) pede com a empresa do endereço');
     ok(visao.includes('comparar=1'), '(viii) pede o período anterior (variação)');
@@ -472,6 +509,13 @@ console.log('\n(iv)–(xi) estáticos da parte 5b');
       emOrdem(visao, ['<FluxoDoEvento', '<Kpis', '<Funil', '<Receita', '<AtividadeRecente', '<Qualidade', '<ChecklistEmpresa']),
       '(viii) os blocos na ordem da spec'
     );
+    ok(
+      visao.includes('configuracaoIncompleta') &&
+        emOrdem(visao, ['configuracaoIncompleta ? <ChecklistEmpresa', '<FluxoDoEvento']),
+      '(viii) E1: com a configuração incompleta, o checklist vem antes do fluxo'
+    );
+    ok(visao.includes('Nada é enviado à Meta para testar'), '(viii) a garantia continua no vazio do período');
+    ok(!/vieram de anúncio|seguiram|Visitas"/.test(visao), '(viii) nada de "vieram de anúncio", "seguiram" nem "Visitas"');
   }
 
   // (ix) nenhum arquivo da pasta importa lucide (G9).

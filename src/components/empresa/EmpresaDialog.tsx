@@ -383,7 +383,7 @@ export function EmpresaDialog({ aberto, onOpenChange, empresa }: EmpresaDialogPr
                 — o evento chega, mas na caixa da empresa errada. */}
             <Callout tone="info" icon={KeyRound}>
               Cada empresa tem o próprio segredo de webhook e a própria chave de
-              tag. Eles aparecem em Instalação.
+              tag. Eles aparecem na aba Instalação da empresa.
             </Callout>
           </div>
         ) : (

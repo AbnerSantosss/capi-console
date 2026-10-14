@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { InboxList } from '@/components/integrations/InboxList';
+import { IconeDoAssunto } from '@/components/cenas';
 
 const EXEMPLO = `{
   "event": "order_approved",
@@ -39,6 +40,11 @@ const EXEMPLO = `{
   }
 }`;
 
+/** O3: o ícone do título com a cor e a entrada curta do assunto. */
+function IconeDaOrigem() {
+  return <IconeDoAssunto assunto="evento" icone={Webhook} />;
+}
+
 export function SourceSection() {
   const [aba, setAba] = useState('inbox');
 
@@ -46,10 +52,10 @@ export function SourceSection() {
     <Section
       id="secao-origem"
       step={1}
-      icon={Webhook}
+      icon={IconeDaOrigem}
       variant="card"
       title="De onde vem o evento"
-      description="Escolha um evento que já chegou, cole o JSON do webhook, ou preencha os campos abaixo à mão."
+      description="Escolha uma venda da Fila, cole o JSON ou preencha à mão."
     >
       <Tabs value={aba} onValueChange={(v) => v && setAba(String(v))}>
         <TabsList className="h-auto w-full bg-surface-2 p-1 sm:w-auto">
@@ -70,19 +76,9 @@ export function SourceSection() {
         </TabsList>
 
         <TabsContent value="inbox" className="mt-4 outline-none">
-          {/* Os dois botoes de cada item faziam coisas diferentes com nomes
-              parecidos. Uma frase resolve o que nenhum rotulo curto resolvia. */}
-          <p className="mb-3 rounded-control border border-line bg-surface-2 p-3 text-caption text-fg-muted">
-            <strong className="font-semibold text-fg-body">
-              Carregar no formulário
-            </strong>{' '}
-            traz os dados para os campos abaixo, para você conferir antes de
-            enviar — nada sai para a Meta.{' '}
-            <strong className="font-semibold text-fg-body">
-              Enviar agora
-            </strong>{' '}
-            envia o evento do jeito que ele chegou, sem passar pelo formulário.
-          </p>
+          {/* E5: a frase que separava "Carregar no formulário" de "Enviar
+              agora" virou legenda de 2 palavras sob cada ação, no menu de cada
+              linha da Fila ("Revisa primeiro" / "Envia como chegou"). */}
           <InboxList compacto />
           <Link
             href="/automatico?aba=inbox"

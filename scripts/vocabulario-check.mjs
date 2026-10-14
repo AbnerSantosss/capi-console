@@ -169,18 +169,7 @@ const FORA_DA_V6 = 'arquivo fora da lista "Pode tocar" da V6; o texto fica para 
 const PENDENTES_FORA_DA_V6 = [
   { arquivo: 'src/components/common/ErrorSummary.tsx', palavra: 'Disparar/Disparo', texto: 'Corrija 1 campo antes de disparar', motivo: FORA_DA_V6 },
   { arquivo: 'src/components/common/ErrorSummary.tsx', palavra: 'Disparar/Disparo', texto: 'campos antes de disparar', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/dispatch/ConfirmDialog.tsx', palavra: 'Marca/Marcas', texto: 'Não há código de teste ativo nesta marca.', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/event/TransactionSection.tsx', palavra: 'Disparar/Disparo', texto: 'se o Pixel também disparar', motivo: FORA_DA_V6 },
   { arquivo: 'src/components/guide/PathCard.tsx', palavra: 'Disparar/Disparo', texto: 'Quem dispara', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/integrations/ListaDeTestes.tsx', palavra: 'Disparar/Disparo', texto: 'o console para de disparar sozinho', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/integrations/ListaDeTestes.tsx', palavra: 'Disparar/Disparo', texto: 'pode ser disparado por você', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Disparar/Disparo', texto: 'carregado no disparo', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Testes da equipe', texto: 'teste da equipe fora da lista', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Testes da equipe', texto: 'Esconder testes da equipe', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Testes da equipe', texto: 'Mostrar testes da equipe', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Testes da equipe', texto: 'Nem com os testes da equipe à mostra', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/painel/ListaDePessoas.tsx', palavra: 'Testes da equipe', texto: 'tudo o que entrou seja teste da equipe', motivo: FORA_DA_V6 },
-  { arquivo: 'src/components/visao-geral/AtividadeRecente.tsx', palavra: 'Testes da equipe', texto: 'sem teste da equipe', motivo: FORA_DA_V6 },
   {
     arquivo: 'src/app/api/relay/route.ts',
     palavra: 'Destino',

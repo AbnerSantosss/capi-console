@@ -1131,6 +1131,25 @@ const ACEITO = [{ marcaId: 'a', status: 'enviado', httpStatus: 200, eventsReceiv
   }
 }
 
+/* ---------------- Abandonos (O2 do funil da Visao geral) ---------------- */
+{
+  const abandono = () =>
+    item({ status: 'ignorado', evento: 'checkout_abandoned', eventoOrigem: 'checkout_abandoned' });
+  const r = resumirInbox(
+    [
+      abandono(),
+      abandono(),
+      item({ status: 'disparado', evento: 'Purchase', eventoMeta: 'Purchase', eventoOrigem: 'purchase_approved' }),
+      // Teste da equipe: fora da conta, como em todo o resto.
+      item({ status: 'ignorado', evento: 'checkout_abandoned', eventoOrigem: 'checkout_abandoned', testeInterno: true }),
+    ],
+    AGORA,
+    30
+  );
+  ok(r.abandonos === 2, 'abandonos: 2 checkout_abandoned + 1 purchase_approved -> 2 (teste da equipe fora)', String(r.abandonos));
+  ok(resumirInbox([], AGORA, 30).abandonos === 0, 'abandonos: lista vazia -> 0');
+}
+
 ok(chamadasDeRede === 0, 'nenhuma chamada de rede durante a suite', String(chamadasDeRede));
 
 /* ---------------- Fechamento ---------------- */

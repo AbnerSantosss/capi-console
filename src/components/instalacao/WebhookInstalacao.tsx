@@ -17,7 +17,6 @@
 import React, { useId, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowUpRight,
   Check,
   ChevronDown,
   Copy,
@@ -31,7 +30,8 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Callout, Field, Panel } from '@/components/common/primitives';
+import { SeloDePasso } from '@/components/cenas';
+import { Callout, Field } from '@/components/common/primitives';
 import { cn } from '@/lib/utils';
 import {
   erroDoRotulo,
@@ -41,6 +41,8 @@ import {
 import type { Integracoes } from '@/components/integrations/tipos';
 import { nomeDaPlataforma } from '@/lib/produto';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
+import { IconeExpor } from './icones-animados';
+import { TituloDoBloco } from './OndeInstalarTag';
 
 /**
  * Os cinco passos do backoffice do xWinner, na ordem em que se faz.
@@ -55,55 +57,43 @@ const passosXWinner: Array<{ id: string; conteudo: React.ReactNode }> = [
     id: 'onde',
     conteudo: (
       <>
-        Entre em <code className="font-mono">admin.codigovencedor.com</code> →
-        Integrações → aba <strong>Webhooks</strong> → Novo endpoint.
+        Abra <code className="font-mono">admin.codigovencedor.com</code> → Integrações → aba{' '}
+        <strong>Webhooks</strong>.
       </>
     ),
   },
   {
-    id: 'formulario',
+    id: 'novo',
     conteudo: (
       <>
-        O formulário tem só <strong>URL (https)</strong>, os eventos e Ativo —
-        não existe campo de cabeçalho. É por isso que a URL acima leva o segredo
-        no próprio endereço.
+        Clique em <strong>Novo endpoint</strong> e cole a URL.
       </>
     ),
   },
+  { id: 'eventos', conteudo: <>Marque os 5 eventos abaixo.</> },
   {
-    id: 'eventos',
+    id: 'ativo',
     conteudo: (
       <>
-        Assine só os eventos que viram conversão:{' '}
-        <code className="font-mono">precheckout_opened</code>,{' '}
-        <code className="font-mono">checkout_session_opened</code>,{' '}
-        <code className="font-mono">payment_generated</code>,{' '}
-        <code className="font-mono">checkout_card_attempted</code> e{' '}
-        <code className="font-mono">purchase_approved</code>.
+        Deixe <strong>Ativo</strong> ligado e salve.
       </>
     ),
   },
   {
-    id: 'testar',
-    conteudo: (
-      <>
-        O botão <strong>Testar</strong> do xWinner manda um evento{' '}
-        <code className="font-mono">ping</code>, e não uma compra: ele prova o
-        canal, não o mapeamento. O ping aparece na Fila como
-        ignorado, e é esse o resultado certo.
-      </>
-    ),
-  },
-  {
+    // O xWinner mostra uma vez um segredo de assinatura dele; quem autentica
+    // aqui é o segredo da URL.
     id: 'assinatura',
-    conteudo: (
-      <>
-        Ao salvar, o xWinner mostra uma única vez um segredo de assinatura dele.
-        Este console não usa esse valor — quem autentica aqui é o segredo da URL
-        acima.
-      </>
-    ),
+    conteudo: <>O segredo que o xWinner mostra não é usado.</>,
   },
+];
+
+/** Os eventos que viram conversão: o operador marca estes no formulário. */
+const EVENTOS_XWINNER = [
+  'precheckout_opened',
+  'checkout_session_opened',
+  'payment_generated',
+  'checkout_card_attempted',
+  'purchase_approved',
 ];
 
 export interface WebhookInstalacaoPropriedades {
@@ -139,8 +129,8 @@ export function WebhookInstalacao({
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
   const [salvandoRotulo, setSalvandoRotulo] = useState(false);
   // V7: o dia a dia desta tela é copiar UMA URL. O resto — o segredo, a URL
-  // antiga, a URL do n8n, o apelido, o teste pela linha de comando — é de
-  // quem configura uma vez, e fica atrás de "Mostrar detalhes".
+  // antiga, a URL do n8n, o apelido, o teste pela linha de comando e o túnel —
+  // é de quem configura uma vez, e fica atrás de "Detalhes técnicos" (E3).
   const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
   const idDetalhes = useId();
 
@@ -212,88 +202,86 @@ export function WebhookInstalacao({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex min-w-0 flex-col gap-4">
-        {ehLocal && (
-          <Callout tone="warning" icon={AlertTriangle} title="A plataforma exige https">
-            O campo do backoffice é <strong>URL (https)</strong> e este console
-            está em <code className="font-mono">{base}</code>. Abra o acesso
-            público (em &ldquo;Mostrar detalhes&rdquo;, &ldquo;Expor para a
-            internet&rdquo;) e use a URL gerada no lugar de{' '}
-            <code className="font-mono">localhost:3333</code>.
-          </Callout>
-        )}
+      {ehLocal && (
+        <Callout tone="warning" icon={AlertTriangle}>
+          A plataforma só aceita endereço https. Use o endereço público.
+        </Callout>
+      )}
 
-        <Field
+      <Field
+        id="endpoint-rotulado"
+        label={`URL para ${nomePlataforma}`}
+        helper="Cole no webhook da plataforma. O final do endereço é o segredo: não mostre a ninguém."
+        className="rounded-panel bg-surface-2 p-4"
+        action={
+          <div className="flex flex-wrap gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-pressed={mostrarUrlSensivel}
+              onClick={() => setMostrarUrlSensivel((value) => !value)}
+            >
+              {mostrarUrlSensivel ? (
+                <EyeOff className="size-3.5" aria-hidden />
+              ) : (
+                <Eye className="size-3.5" aria-hidden />
+              )}
+              {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
+            </Button>
+            <Button size="sm" onClick={() => copiar(endpointRotulado, 'ep-rotulado')}>
+              {copiado === 'ep-rotulado' ? (
+                <Check className="size-3.5" aria-hidden />
+              ) : (
+                <Copy className="size-3.5" aria-hidden />
+              )}
+              Copiar a URL
+            </Button>
+          </div>
+        }
+      >
+        <Input
           id="endpoint-rotulado"
-          label={`URL para ${nomePlataforma}`}
-          helper="Cole esta URL no cadastro de webhooks da plataforma de vendas. O apelido é só para você reconhecer a linha no backoffice; quem autentica é o segredo, sempre o último pedaço do endereço."
-          className="rounded-lg border border-line bg-surface-2 p-4"
-          action={
-            <div className="flex gap-1">
+          readOnly
+          value={endpointRotuladoVisivel}
+          className="wrap-token font-mono"
+        />
+      </Field>
+
+      {ehXWinner && (
+        <div className="flex min-w-0 flex-col gap-3">
+          <TituloDoBloco assunto="webhook" icone={Info}>
+            Como cadastrar no xWinner
+          </TituloDoBloco>
+          <ol className="flex flex-col gap-2.5">
+            {passosXWinner.map((passo, indice) => (
+              <li key={passo.id} className="flex min-w-0 items-center gap-3 text-body text-fg-body">
+                <SeloDePasso numero={indice + 1} assunto="webhook" estado="proximo" />
+                <span className="min-w-0">{passo.conteudo}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Eventos para marcar no xWinner">
+            {EVENTOS_XWINNER.map((evento) => (
               <Button
+                key={evento}
                 size="sm"
-                variant="ghost"
-                aria-pressed={mostrarUrlSensivel}
-                onClick={() => setMostrarUrlSensivel((value) => !value)}
+                variant="outline"
+                className="font-mono"
+                aria-label={`Copiar ${evento}`}
+                onClick={() => copiar(evento, `xw-${evento}`)}
               >
-                {mostrarUrlSensivel ? (
-                  <EyeOff className="size-3.5" aria-hidden />
-                ) : (
-                  <Eye className="size-3.5" aria-hidden />
-                )}
-                {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => copiar(endpointRotulado, 'ep-rotulado')}
-              >
-                {copiado === 'ep-rotulado' ? (
+                {copiado === `xw-${evento}` ? (
                   <Check className="size-3.5 text-success" aria-hidden />
                 ) : (
                   <Copy className="size-3.5" aria-hidden />
                 )}
-                Copiar
+                {evento}
               </Button>
-            </div>
-          }
-        >
-          <Input
-            id="endpoint-rotulado"
-            readOnly
-            value={endpointRotuladoVisivel}
-            className="wrap-token font-mono"
-          />
-        </Field>
-
-        {ehXWinner && (
-          <div className="rounded-lg border border-line bg-surface-2 p-4">
-            <p className="flex items-center gap-2 text-label font-semibold text-fg-strong">
-              <Info className="size-4 shrink-0 text-fg-body" aria-hidden />
-              Como cadastrar esta URL no xWinner
-            </p>
-            {/* O numero e um selo escrito, e nao o marcador de `list-decimal`:
-                a lista de passos de `OndeInstalarTag` ja e assim, e marcador de
-                lista some quando o `li` vira item de flex. */}
-            <ol className="mt-3 flex flex-col gap-2.5">
-              {passosXWinner.map((passo, indice) => (
-                <li
-                  key={passo.id}
-                  className="flex min-w-0 gap-2.5 text-caption text-fg-body"
-                >
-                  <span
-                    aria-hidden
-                    className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full border border-line-control bg-surface-2 font-mono text-caption font-semibold tabular text-fg-muted"
-                  >
-                    {indice + 1}
-                  </span>
-                  <span className="min-w-0">{passo.conteudo}</span>
-                </li>
-              ))}
-            </ol>
+            ))}
           </div>
-        )}
-      </div>
+          <p className="text-body text-fg-body">O botão Testar não conta como venda.</p>
+        </div>
+      )}
 
       <div>
         <Button
@@ -307,195 +295,185 @@ export function WebhookInstalacao({
             className={cn('size-4 transition-transform', mostrarDetalhes && 'rotate-180')}
             aria-hidden
           />
-          {mostrarDetalhes ? 'Ocultar detalhes' : 'Mostrar detalhes'}
+          Detalhes técnicos
         </Button>
-        <p className="mt-1 text-caption text-fg-muted">
-          Segredo, URL antiga, URL para o n8n, apelido da URL e teste pela linha de comando.
-        </p>
       </div>
 
       {/* `hidden`, e não desmontar: o rascunho do apelido e o rastreio de campo
           sujo da `InstalacaoPage` (C2) seguem valendo com os detalhes fechados. */}
-      <div id={idDetalhes} hidden={!mostrarDetalhes}>
-      <div className="flex min-w-0 flex-col gap-4">
-        <Field
-          id="rotulo-endpoint"
-          label="Apelido desta URL"
-          helper={`Minúsculas, dígitos e hífen. Aparece no endereço como /api/webhook/in/${rotuloLimpo || 'apelido'}/…`}
-          error={erroRotulo ?? undefined}
-          className="rounded-lg border border-line bg-surface-2 p-4"
-          action={
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={salvarRotulo}
-              disabled={salvandoRotulo || Boolean(erroRotulo) || !rotuloMudou}
-            >
-              {salvandoRotulo ? 'Salvando…' : 'Salvar apelido'}
-            </Button>
-          }
-        >
-          <Input
+      <div id={idDetalhes} hidden={!mostrarDetalhes} className="min-w-0">
+        <div className="flex min-w-0 flex-col gap-5">
+          <Field
             id="rotulo-endpoint"
-            value={rotuloRascunho}
-            onChange={(e) => setRotuloRascunho(e.target.value)}
-            onBlur={() => setRotuloRascunho(normalizarRotulo(rotuloRascunho))}
-            placeholder={ROTULO_PADRAO}
-            className="wrap-token font-mono"
-          />
-        </Field>
-
-        {rotuloMudou && !erroRotulo && (
-          <Callout tone="warning" icon={AlertTriangle} title="Trocar o apelido muda a URL">
-            Depois de salvar você precisa{' '}
-            <strong>cadastrar a URL nova na plataforma</strong>. Enquanto o
-            backoffice apontar para o apelido antigo, as entregas continuam
-            chegando — o segredo é o mesmo —, mas aparecem marcadas como{' '}
-            <em>apelido antigo</em> na Fila.
-          </Callout>
-        )}
-
-        <Field
-          id="endpoint-caminho"
-          label="URL antiga, sem apelido (continua valendo)"
-          helper="É o formato cadastrado antes de o apelido existir. Não precisa trocar: o console aceita os dois. Serve de saída se algo der errado com o apelido. Mostrar e ocultar o segredo nela é o mesmo botão da URL de cima."
-          className="rounded-lg border border-line bg-surface-2 p-4"
-          action={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => copiar(endpointCaminho, 'ep-caminho')}
-            >
-              {copiado === 'ep-caminho' ? (
-                <Check className="size-3.5 text-success" aria-hidden />
-              ) : (
-                <Copy className="size-3.5" aria-hidden />
-              )}
-              Copiar
-            </Button>
-          }
-        >
-          <Input
-            id="endpoint-caminho"
-            readOnly
-            value={endpointCaminhoVisivel}
-            className="wrap-token font-mono"
-          />
-        </Field>
-
-        <Field
-          id="endpoint-header"
-          label="URL para o n8n"
-          helper="Quando o remetente aceita header customizado, prefira este formato: a URL fica limpa e o segredo não aparece nela."
-          className="rounded-lg border border-line bg-surface-2 p-4"
-          action={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => copiar(endpointHeader, 'ep-header')}
-            >
-              {copiado === 'ep-header' ? (
-                <Check className="size-3.5 text-success" aria-hidden />
-              ) : (
-                <Copy className="size-3.5" aria-hidden />
-              )}
-              Copiar
-            </Button>
-          }
-        >
-          <Input
-            id="endpoint-header"
-            readOnly
-            value={endpointHeader}
-            className="wrap-token font-mono"
-          />
-        </Field>
-
-        <Field
-          id="segredo"
-          label="Segredo"
-          param="X-CAPI-Secret"
-          helper="Vale para as duas URLs acima. Sem o segredo correto o endpoint responde 401."
-          className="rounded-lg border border-line bg-surface-2 p-4"
-          action={
-            <div className="flex gap-1">
+            label="Apelido desta URL"
+            helper="Mudar o apelido muda a URL: cole a nova na plataforma."
+            error={erroRotulo ?? undefined}
+            action={
               <Button
                 size="sm"
-                variant="ghost"
-                aria-pressed={mostrarSegredo}
-                onClick={() => setMostrarSegredo((value) => !value)}
+                variant="outline"
+                onClick={salvarRotulo}
+                disabled={salvandoRotulo || Boolean(erroRotulo) || !rotuloMudou}
               >
-                {mostrarSegredo ? (
-                  <EyeOff className="size-3.5" aria-hidden />
-                ) : (
-                  <Eye className="size-3.5" aria-hidden />
-                )}
-                {mostrarSegredo ? 'Ocultar' : 'Mostrar'}
+                {salvandoRotulo ? 'Salvando…' : 'Salvar apelido'}
               </Button>
+            }
+          >
+            <Input
+              id="rotulo-endpoint"
+              value={rotuloRascunho}
+              onChange={(e) => setRotuloRascunho(e.target.value)}
+              onBlur={() => setRotuloRascunho(normalizarRotulo(rotuloRascunho))}
+              placeholder={ROTULO_PADRAO}
+              className="wrap-token font-mono"
+            />
+          </Field>
+
+          {rotuloMudou && !erroRotulo && (
+            <Callout tone="warning" icon={AlertTriangle} title="Trocar o apelido muda a URL">
+              Depois de salvar, cole a URL nova na plataforma. Até lá, as vendas
+              chegam marcadas como <em>apelido antigo</em> na Fila.
+            </Callout>
+          )}
+
+          <Field
+            id="endpoint-caminho"
+            label="URL antiga, sem apelido"
+            helper="Endereço antigo, ainda aceito. Use só se a plataforma ainda não foi atualizada."
+            action={
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => copiar(entrada.segredo, 'seg')}
+                onClick={() => copiar(endpointCaminho, 'ep-caminho')}
               >
-                {copiado === 'seg' ? (
+                {copiado === 'ep-caminho' ? (
                   <Check className="size-3.5 text-success" aria-hidden />
                 ) : (
                   <Copy className="size-3.5" aria-hidden />
                 )}
                 Copiar
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => void onTrocarSegredo()}>
-                <RefreshCw className="size-3.5" aria-hidden />
-                Trocar
+            }
+          >
+            <Input
+              id="endpoint-caminho"
+              readOnly
+              value={endpointCaminhoVisivel}
+              className="wrap-token font-mono"
+            />
+          </Field>
+
+          <Field
+            id="endpoint-header"
+            label="URL para o n8n"
+            helper="Para quem usa o n8n."
+            action={
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => copiar(endpointHeader, 'ep-header')}
+              >
+                {copiado === 'ep-header' ? (
+                  <Check className="size-3.5 text-success" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
+                Copiar
+              </Button>
+            }
+          >
+            <Input
+              id="endpoint-header"
+              readOnly
+              value={endpointHeader}
+              className="wrap-token font-mono"
+            />
+          </Field>
+
+          <Field
+            id="segredo"
+            label="Segredo"
+            param="X-CAPI-Secret"
+            helper="Último pedaço da URL. Trocar derruba a plataforma até colar a nova."
+            action={
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-pressed={mostrarSegredo}
+                  onClick={() => setMostrarSegredo((value) => !value)}
+                >
+                  {mostrarSegredo ? (
+                    <EyeOff className="size-3.5" aria-hidden />
+                  ) : (
+                    <Eye className="size-3.5" aria-hidden />
+                  )}
+                  {mostrarSegredo ? 'Ocultar' : 'Mostrar'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copiar(entrada.segredo, 'seg')}
+                >
+                  {copiado === 'seg' ? (
+                    <Check className="size-3.5 text-success" aria-hidden />
+                  ) : (
+                    <Copy className="size-3.5" aria-hidden />
+                  )}
+                  Copiar
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => void onTrocarSegredo()}>
+                  <RefreshCw className="size-3.5" aria-hidden />
+                  Trocar
+                </Button>
+              </div>
+            }
+          >
+            <Input
+              id="segredo"
+              readOnly
+              value={mostrarSegredo ? entrada.segredo : mascara}
+              className="wrap-token font-mono"
+            />
+          </Field>
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <TituloDoBloco assunto="webhook" icone={Terminal}>
+              Teste pela linha de comando
+            </TituloDoBloco>
+            <p className="text-body text-fg-body">
+              Só em ambiente isolado. O segredo aparece com o &ldquo;Mostrar&rdquo; do
+              campo Segredo.
+            </p>
+            <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
+              {curlVisivel}
+            </pre>
+            <div>
+              <Button variant="outline" onClick={() => void onSimular()}>
+                <Send className="size-4" aria-hidden />
+                Simular recebimento
               </Button>
             </div>
-          }
-        >
-          <Input
-            id="segredo"
-            readOnly
-            value={mostrarSegredo ? entrada.segredo : mascara}
-            className="wrap-token font-mono"
-          />
-        </Field>
+          </div>
 
-        <div className="rounded-lg border border-line bg-surface-2 p-4">
-          <p className="flex items-center gap-2 text-label font-semibold text-fg-body">
-            <Terminal className="size-4 text-fg-body" aria-hidden />
-            Instruções técnicas
-          </p>
-          <p className="mt-2 mb-2 text-body text-fg-body">
-            Teste pela linha de comando somente em um ambiente isolado. O segredo
-            aparece aqui só com o &ldquo;Mostrar&rdquo; do campo Segredo.
-          </p>
-          <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
-            {curlVisivel}
-          </pre>
-          <Button variant="outline" className="mt-3" onClick={() => void onSimular()}>
-            <Send className="size-4" aria-hidden />
-            Simular recebimento
-          </Button>
+          <div className="flex min-w-0 flex-col gap-2">
+            <TituloDoBloco desenho={<IconeExpor />}>Expor para a internet</TituloDoBloco>
+            <p className="text-body text-fg-body">
+              Em <code className="font-mono">localhost</code>, ninguém de fora alcança
+              o console. Para receber webhooks reais, abra um túnel:
+            </p>
+            <pre className="wrap-token max-w-full overflow-x-auto rounded-control border border-line-strong bg-surface-1 p-2.5 font-mono text-caption text-fg-strong">
+              cloudflared tunnel --url http://localhost:3333
+            </pre>
+            <p className="text-body text-fg-body">
+              Na VPS o console roda em <code className="font-mono">3334</code> e o
+              endereço fixo do túnel é{' '}
+              <code className="font-mono">capi.proxserverabner.site</code>. Use o
+              endereço gerado + <code className="font-mono">/api/webhook/in</code>. O
+              segredo é a única proteção: não o compartilhe.
+            </p>
+          </div>
         </div>
-
-        <Panel title="Expor para a internet" icon={ArrowUpRight}>
-          <p className="text-body text-fg-body">
-            Rodando em <code className="font-mono">localhost</code>, o console
-            não é alcançável de fora. Para receber webhooks reais, abra um túnel:
-          </p>
-          <pre className="wrap-token mt-2 overflow-x-auto rounded-control border border-line-strong bg-surface-1 p-2.5 font-mono text-caption text-fg-strong">
-            cloudflared tunnel --url http://localhost:3333
-          </pre>
-          <p className="mt-2 text-body text-fg-body">
-            Na VPS o console roda em <code className="font-mono">3334</code> (a
-            3333 já é de outro container) e o hostname fixo do túnel é{' '}
-            <code className="font-mono">capi.proxserverabner.site</code>.
-          </p>
-          <p className="mt-2 text-body text-fg-body">
-            Use a URL gerada + <code className="font-mono">/api/webhook/in</code>.
-            O segredo é a única proteção — não o compartilhe.
-          </p>
-        </Panel>
-      </div>
       </div>
     </div>
   );

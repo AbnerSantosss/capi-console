@@ -26,18 +26,19 @@
  */
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { GitBranch, Zap, ZapOff } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import {
   contarRegrasAuto,
   estadoDePixel,
   nomesDasRegrasAuto,
 } from '@/components/pixels/estado-pixel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Esqueleto, RegiaoDeEspera } from '@/components/common/Esqueleto';
 import {
@@ -73,6 +74,8 @@ export function ChaveDoAutomatico({
   const erro = useBrandStore((s) => s.erro);
   const carregar = useBrandStore((s) => s.carregar);
   const definirAutoDisparo = useBrandStore((s) => s.definirAutoDisparo);
+  // Só para o botão "Abrir Pixels" levar à aba Pixels desta empresa.
+  const slug = useParams<{ slug?: string }>()?.slug;
 
   React.useEffect(() => {
     void carregar();
@@ -190,30 +193,15 @@ export function ChaveDoAutomatico({
   /* A frase de contexto                                               */
   /* ---------------------------------------------------------------- */
 
-  let contexto: string;
-  if (!ligadoNoServidor) {
-    contexto =
-      'Os eventos continuam chegando e ficam na fila; nada vai para a Meta.';
-  } else if (regrasAutoLigadas === 0) {
-    // "0 regras automáticas enviando" é uma frase que ninguém entende: diga o
-    // que acontece com os eventos.
-    contexto = 'nenhuma regra está em Automático, então tudo fica na fila esperando você.';
-  } else if (ligadas.length > 1) {
-    contexto =
-      regrasAutoLigadas === 1
-        ? `1 regra automática enviando para ${ligadas.length} Pixels.`
-        : `${regrasAutoLigadas} regras automáticas enviando para ${ligadas.length} Pixels.`;
-  } else {
-    const nome = ligadas[0]?.nome ?? '—';
-    contexto =
-      regrasAutoLigadas === 1
-        ? `1 regra automática enviando para o Pixel ${nome}.`
-        : `${regrasAutoLigadas} regras automáticas enviando para o Pixel ${nome}.`;
-  }
-
-  const titulo = ligadoNoServidor
-    ? 'Envio automático ligado'
-    : 'Envio automático desligado';
+  // E6a: uma frase de estado. Ligado sem regra em Automático não é "envia
+  // sozinho": a frase diz que nada sai, e o aviso abaixo diz o que falta.
+  // 14/10 (pendência 2): a frase não repete a palavra do selo ("Ligado" /
+  // "Desligado"), que já está logo acima e é lida antes dela.
+  const estadoEmTexto = !ligadoNoServidor
+    ? 'Tudo espera na Fila.'
+    : regrasAutoLigadas === 0
+      ? 'Nada sai sozinho ainda.'
+      : 'As regras Automáticas enviam sozinhas.';
 
   /* ---------------------------------------------------------------- */
   /* A confirmação de ligar — ela diz o que vai acontecer              */
@@ -221,15 +209,12 @@ export function ChaveDoAutomatico({
 
   const nomesAuto = aLigar ? nomesDasRegrasAuto(regras, aLigar.id) : [];
 
-  let oQueVaiAcontecer: string;
-  if (nomesAuto.length === 0) {
-    oQueVaiAcontecer =
-      'Hoje nenhuma regra está no modo automático, então nada será enviado ainda.';
-  } else if (nomesAuto.length === 1) {
-    oQueVaiAcontecer = `Hoje 1 regra está no modo automático: ${nomesAuto[0]}.`;
-  } else {
-    oQueVaiAcontecer = `Hoje ${nomesAuto.length} regras estão no modo automático: ${nomesAuto.join(', ')}.`;
-  }
+  // Quais regras passam a sair sozinhas: sem isto, quem confirma não sabe o
+  // que está ligando.
+  const oQueVaiAcontecer =
+    nomesAuto.length === 0
+      ? 'Nenhuma regra está em Automático: nada sai ainda.'
+      : `Em Automático: ${nomesAuto.join(', ')}.`;
 
   /* ---------------------------------------------------------------- */
 
@@ -238,9 +223,9 @@ export function ChaveDoAutomatico({
    * é o primeiro elemento de /automatico e o estado dela tem de ser legível do
    * outro lado da sala, antes de qualquer leitura.
    *
-   * 🔴 Cor é REFORÇO, nunca o portador do estado (SC 1.4.1): o título em texto
-   * ("Envio automático ligado/desligado"), o selo com palavra e o ícone que
-   * troca de glifo continuam dizendo tudo sem depender de enxergar a cor.
+   * 🔴 Cor é REFORÇO, nunca o portador do estado (SC 1.4.1): a palavra da
+   * chavinha ("Ligado" / "Desligado"), a frase de estado e o ícone que troca
+   * de glifo continuam dizendo tudo sem depender de enxergar a cor.
    *
    * Vermelho no desligado é uma divergência DELIBERADA do selo
    * `pixel-desligado` da caixa de entrada, que é neutro de propósito. Lá o
@@ -300,29 +285,24 @@ export function ChaveDoAutomatico({
         </span>
 
         <div className="min-w-0 flex-1">
-          {/* O selo de estado antes de tudo, na cor do estado e com a palavra
-              dentro dele — é a leitura de um segundo que o pedido cobrava. */}
-          {/* Sem caixa alta: o selo v3 abandonou o `uppercase` de propósito, e
-              quem carrega o contraste aqui é a cor, que era o que se pediu. */}
-          <Badge variant={ligadoNoServidor ? 'sucesso' : 'perigo'} className="mb-2">
-            <IconeDoEstado aria-hidden />
-            {ligadoNoServidor ? 'Ligado' : 'Desligado'}
-          </Badge>
+          {/* 14/10 (pendência 2): saiu o selo "Ligado"/"Desligado" que ficava
+              aqui — a chavinha logo abaixo já escreve a mesma palavra, e a
+              tela dizia "Ligado" duas vezes. A leitura de um segundo continua
+              na moldura e no ícone coloridos, e a palavra, na chavinha. */}
           <Switch
             checked={ligado}
             disabled={!alvo || (!ligado && !podeLigar)}
             salvando={salvando}
             onCheckedChange={(v) => pedirAlternar(v)}
             rotulo="Envio automático"
-            descricao="Com ele ligado, os eventos que casam com uma regra automática vão para a Meta sem você conferir."
+            descricao="Manda as regras Automáticas para a Meta sem você conferir."
             rodape={
               <div className="flex flex-col gap-2">
                 {/* O estado vai em TEXTO, e a troca é anunciada. Quem não
                     distingue as cores e quem usa leitor de tela leem o mesmo
                     que todo mundo. */}
-                <p role="status" aria-live="polite" className="text-label">
-                  <span className="font-semibold text-fg-strong">{titulo}</span>
-                  <span className="text-fg-body"> — {contexto}</span>
+                <p role="status" aria-live="polite" className="text-label text-fg-strong">
+                  {estadoEmTexto}
                 </p>
 
                 {erro && (
@@ -332,44 +312,41 @@ export function ChaveDoAutomatico({
                 )}
 
                 {!erro && marcas.length === 0 && (
-                  <p className="text-caption text-danger">
-                    Nenhum Pixel cadastrado — não há para onde enviar. Cadastre
-                    um Pixel antes de ligar.
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-caption text-danger">Falta cadastrar um Pixel.</p>
+                    <Link
+                      href={slug ? `/e/${encodeURIComponent(slug)}/pixels` : '/pixels'}
+                      className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                    >
+                      Abrir Pixels
+                    </Link>
+                  </div>
                 )}
 
                 {alvo && !podeLigar && !ligado && (
                   <p className="text-caption text-danger">
-                    {alvo.nome} está sem token de acesso. Sem token nada sai
-                    para a Meta, então o automático não pode ser ligado.
+                    {alvo.nome} está sem token. Sem token nada sai.
                   </p>
                 )}
 
-                {/* Pixel ligado e com Código de teste: tudo o que sair vai só
-                    para o Testar eventos. Sem este aviso aqui, "ligado" parece
-                    "funcionando" e a venda real nunca chega à campanha. */}
+                {/* Pixel ligado e com Código de teste: o que sai não conta na
+                    campanha. Sem este aviso, "ligado" parece "funcionando". */}
                 {ligadoNoServidor &&
                   ligadas.filter((m) => m.testCode?.trim()).map((m) => (
                     <p key={m.id} className="text-caption text-warning">
-                      O Pixel {m.nome} está em modo teste: o que sair vai só para
-                      o Testar eventos da Meta e não conta na campanha. Para
-                      enviar de verdade, apague o Código de teste na aba Pixels.
+                      {m.nome} está em modo teste: o que sai não conta como venda.
                     </p>
                   ))}
 
                 {/* O terceiro estado, dito onde a chave está: ligado e sem
-                    nenhuma regra em automático não é "funcionando". */}
+                    nenhuma regra em automático não é "funcionando". A cena
+                    abaixo mostra a porta que falta. */}
                 {semRegraAutomatica && (
-                  <div className="flex flex-col items-start gap-2 rounded-control border border-warning/40 bg-warning/8 p-3">
-                    <p className="text-caption text-warning">
-                      Falta a segunda chave. Um evento só sai sozinho quando a
-                      regra dele também está em Automático (por exemplo, a de
-                      Purchase). Até lá, tudo fica na fila e você envia pelo
-                      botão Enviar agora.
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2 rounded-control border border-warning/40 bg-warning/8 p-3">
+                    <p className="text-caption text-warning">Falta a regra em Automático.</p>
                     <Button size="sm" variant="outline" onClick={onIrParaRegras}>
                       <GitBranch className="size-4" aria-hidden />
-                      Abrir Regras
+                      Ver as regras
                     </Button>
                   </div>
                 )}
@@ -398,13 +375,14 @@ export function ChaveDoAutomatico({
                 dentro de <p> é HTML inválido. */}
             <AlertDialogDescription render={<div />}>
               <p>
-                A partir de agora, os eventos das regras automáticas vão para o
-                Pixel{' '}
+                Daqui em diante, as regras Automáticas enviam para {aLigar?.nome}{' '}
+                (
                 <span className="wrap-token font-mono tabular text-fg-body">
                   {aLigar?.pixelId}
-                </span>{' '}
+                </span>
+                ){' '}
                 <span className="font-semibold text-fg-body">
-                  sem passar pela sua aprovação
+                  sem pedir sua aprovação
                 </span>
                 .
               </p>
@@ -413,10 +391,7 @@ export function ChaveDoAutomatico({
 
               {aLigar && !aLigar.testCode?.trim() && (
                 <p className="mt-2 rounded-control border border-warning/40 bg-warning/8 p-2.5 text-warning">
-                  Este Pixel está sem código de teste, então o que sair daqui
-                  conta como conversão real. O caminho seguro é preencher o
-                  código de teste, ligar, conferir em Testar eventos no
-                  Gerenciador da Meta e só então apagar o código.
+                  Sem código de teste, conta como venda real.
                 </p>
               )}
             </AlertDialogDescription>

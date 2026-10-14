@@ -24,7 +24,7 @@ import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { EVENTOS_META } from '@/lib/meta-events';
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { pedir } from '@/lib/cliente-api';
-import { motivoDaRegraIgnorar, parMeta } from './eventos-legiveis';
+import { parMeta } from './eventos-legiveis';
 import {
   Accordion,
   AccordionContent,
@@ -40,9 +40,11 @@ import { cn } from '@/lib/utils';
 import type { ModoRegra, RegraRoteamento } from '@/lib/config-store';
 
 const MODOS: { valor: ModoRegra; rotulo: string; ajuda: string }[] = [
-  { valor: 'auto', rotulo: 'Automático', ajuda: 'Vai sozinho para a Meta, sem revisão humana.' },
-  { valor: 'fila', rotulo: 'Fila', ajuda: 'Fica na Fila esperando um clique.' },
-  { valor: 'ignorar', rotulo: 'Ignorar', ajuda: 'Nunca vai para a Meta.' },
+  { valor: 'auto', rotulo: 'Automático', ajuda: 'Sai sozinho.' },
+  // O valor salvo continua 'fila'; só o nome mudou (13/10, pedido do dono):
+  // "Fila" ficou só para a lista, e o modo da regra virou "Manual".
+  { valor: 'fila', rotulo: 'Manual', ajuda: 'Espera você enviar.' },
+  { valor: 'ignorar', rotulo: 'Ignorar', ajuda: 'Nunca sai.' },
 ];
 
 const NOMES_CATALOGO = Object.keys(MAPA_EVENTOS_ORIGEM);
@@ -178,7 +180,7 @@ export function RulesSection({
       ?.eventoOrigem ??
     'nome_do_evento';
 
-  /** Cria a regra ja com o nome que chegou e o evento da Meta que a tabela conhece. Nasce em Fila. */
+  /** Cria a regra ja com o nome que chegou e o evento da Meta que a tabela conhece. Nasce em Manual. */
   const criarRegraPara = (nome: string, sugestao?: string) => {
     // O id sai do nome do evento (e de um contador, se ja existir um igual).
     const base = `r_${nome.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40) || 'evento'}`;
@@ -265,7 +267,7 @@ export function RulesSection({
 
   const filtros: Array<{ value: typeof filtro; label: string }> = [
     { value: 'todas', label: 'Todas' },
-    { value: 'fila', label: 'Fila' },
+    { value: 'fila', label: 'Manual' },
     { value: 'auto', label: 'Automático' },
     { value: 'ignorar', label: 'Ignorar' },
     { value: 'desativadas', label: 'Desativadas' },
@@ -279,10 +281,7 @@ export function RulesSection({
           icon={ShieldAlert}
           title={`Chegaram eventos de ${semRegraAgora.length} tipo${semRegraAgora.length === 1 ? '' : 's'} sem regra`}
         >
-          <p>
-            Eles estão parados na fila (ou foram ignorados) porque nenhuma regra diz o que
-            fazer com eles. Crie a regra, confira o evento da Meta e o Pixel, e salve.
-          </p>
+          <p>Sem regra, o evento espera na Fila.</p>
           <ul className="mt-2 flex flex-col gap-2">
             {semRegraAgora.slice(0, 8).map((e) => (
               <li key={e.nome} className="flex flex-wrap items-center gap-2">
@@ -299,18 +298,11 @@ export function RulesSection({
           </ul>
         </Callout>
       )}
-      {autoEmProducao.length > 0 ? (
+      {/* E6a: o título já diz o risco; o corpo fica só com os eventos que
+          estão saindo sozinhos para a Meta. */}
+      {autoEmProducao.length > 0 && (
         <Callout tone="danger" icon={Zap} title="Há regras automáticas em PRODUÇÃO">
-          {autoEmProducao.map((r) => r.eventoOrigem).join(', ')} envia
-          {autoEmProducao.length > 1 ? 'm' : ''} para a Meta sem revisão e{' '}
-          <strong>entra nas métricas reais</strong> da campanha. Para testar sem
-          afetar as métricas, preencha o Código de teste do Pixel.
-        </Callout>
-      ) : (
-        <Callout tone="warning" icon={ShieldAlert}>
-          O modo <strong>Automático</strong> envia para a Meta sem revisão humana.
-          Ligue somente depois de validar no Test Events. Pixels com Código de
-          teste preenchido não entram nas métricas reais.
+          {autoEmProducao.map((r) => r.eventoOrigem).join(', ')}
         </Callout>
       )}
 
@@ -329,7 +321,13 @@ export function RulesSection({
               className="w-full pl-9"
             />
           </label>
-          <div className="flex flex-wrap gap-1" aria-label="Filtrar regras">
+          {/* No celular, uma linha só que rola de lado: em duas linhas os cinco
+              filtros ocupavam quase 100px antes da lista (13/10, dono). */}
+          <div
+            className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0"
+            role="group"
+            aria-label="Filtrar regras"
+          >
             {filtros.map((item) => (
               <button
                 key={item.value}
@@ -337,9 +335,9 @@ export function RulesSection({
                 aria-pressed={filtro === item.value}
                 onClick={() => setFiltro(item.value)}
                 className={cn(
-                  'min-h-10 rounded-control border px-3 text-caption font-medium transition-colors',
+                  'min-h-control-md shrink-0 rounded-control border px-3 text-caption font-medium whitespace-nowrap transition-colors',
                   filtro === item.value
-                    ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
+                    ? 'border-line border-b-2 border-b-fg-strong bg-surface-3 text-fg-strong'
                     : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
                 )}
               >
@@ -383,11 +381,11 @@ export function RulesSection({
           <EstadoVazio
             icone={Zap}
             titulo="Nenhuma regra ainda"
-            motivo="Sem regra, todo webhook que chega fica parado na fila esperando um clique. Uma regra diz qual evento da plataforma vira qual evento da Meta, e se ele sai sozinho."
+            motivo="Sem regra, o evento espera na Fila."
             acao={
               <Button variant="outline" onClick={adicionar}>
                 <Plus className="size-4" aria-hidden />
-                Nova regra
+                Criar regra
               </Button>
             }
           />
@@ -425,14 +423,9 @@ export function RulesSection({
             !NOMES_CATALOGO.includes(r.eventoOrigem);
           const par = r.modo === 'ignorar' ? null : parMeta(r.eventoMeta);
           const personalizado = r.modo !== 'ignorar' && r.eventoMeta !== '' && par?.padrao === false;
-          // O par só faz sentido dito por inteiro: nome da plataforma, nome técnico
-          // que aparece no Gerenciador e a tradução do que aquilo significa.
-          const explicacao =
-            r.modo === 'ignorar'
-              ? motivoDaRegraIgnorar(r.eventoOrigem)
-              : par
-                ? par.descricao
-                : 'Sem evento da Meta escolhido: nada seria enviado.';
+          // E6a: o cabeçalho é uma linha só, "{plataforma} → {Meta} · {modo}"
+          // (≤ 12 palavras). A explicação longa do par saiu: o nome técnico
+          // continua ao lado, e o formulário aberto diz o resto.
           // V7: o estado das duas travas já no cabeçalho, sem abrir a regra.
           const pixelsDestaRegra = pixelsDaRegra(r);
           const pixelsLigados = pixelsDestaRegra.filter((id) => {
@@ -452,7 +445,6 @@ export function RulesSection({
                     <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
                       {r.ativo ? 'Ativa' : 'Desativada'}
                     </StatusDot>
-                    <span className="text-caption text-fg-muted uppercase">Plataforma</span>
                     <span className="min-w-0 break-words font-mono text-label font-semibold text-fg-strong">
                       {r.eventoOrigem || 'Nova regra'}
                     </span>
@@ -461,7 +453,6 @@ export function RulesSection({
                     </span>
                     {par ? (
                       <>
-                        <span className="text-caption text-fg-muted uppercase">Meta</span>
                         <span className="text-label font-semibold text-fg-strong">{par.pt}</span>
                         <span className="break-words font-mono text-caption text-fg-body">
                           {par.tecnico}
@@ -469,9 +460,12 @@ export function RulesSection({
                       </>
                     ) : (
                       <span className="text-label font-semibold text-fg-muted">
-                        {r.modo === 'ignorar' ? 'Não enviar' : 'Sem evento da Meta escolhido'}
+                        {r.modo === 'ignorar' ? 'Não enviar' : 'Sem evento da Meta'}
                       </span>
                     )}
+                    <span className="text-fg-muted" aria-hidden>
+                      ·
+                    </span>
                     <Badge className="w-fit">
                       {MODOS.find((m) => m.valor === r.modo)?.rotulo}
                     </Badge>
@@ -490,7 +484,6 @@ export function RulesSection({
                         </StatusDot>
                       ))}
                   </span>
-                  <span className="text-caption font-normal text-fg-muted">{explicacao}</span>
                 </span>
               </AccordionTrigger>
               <AccordionContent className="border-t border-line px-4 pt-4 pb-4">
@@ -523,7 +516,7 @@ export function RulesSection({
                     helper={
                       foraDoCatalogo
                         ? 'Nome fora do catálogo conhecido.'
-                        : 'Nome técnico exato, como a plataforma manda. Use * para qualquer evento sem regra própria.'
+                        : 'Nome como a plataforma manda. * vale para qualquer outro.'
                     }
                   >
                     <Input
@@ -541,12 +534,10 @@ export function RulesSection({
                     label="Vira qual evento padrão da Meta"
                     helper={
                       r.modo === 'ignorar'
-                        ? 'Não se aplica: esta regra não envia nada à Meta.'
+                        ? 'Esta regra não envia nada.'
                         : personalizado
-                          ? 'Fora dos padrões da Meta: vira evento personalizado e não otimiza campanha.'
-                          : par
-                            ? `No Gerenciador de Eventos aparece como ${par.tecnico}.`
-                            : undefined
+                          ? 'Fora dos padrões da Meta: não otimiza campanha.'
+                          : 'O evento que a Meta vai receber.'
                     }
                   >
                     <Select
@@ -642,10 +633,6 @@ export function RulesSection({
                     <p className="text-label font-semibold text-fg-strong">
                       Só sai sozinho quando as duas estão ligadas
                     </p>
-                    <p className="text-caption text-fg-muted">
-                      A regra em Automático e o envio automático do Pixel. Se uma
-                      delas estiver desligada, o evento fica na Fila esperando você.
-                    </p>
                     <ul className="flex flex-col gap-1.5">
                       <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-caption text-fg-body">Esta regra</span>
@@ -668,7 +655,7 @@ export function RulesSection({
                     </ul>
                     <Link
                       href={abaPixels}
-                      className="self-start text-caption font-medium text-tinta-texto underline-offset-4 hover:underline"
+                      className="self-start text-caption font-medium text-fg-strong underline underline-offset-4"
                     >
                       Ligar ou desligar o Pixel em Pixels
                     </Link>

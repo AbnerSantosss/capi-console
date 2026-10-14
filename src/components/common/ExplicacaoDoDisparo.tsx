@@ -1,57 +1,53 @@
 import type { CSSProperties, ElementType } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Plug, Send, Workflow } from '@/components/ui/icones';
+import { ArrowUpRight, Send, Workflow } from '@/components/ui/icones';
 
 import { cn } from '@/lib/utils';
 
 /**
- * As duas telas de disparo, lado a lado, na própria tela em que o operador
+ * As duas formas de envio, numa linha cada, na própria tela em que o operador
  * está.
  *
- * Motivo de existir: "Disparo manual" e "Disparo automático" se parecem no
- * nome e as duas mandam evento para a Meta. Quem abre o console pela primeira
- * vez não tem como saber qual das duas é a sua. Em vez de repetir a distinção
- * na descrição de cada página — onde ela some, porque só se lê o lado em que
- * já se está —, as duas aparecem juntas, e a atual vem marcada.
+ * Motivo de existir: "Envio manual" e "Envio automático" se parecem no nome e
+ * as duas mandam evento para a Meta. Em vez de repetir a distinção na
+ * descrição de cada página — onde ela some, porque só se lê o lado em que já
+ * se está —, as duas aparecem juntas, e a atual vem marcada (sem link).
  *
- * A tinta de cada área (coral no manual, violeta no automático) entra só no
- * chip do ícone e na barra da lateral, nunca em texto (DS-1.5′). Os valores
- * chegam por `--c`, declarado no artigo, para não repetir a variável em cada
- * propriedade.
+ * E5 (HyperFrames): o cartão "Qual tela faz o quê" virou duas linhas com ícone
+ * ESTÁTICO, sem cena. A tinta de cada área (coral no manual, violeta no
+ * automático) entra só no chip do ícone e na barra da linha atual, nunca em
+ * texto (DS-1.5′). O valor chega por `--c`, declarado na linha.
  */
 
 type Tela = 'manual' | 'automatico';
 
 interface Descricao {
   titulo: string;
-  href: string;
   icone: ElementType;
   tinta: string;
-  /** O que a tela faz. Uma frase. */
+  /** O que a forma faz, curto. */
   faz: string;
-  /** Em que situação o operador abre esta tela. Uma frase. */
-  quando: string;
+  /** Quando usar. Opcional: o automático se explica em duas palavras. */
+  quando?: string;
+  /** Texto do link quando o operador está na outra tela. */
+  abrir: string;
 }
 
 const TELAS: Record<Tela, Descricao> = {
   manual: {
     titulo: 'Envio manual',
-    // V7: o envio manual mora na aba Eventos de cada empresa; o endereço de
-    // verdade sai de `hrefDoManual(slug)`. Sem empresa, a lista de empresas.
-    href: '/empresas',
     icone: Send,
     tinta: 'var(--tinta-manual)',
-    faz: 'Você monta o evento a partir de um pedido real e confere antes de enviar. Um por vez.',
-    quando:
-      'para recuperar uma venda que o Pixel do navegador perdeu, como PIX que só confirmou depois.',
+    faz: 'Você monta e envia um por vez.',
+    quando: 'Para recuperar venda que o Pixel perdeu (ex.: PIX).',
+    abrir: 'Abrir o envio manual',
   },
   automatico: {
     titulo: 'Envio automático',
-    href: '/automatico',
     icone: Workflow,
     tinta: 'var(--tinta-automatico)',
-    faz: 'Os eventos que chegam pelo webhook e pela tag passam pelas regras e vão para a Meta sozinhos, sem você digitar nada.',
-    quando: 'para o dia a dia, depois que as regras estão conferidas.',
+    faz: 'Sai sozinho.',
+    abrir: 'Abrir Regras',
   },
 };
 
@@ -66,6 +62,14 @@ export function hrefDoManual(slug?: string): string {
   return slug ? `/e/${encodeURIComponent(slug)}/eventos?vista=manual` : '/empresas';
 }
 
+/**
+ * O "Envio automático" da empresa: a aba Regras, onde se liga o que sai
+ * sozinho. Sem apelido, a lista de empresas, pelo mesmo motivo do manual.
+ */
+export function hrefDoAutomatico(slug?: string): string {
+  return slug ? `/e/${encodeURIComponent(slug)}/regras` : '/empresas';
+}
+
 export function ExplicacaoDoDisparo({
   atual,
   slug,
@@ -73,129 +77,87 @@ export function ExplicacaoDoDisparo({
 }: {
   /** A tela em que o operador está agora: ela vem marcada, sem link. */
   atual: Tela;
-  /** Apelido da empresa desta tela: leva o cartão "Envio manual" à aba Eventos dela. */
+  /** Apelido da empresa desta tela: leva os links às abas dela. */
   slug?: string;
   className?: string;
 }) {
+  const destino: Record<Tela, string> = {
+    manual: hrefDoManual(slug),
+    automatico: hrefDoAutomatico(slug),
+  };
+
   return (
     <section
-      aria-labelledby="explicacao-disparo-titulo"
-      className={cn(
-        'rounded-panel border border-line-strong bg-surface-1 p-4 shadow-realce sm:p-5',
-        className
-      )}
+      aria-label="Envio manual ou automático"
+      className={cn('rounded-panel border border-line bg-surface-1 p-3 sm:p-4', className)}
     >
-      <h2
-        id="explicacao-disparo-titulo"
-        className="text-title font-semibold text-fg-strong"
-      >
-        Qual tela faz o quê
-      </h2>
-
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <ul className="flex flex-col gap-2.5">
         {ORDEM.map((tela) => (
-          <CartaoDeTela
+          <LinhaDaTela
             key={tela}
-            dados={
-              tela === 'manual' ? { ...TELAS.manual, href: hrefDoManual(slug) } : TELAS[tela]
-            }
+            dados={TELAS[tela]}
+            href={destino[tela]}
             aqui={tela === atual}
           />
         ))}
-      </div>
-
-      <p className="mt-4 flex items-start gap-2 border-t border-line pt-3 text-caption text-fg-muted">
-        <Plug className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span>
-          Quem faz o evento <strong className="font-semibold">chegar</strong> é a{' '}
-          <Link
-            href="/instalacao"
-            className="text-tinta-texto underline-offset-2 hover:underline"
-          >
-            tela de Instalação
-          </Link>
-          . Manual e automático só decidem o que sai daqui para a Meta.
-        </span>
-      </p>
+      </ul>
     </section>
   );
 }
 
-function CartaoDeTela({ dados, aqui }: { dados: Descricao; aqui: boolean }) {
-  const { titulo, href, icone: Icone, faz, quando } = dados;
+function LinhaDaTela({
+  dados,
+  href,
+  aqui,
+}: {
+  dados: Descricao;
+  href: string;
+  aqui: boolean;
+}) {
+  const { titulo, icone: Icone, faz, quando, abrir } = dados;
+  const estilo = { '--c': dados.tinta } as CSSProperties;
 
-  const conteudo = (
-    <>
+  return (
+    <li
+      className="relative flex min-w-0 items-start gap-2.5 pl-2.5"
+      style={estilo}
+      aria-current={aqui ? 'page' : undefined}
+    >
       {aqui && (
         <span
           aria-hidden
-          className="absolute inset-y-2.5 left-0 w-0.5 rounded-full"
+          className="absolute inset-y-0.5 left-0 w-0.5 rounded-full"
           style={{ background: 'var(--c)' }}
         />
       )}
-
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className="grid size-8 shrink-0 place-items-center rounded-control border"
-          style={{
-            color: 'var(--c)',
-            background: 'color-mix(in srgb, var(--c) 14%, transparent)',
-            borderColor: 'color-mix(in srgb, var(--c) 22%, transparent)',
-          }}
-        >
-          <Icone className="size-4" />
-        </span>
-
-        <h3 className="min-w-0 flex-1 truncate text-label font-semibold text-fg-strong">
-          {titulo}
-        </h3>
-
-        {aqui ? (
-          <span className="shrink-0 rounded-control border border-line-control bg-surface-3 px-2 py-0.5 text-caption font-medium text-fg-muted">
-            Você está aqui
-          </span>
-        ) : (
-          <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-tinta-texto">
-            Abrir
-            <ArrowUpRight className="size-3.5" aria-hidden />
-          </span>
+      <span
+        aria-hidden
+        className="grid size-7 shrink-0 place-items-center rounded-control border"
+        style={{
+          color: 'var(--c)',
+          background: 'color-mix(in srgb, var(--c) 14%, transparent)',
+          borderColor: 'color-mix(in srgb, var(--c) 22%, transparent)',
+        }}
+      >
+        <Icone className="size-3.5" />
+      </span>
+      <p className="min-w-0 flex-1 text-caption text-fg-body">
+        <span className="font-semibold text-fg-strong">{titulo}:</span> {faz}
+        {quando && <> {quando}</>}
+        {!aqui && (
+          <>
+            {' '}
+            <Link
+              href={href}
+              className="inline-flex items-center gap-0.5 font-medium text-tinta-texto underline-offset-2 hover:underline"
+            >
+              {abrir}
+              <ArrowUpRight className="size-3.5" aria-hidden />
+            </Link>
+          </>
         )}
-      </div>
-
-      <p className="mt-2 text-caption text-fg-body">{faz}</p>
-      <p className="mt-1 text-caption text-fg-muted">
-        <span className="font-medium text-fg-body">Quando usar:</span> {quando}
       </p>
-    </>
-  );
-
-  const base = cn(
-    'relative min-w-0 overflow-hidden rounded-control border p-3',
-    aqui
-      ? 'border-line-control bg-surface-3'
-      : 'border-line bg-surface-2 transition-colors hover:border-line-control hover:bg-surface-3'
-  );
-
-  const estilo = { '--c': dados.tinta } as CSSProperties;
-
-  if (aqui) {
-    return (
-      <article className={base} style={estilo}>
-        {conteudo}
-      </article>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      className={cn(base, 'block')}
-      style={estilo}
-      aria-label={`Abrir ${titulo}`}
-    >
-      {conteudo}
-    </Link>
+    </li>
   );
 }
 

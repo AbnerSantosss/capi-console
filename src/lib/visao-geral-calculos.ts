@@ -387,6 +387,16 @@ export interface NumerosDaVisaoGeral {
   paginas: number | null;
   checkouts: number | null;
   compras: number | null;
+  /** Eventos `Lead` recebidos no período (etapa "Contato" do funil). */
+  leads: number | null;
+  /** Eventos `AddPaymentInfo` (PIX gerado ou cartão tentado; não são pessoas). */
+  pagamentos: number | null;
+  /**
+   * Entregas da plataforma com "abandon" no nome (`resumo.abandonos`).
+   * `null` sem dado ou quando o resumo não traz o campo: o ramo do funil
+   * mostra "sem sinal", nunca um zero inventado.
+   */
+  abandonos: number | null;
   /** Checkouts ÷ páginas, compras ÷ checkouts. */
   taxaCheckout: number | null;
   taxaCompra: number | null;
@@ -443,6 +453,9 @@ export function numerosDaVisaoGeral(resumo: ResumoInbox): NumerosDaVisaoGeral {
     paginas: se(paginas),
     checkouts: se(checkouts),
     compras: se(compras),
+    leads: se(recebidosDe(resumo.porEventoMeta, 'Lead')),
+    pagamentos: se(recebidosDe(resumo.porEventoMeta, 'AddPaymentInfo')),
+    abandonos: temDado && typeof resumo.abandonos === 'number' ? resumo.abandonos : null,
     taxaCheckout: temDado ? percentual(checkouts, paginas) : null,
     taxaCompra: temDado ? percentual(compras, checkouts) : null,
     valorDasCompras: temDado ? valor : null,
@@ -466,15 +479,20 @@ export function numerosDaVisaoGeral(resumo: ResumoInbox): NumerosDaVisaoGeral {
 }
 
 /**
- * A frase que o leitor de tela lê no lugar do funil: "Página 19.640 →
- * Checkout 1.248 (6,4%) → Compra 312 (25,0%); cliques indisponíveis".
+ * A frase que o leitor de tela lê no lugar do funil, com as mesmas etapas da
+ * cena: "Páginas vistas 19.640 → Checkout iniciado 1.248 → Aguardando
+ * pagamento 400 → Pago 312; abandonou o checkout 90. Conta eventos, não
+ * pessoas." A etapa "Contato" só entra com `leads > 0` (como na tela).
  */
 export function resumoTextualDoFunil(n: NumerosDaVisaoGeral): string {
-  if (!n.temDado) return 'Nenhum evento real no período; cliques indisponíveis.';
-  return (
-    `Página ${formatarPtBr(n.paginas)} → Checkout ${formatarPtBr(n.checkouts)} (${formatarPercentual(n.taxaCheckout)}) ` +
-    `→ Compra ${formatarPtBr(n.compras)} (${formatarPercentual(n.taxaCompra)}); cliques indisponíveis.`
-  );
+  if (!n.temDado) return 'Nenhum evento real no período.';
+  const etapas: Array<[string, number | null]> = [['Páginas vistas', n.paginas]];
+  if ((n.leads ?? 0) > 0) etapas.push(['Contato', n.leads]);
+  etapas.push(['Checkout iniciado', n.checkouts], ['Aguardando pagamento', n.pagamentos], ['Pago', n.compras]);
+  const caminho = etapas.map(([rotulo, valor]) => `${rotulo} ${formatarPtBr(valor)}`).join(' → ');
+  const abandono =
+    n.abandonos === null ? 'abandono do checkout sem sinal' : `abandonou o checkout ${formatarPtBr(n.abandonos)}`;
+  return `${caminho}; ${abandono}. Conta eventos, não pessoas.`;
 }
 
 /* ------------------------------------------------------------------ */

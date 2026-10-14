@@ -15,9 +15,10 @@
  * filtro mais frouxo nunca pode ampliar o que vai para a Meta.
  */
 
-import React from 'react';
-import { ListFilter, Send, Square, X } from '@/components/ui/icones';
+import React, { useState } from 'react';
+import { ChevronDown, ListFilter, Send, Square, X } from '@/components/ui/icones';
 
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -259,6 +260,14 @@ export function FiltrosInbox({
   onPararLote: () => void;
 }) {
   const ativo = haFiltroAtivo(valor);
+  const quantosAtivos =
+    (valor.evento !== TODOS ? 1 : 0) +
+    (valor.atribuicao !== 'todos' ? 1 : 0) +
+    (valor.origem !== 'todos' ? 1 : 0) +
+    (valor.status !== 'todos' ? 1 : 0) +
+    (valor.equipe !== 'todos' ? 1 : 0);
+  // Só vale abaixo de 48rem: lá os cinco seletores ficam atrás de um botão.
+  const [abertoNoCelular, setAbertoNoCelular] = useState(false);
   const rodando = lote !== null;
   const pct = rodando && lote.total > 0 ? Math.round((lote.feitos / lote.total) * 100) : 0;
 
@@ -267,16 +276,43 @@ export function FiltrosInbox({
     // cartão da caixa de entrada. Em `surface-2` ela fica 0.053 de L acima
     // dele — separa por luz, como manda o G3′, e a borda sai.
     <div className="flex flex-col gap-2 rounded-control bg-surface-2 p-3">
-      {/* Abaixo de 48rem cada campo ocupa a linha inteira: cinco selects lado a
-          lado em 360px davam 5 linhas de filtro antes da lista, e cada gatilho
-          ficava estreito demais para ler o valor escolhido. */}
-      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-end">
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-caption font-medium text-fg-muted md:h-control-md">
+      {/* Abaixo de 48rem os cinco seletores empilhados passavam de 350px antes
+          do primeiro evento (13/10, dono: "filtros grandes ocupando muito
+          espaço"). Lá eles ficam atrás deste botão, que diz quantos estão
+          valendo, e abrem em duas colunas. De 48rem para cima, a fileira de
+          sempre. */}
+      <button
+        type="button"
+        aria-expanded={abertoNoCelular}
+        aria-controls="filtros-da-fila"
+        onClick={() => setAbertoNoCelular((v) => !v)}
+        className="flex min-h-control-md items-center gap-1.5 text-caption font-medium text-fg-body md:hidden"
+      >
+        <ListFilter className="size-3.5 text-fg-muted" aria-hidden />
+        Filtros
+        {quantosAtivos > 0 && (
+          <span className="rounded-full bg-tinta/15 px-1.5 text-tinta-texto tabular">
+            {quantosAtivos}
+          </span>
+        )}
+        <ChevronDown
+          className={cn('ml-auto size-4 text-fg-muted transition-transform', abertoNoCelular && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+      <div
+        id="filtros-da-fila"
+        className={cn(
+          abertoNoCelular ? 'grid' : 'hidden',
+          'min-w-0 grid-cols-2 gap-2 md:flex md:flex-row md:flex-wrap md:items-end'
+        )}
+      >
+        <span className="hidden shrink-0 items-center gap-1.5 text-caption font-medium text-fg-muted md:inline-flex md:h-control-md">
           <ListFilter className="size-3.5" aria-hidden />
           Filtrar
         </span>
 
-        <CampoFiltro id="filtro-evento" rotulo="Evento">
+        <CampoFiltro id="filtro-evento" rotulo="Evento" largo>
           <Select
             value={valor.evento}
             onValueChange={(v) => v && onValor({ ...valor, evento: String(v) })}
@@ -439,7 +475,7 @@ export function FiltrosInbox({
           <Button
             size="sm"
             variant="ghost"
-            className="min-h-control-md w-full md:w-auto md:min-h-control-sm"
+            className="col-span-2 min-h-control-md w-full md:w-auto md:min-h-control-sm"
             onClick={() => onValor(FILTROS_VAZIOS)}
           >
             <X className="size-3.5" aria-hidden />
@@ -527,17 +563,25 @@ export function FiltrosInbox({
 function CampoFiltro({
   id,
   rotulo,
+  largo = false,
   children,
 }: {
   id: string;
   rotulo: string;
+  /** Ocupa as duas colunas no celular (o nome do evento é comprido). */
+  largo?: boolean;
   children: React.ReactNode;
 }) {
-  // Largura total até 48rem (uma coluna, nada de campo espremido); a partir daí
-  // `min-w-40 flex-1` deixa a barra se acomodar sozinha em duas ou três linhas
-  // no tablet e numa só no desktop — sem grade de breakpoint.
+  // Até 48rem, grade de duas colunas; a partir daí `min-w-40 flex-1` deixa a
+  // barra se acomodar sozinha em duas ou três linhas no tablet e numa só no
+  // desktop — sem grade de breakpoint.
   return (
-    <div className="flex w-full min-w-0 flex-col gap-1 md:w-auto md:min-w-40 md:flex-1">
+    <div
+      className={cn(
+        'flex w-full min-w-0 flex-col gap-1 md:w-auto md:min-w-40 md:flex-1',
+        largo && 'col-span-2'
+      )}
+    >
       <label htmlFor={id} className="text-caption font-medium text-fg-muted">
         {rotulo}
       </label>

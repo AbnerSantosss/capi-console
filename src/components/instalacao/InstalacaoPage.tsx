@@ -17,7 +17,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Code2, Globe, Webhook } from '@/components/ui/icones';
+import { Globe, Webhook } from '@/components/ui/icones';
 
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
@@ -26,6 +26,9 @@ import { TagDoSite } from '@/components/integrations/TagDoSite';
 import type { Integracoes } from '@/components/integrations/tipos';
 import type { DominioTag } from '@/lib/tag-dominios';
 import { WebhookInstalacao } from './WebhookInstalacao';
+import { IconeTag, IconeWebhook } from './icones-animados';
+import { PassoAPasso } from './PassoAPasso';
+import s from './instalacao.module.css';
 
 /** Âncoras públicas desta tela. O `?aba=` antigo de `/automatico` aponta para cá. */
 const ANCORA_WEBHOOK = 'webhook';
@@ -310,11 +313,15 @@ export function InstalacaoPage({
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-6"
+      className={`${s.pagina} flex min-w-0 flex-col gap-8`}
       onFocus={aoFocarCampo}
       onInput={aoDigitar}
       onBlur={() => reavaliarRascunho()}
     >
+      {/* 13/10: o roteiro animado "Passo 1 / Passo 2" abre a aba e leva às
+          duas seções abaixo, na mesma cor de cada uma. */}
+      <PassoAPasso />
+
       {/* V7: dois cartões, um por fonte, cada um com o estado em palavra no
           cabeçalho — a faixa de resumo com os dois estados e o índice de
           âncoras saiu, porque cada cartão já diz o seu. A tag vem primeiro (é
@@ -322,10 +329,11 @@ export function InstalacaoPage({
           pronto). As âncoras `#tag` e `#webhook` continuam as mesmas. */}
       <Section
         id={ANCORA_TAG}
-        icon={Code2}
+        step={1}
+        icon={IconeTag}
         variant="card"
-        title="Tag do site"
-        description="Mede a visita no navegador e guarda a atribuição antes de a venda por PIX acontecer fora dele."
+        className={`${s.secao} ${s.secaoTag}`}
+        title="Instalar a tag no site"
         action={
           <StatusDot
             tone={medindo.length > 0 ? 'success' : dominios.length > 0 ? 'warning' : 'neutral'}
@@ -358,13 +366,15 @@ export function InstalacaoPage({
           plataforma alcança o endereço: aí o estado é de alerta. */}
       <Section
         id={ANCORA_WEBHOOK}
-        icon={Webhook}
+        step={2}
+        icon={IconeWebhook}
         variant="card"
-        title="Webhook de vendas"
-        description="Aponte a plataforma de vendas ou o n8n para este endereço. É o que traz a venda — inclusive a de PIX, que acontece fora do navegador. Quem confirma que a plataforma o usa é a primeira venda que aparecer na Fila."
+        className={`${s.secao} ${s.secaoWebhook}`}
+        title="Instalar o webhook de vendas"
+        description="Cole este endereço na plataforma. A 1ª venda aparece na Fila."
         action={
           <StatusDot tone={ehLocal ? 'warning' : 'neutral'} icon={Webhook}>
-            {ehLocal ? 'Só nesta máquina (localhost)' : 'Endereço no ar'}
+            {ehLocal ? 'Só neste computador' : 'No ar'}
           </StatusDot>
         }
       >

@@ -1,15 +1,14 @@
 'use client';
 
 /**
- * Os 5 indicadores da Visão geral (V5 do plano v7; spec :35-43), nesta ordem:
- * Cliques · Visualizações de página · Inícios de checkout · Compras · Valor das
- * compras. Centrados, mesma altura, número grande em peso 700 com algarismos
- * tabulares, SEM ícone.
+ * Os 4 indicadores da Visão geral (HyperFrames E1), nesta ordem: Páginas
+ * vistas · Checkouts · Compras · Faturado. Centrados, mesma altura, número
+ * grande em peso 700 com algarismos tabulares, SEM ícone.
  *
  * Só dado real:
- *  - Cliques é "indisponível": o console não recebe os cliques do anúncio. O
- *    que ele tem são eventos que chegaram com `fbclid`/`fbc`, e esses aparecem
- *    com o nome deles, nunca como clique.
+ *  - Não há cartão de cliques: o console não recebe os cliques do anúncio. Em
+ *    "Páginas vistas" entra a linha "{N} com clique de anúncio" (eventos que
+ *    chegaram com `fbclid`), só com dado; são eventos, nunca pessoas.
  *  - Sem evento real no período (`base = 0`), todo número é "—".
  *  - Variação só quando o período anterior veio e não era zero (`variacao()`);
  *    senão nada, nem seta.
@@ -21,7 +20,6 @@ import type { ReactNode } from 'react';
 import consoleStyles from '@/components/layout/console.module.css';
 import { cn } from '@/lib/utils';
 import {
-  SEM_DADO,
   formatarMoeda,
   formatarPercentual,
   formatarPtBr,
@@ -54,7 +52,7 @@ function CartaoKpi({
   rotulo: string;
   valor: ReactNode;
   children?: ReactNode;
-  /** O cartão "Valor das compras": mais largo e com o fundo verde discreto. */
+  /** O cartão "Faturado": com o fundo verde discreto. */
   destaque?: boolean;
   className?: string;
 }) {
@@ -99,46 +97,27 @@ function Dinheiro({ valor, moeda }: { valor: number | null; moeda: string }) {
   );
 }
 
-function eventos(n: number | null): string {
-  return n === 1 ? 'evento' : 'eventos';
-}
-
 export function Kpis({ numeros: n }: { numeros: NumerosDaVisaoGeral }) {
   const moedasDiferentes = n.temDado && n.compras !== null && n.compras > 0 && n.valorDasCompras === null;
 
   return (
-    // A grade (1 → 2 → 5 colunas) mora em `.gradeKpis` (V9): ela lê a largura
+    // A grade (1 → 2×2 → 4 colunas) mora em `.gradeKpis` (V9): ela lê a largura
     // deste `<section>`, e não a da janela, porque a lateral come 15.5rem.
     <section aria-label="Indicadores do período" className="@container">
       <ul role="list" className={consoleStyles.gradeKpis}>
-        <CartaoKpi
-          rotulo="Cliques"
-          valor={<span className="text-title font-semibold text-fg-muted">indisponível</span>}
-        >
-          <p>o console não recebe os cliques do anúncio</p>
+        <CartaoKpi rotulo="Páginas vistas" valor={<span className={NUMERO}>{formatarPtBr(n.paginas)}</span>}>
+          {/* Eventos com fbclid: NÃO são cliques nem pessoas (o console não recebe os cliques). */}
           {n.temDado ? (
-            <p className="tabular-nums">
-              <span className="font-semibold text-fg-body">{formatarPtBr(n.comFbclid)}</span>{' '}
-              {eventos(n.comFbclid)} com fbclid e{' '}
-              <span className="font-semibold text-fg-body">{formatarPtBr(n.comFbc)}</span> com fbc no
-              período
+            <p className="tabular-nums" title="Eventos que chegaram com fbclid; não são cliques nem pessoas">
+              <span className="font-semibold text-fg-body">{formatarPtBr(n.comFbclid)}</span> com clique de
+              anúncio
             </p>
           ) : null}
-        </CartaoKpi>
-
-        <CartaoKpi
-          rotulo="Visualizações de página"
-          valor={<span className={NUMERO}>{formatarPtBr(n.paginas)}</span>}
-        >
-          <p>{SEM_DADO} dos cliques</p>
           <Variacao valor={n.variacaoPaginas} />
         </CartaoKpi>
 
-        <CartaoKpi
-          rotulo="Inícios de checkout"
-          valor={<span className={NUMERO}>{formatarPtBr(n.checkouts)}</span>}
-        >
-          <p className="tabular-nums">{formatarPercentual(n.taxaCheckout)} das visitas</p>
+        <CartaoKpi rotulo="Checkouts" valor={<span className={NUMERO}>{formatarPtBr(n.checkouts)}</span>}>
+          <p className="tabular-nums">{formatarPercentual(n.taxaCheckout)} das páginas</p>
           <Variacao valor={n.variacaoCheckouts} />
         </CartaoKpi>
 
@@ -148,7 +127,7 @@ export function Kpis({ numeros: n }: { numeros: NumerosDaVisaoGeral }) {
         </CartaoKpi>
 
         <CartaoKpi
-          rotulo="Valor das compras"
+          rotulo="Faturado"
           destaque
           className={consoleStyles.kpiValor}
           valor={<Dinheiro valor={n.valorDasCompras} moeda={n.moedaDasCompras} />}

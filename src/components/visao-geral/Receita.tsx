@@ -5,8 +5,9 @@
  *
  * O que soma: `porDia[].receita`, o valor dos eventos REAIS enviados à Meta em
  * cada dia (o mesmo recorte de `receitaEnviada`, `inbox-resumo.ts`). Não é só
- * compra: um checkout enviado com valor também entra, e o subtítulo diz isso.
- * O cartão "Valor das compras" dos KPIs é que é só compra.
+ * compra: um checkout enviado com valor também entra (o `title` do subtítulo
+ * "valor enviado à Meta" diz isso). O cartão "Faturado" dos KPIs é só compra.
+ * Sem evento real ou sem dia: "Sem receita no período." (HyperFrames E1).
  *
  *  - Área menta sobre linha reta entre os dias, grade sutil, `dd/mm` no eixo X
  *    e 4 ou 5 degraus redondos no Y (`degrausDoEixo`).
@@ -25,7 +26,9 @@
  */
 
 import { useId, useState } from 'react';
+import { IconeDoAssunto } from '@/components/cenas';
 import consoleStyles from '@/components/layout/console.module.css';
+import { ReceiptText } from '@/components/ui/icones';
 import type { ResumoInbox } from '@/lib/inbox-resumo';
 import { cn } from '@/lib/utils';
 import {
@@ -93,11 +96,15 @@ export function Receita({ resumo, className }: { resumo: ResumoInbox; className?
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id={idTitulo} className="text-title font-semibold text-fg-strong">
+          <h2 id={idTitulo} className="flex items-center gap-2 text-title font-semibold text-fg-strong">
+            <IconeDoAssunto assunto="evento" icone={ReceiptText} />
             Receita por dia
           </h2>
-          <p className="mt-0.5 text-caption text-fg-muted">
-            valor dos eventos reais enviados à Meta (não só compras)
+          <p
+            className="mt-0.5 text-caption text-fg-muted"
+            title="Soma dos eventos reais enviados à Meta, não só compras"
+          >
+            valor enviado à Meta
           </p>
         </div>
         <div className="flex flex-col items-end text-right">
@@ -125,10 +132,8 @@ export function Receita({ resumo, className }: { resumo: ResumoInbox; className?
         </div>
       </div>
 
-      {!temDado ? (
-        <p className="text-caption text-fg-muted">Nenhum evento real no período.</p>
-      ) : porDia.length === 0 ? (
-        <p className="text-caption text-fg-muted">Sem dado de receita no período.</p>
+      {!temDado || porDia.length === 0 ? (
+        <p className="text-caption text-fg-muted">Sem receita no período.</p>
       ) : porDia.length === 1 ? (
         <p className="text-caption text-fg-muted">
           um dia: sem evolução para desenhar

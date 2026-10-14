@@ -39,11 +39,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Callout, Field, Panel, useFieldA11y } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
+import { IconeDoAssunto } from '@/components/cenas';
 import {
   COMPRAS_PARA_SUSPEITAR,
   limiteDeCompras,
   type ListaDeTeste,
 } from '@/lib/deteccao-de-teste';
+
+/* O3 (E6a): o ícone de cada título de painel, na cor do assunto "teste". */
+function IconeDoEmail() {
+  return <IconeDoAssunto assunto="teste" icone={Mail} />;
+}
+function IconeDoNome() {
+  return <IconeDoAssunto assunto="teste" icone={User} />;
+}
+function IconeDaRepeticao() {
+  return <IconeDoAssunto assunto="teste" icone={Repeat2} />;
+}
 
 /** Espelha `NOME_MIN` de `api/integracoes/route.ts`. Ver o bloco vermelho de lá. */
 const NOME_MIN = 3;
@@ -201,17 +213,13 @@ export function ListaDeTestes({
     // o operador direto a esta lista.
     <div id="testes-internos" className="flex min-w-0 scroll-mt-32 flex-col gap-5">
       <Callout tone="danger" icon={FlaskConical} title="O que cai nesta lista não chega à Meta">
-        E-mail ou nome cadastrado aqui vira <strong>teste</strong>: o evento fica registrado na Fila,
-        some de todas as porcentagens e <strong>nunca é enviado</strong> — nem por clique, nem em
-        modo automático. Cadastre só quem é da equipe.
+        Quem está aqui é teste: fica na Fila e <strong>nunca vai para a Meta</strong>. Cadastre só a
+        equipe.
       </Callout>
 
       {/* ---------------- e-mails ---------------- */}
-      <Panel title="E-mails de teste" icon={Mail}>
-        <p className="text-caption text-fg-muted">
-          Comparação exata, sem diferença entre maiúsculas e minúsculas. O endereço inteiro, como ele
-          chega da plataforma.
-        </p>
+      <Panel title="E-mails de teste" icon={IconeDoEmail}>
+        <p className="text-caption text-fg-muted">Escreva o e-mail inteiro.</p>
 
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <Field
@@ -263,12 +271,10 @@ export function ListaDeTestes({
       </Panel>
 
       {/* ---------------- nomes ---------------- */}
-      <Panel title="Nomes de teste" icon={User}>
+      <Panel title="Nomes de teste" icon={IconeDoNome}>
         <p className="text-caption text-fg-muted">
-          Casa por <strong className="text-fg-body">conter</strong>, sem acento e sem diferença de
-          maiúsculas: cadastrar <code className="font-mono">Jairo</code> pega também{' '}
-          <code className="font-mono">Jairo Silva</code>. Por isso o mínimo de {NOME_MIN} letras — um
-          pedaço curto demais marcaria compradores de verdade.
+          Vale parte do nome: &ldquo;Jairo&rdquo; pega &ldquo;Jairo Silva&rdquo;. Mínimo de {NOME_MIN}{' '}
+          letras.
         </p>
 
         <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -319,14 +325,7 @@ export function ListaDeTestes({
         <EstadoVazio
           icone={FlaskConical}
           titulo="Nenhum testador cadastrado"
-          motivo={
-            <>
-              O console continua barrando sozinho o padrão conhecido —{' '}
-              <code className="font-mono">@example.com</code>,{' '}
-              <code className="font-mono">evt_preview…</code> e cupons de centavos. O que ele não
-              adivinha é o e-mail pessoal que a equipe usa para testar o checkout.
-            </>
-          }
+          motivo="Adicione o e-mail que a equipe usa para testar."
           acao={
             <Button
               variant="outline"
@@ -340,12 +339,9 @@ export function ListaDeTestes({
       )}
 
       {/* ---------------- e-mail repetido ---------------- */}
-      <Panel title="E-mail repetido em várias compras" icon={Repeat2}>
+      <Panel title="E-mail repetido em várias compras" icon={IconeDaRepeticao}>
         <p className="text-caption text-fg-muted">
-          Comprar ou depositar de novo é normal e sai sozinho. O console só para de enviar
-          sozinho e espera você conferir quando o mesmo e-mail aparece em várias{' '}
-          <strong className="text-fg-body">compras</strong> e a compra é um primeiro depósito ou
-          tem valor baixo (até 5,00).
+          Mesmo e-mail em várias compras pequenas: o automático para e espera você.
         </p>
 
         {/* 🔴 A diferença entre os dois blocos desta tela, dita na tela: lá em
@@ -353,8 +349,7 @@ export function ListaDeTestes({
             console só REPAROU num padrão, e descartar sozinho uma venda que ele
             apenas acha que é teste é o erro caro do outro lado. */}
         <Callout tone="warning" icon={Repeat2} className="mt-3">
-          Isto <strong>não descarta nada</strong>: o evento fica na Fila, continua contando nos
-          números e pode ser enviado por você a qualquer momento. Só o automático é suspenso.
+          <strong>Não descarta nada</strong>; você ainda pode enviar.
         </Callout>
 
         <div className="mt-3 max-w-64">

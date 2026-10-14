@@ -337,9 +337,18 @@ console.log('\nEnvio automático: as duas travas');
 {
   ok(envioAutomaticoDaEmpresa([PIXEL_LIGADO], [REGRA_AUTO]).ligado === true, 'chave ligada + regra auto → ligado');
   const semChave = envioAutomaticoDaEmpresa([PIXEL_DESLIGADO], [REGRA_AUTO]);
-  ok(!semChave.ligado && semChave.frase === 'Envio automático: desligado (falta: a chave do Pixel ligada)', 'sem a chave: diz o que falta', mostra(semChave.frase));
+  ok(!semChave.ligado && semChave.frase === 'Envio automático: desligado (falta: ligar o envio automático do Pixel)', 'sem a chave: diz o que falta', mostra(semChave.frase));
   const semRegra = envioAutomaticoDaEmpresa([PIXEL_LIGADO], [REGRA_FILA]);
   ok(!semRegra.ligado && semRegra.falta.includes('uma regra automática para o Pixel'), 'sem regra automática: diz o que falta');
+  // Auditoria de UX de 13/10: com a chave ligada a aba Pixels diz "Ligado", então
+  // o resumo não pode dizer "desligado" ao lado.
+  ok(
+    semRegra.chaveLigada === true &&
+      semRegra.frase === 'Envio automático: ligado, mas não sai sozinho (falta: uma regra automática para o Pixel)',
+    'chave ligada sem regra: não diz "desligado"',
+    mostra(semRegra.frase)
+  );
+  ok(semChave.chaveLigada === false, 'sem a chave: chaveLigada falso');
   ok(!envioAutomaticoDaEmpresa([{ ...PIXEL_LIGADO, temToken: false }], [REGRA_AUTO]).ligado, 'sem token nunca liga');
   ok(!envioAutomaticoDaEmpresa([{ ...PIXEL_LIGADO, autoDisparo: undefined }], [REGRA_AUTO]).ligado, 'chave ausente = desligada');
   ok(!envioAutomaticoDaEmpresa([PIXEL_LIGADO], [{ ...REGRA_AUTO, ativo: false }]).ligado, 'regra desativada não conta');

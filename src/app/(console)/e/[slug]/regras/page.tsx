@@ -3,7 +3,6 @@ import { ErroConfiguracaoIndisponivel, lerIntegracoes } from '@/lib/config-store
 import { listarEntregas } from '@/lib/relay';
 import { Workflow } from '@/components/ui/icones';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
-import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
 import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';
 
@@ -13,7 +12,7 @@ import { AbaInicialDeRegras } from './AbaInicialDeRegras';
 export const dynamic = 'force-dynamic';
 
 const TITULO = 'Regras';
-const DESCRICAO = 'Ligue, desligue e confira o que já passou pelas regras.';
+const DESCRICAO = 'Quais vendas saem sozinhas para a Meta.';
 
 /**
  * Regras da empresa (`/e/<slug>/regras`, V2 do v7): o antigo Disparo
@@ -45,13 +44,9 @@ export default async function RegrasDaEmpresa({
   // B1-e: configuração ilegível NÃO cai no error boundary do Next.
   if (cfg.status === 'rejected') {
     if (!(cfg.reason instanceof ErroConfiguracaoIndisponivel)) throw cfg.reason;
-    // O apelido do endereço basta para o cartão "Envio manual" (V7): a
-    // empresa pode não ter sido lida, mas a aba Eventos dela existe.
-    const { slug } = await params;
     return (
       <main className={consoleStyles.page} data-area="automatico">
         <ConsolePageHeader title={TITULO} description={DESCRICAO} icon={Workflow} />
-        <ExplicacaoDoDisparo atual="automatico" slug={slug} className="mb-6" />
         <AvisoConfigIndisponivel arquivo={cfg.reason.arquivo} />
       </main>
     );
@@ -63,8 +58,9 @@ export default async function RegrasDaEmpresa({
 
   return (
     <main className={consoleStyles.page} data-area="automatico">
+      {/* E6a: sem o cartão "Qual tela faz o quê": a cena das duas chaves,
+          dentro da IntegrationsPage, já diz o que sai sozinho e o que espera. */}
       <ConsolePageHeader title={TITULO} description={DESCRICAO} icon={Workflow} />
-      <ExplicacaoDoDisparo atual="automatico" slug={empresa.slug} className="mb-6" />
       <AbaInicialDeRegras />
       {/* T1 (C2): a `key` por empresa força a montagem nova, e `empresaId` vai
           no corpo do PUT para o servidor recusar (409) dados de outra empresa. */}

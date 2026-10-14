@@ -1,104 +1,84 @@
 'use client';
 
 /**
- * O funil da Visão geral (V5 do plano v7; spec :58): Cliques → Página →
- * Checkout → Compra, em faixas curvas contínuas azul → ciano → menta.
+ * O funil da Visão geral (HyperFrames E1 + O2): a única cena da aba, "O
+ * caminho de quem compra", montada com o `Palco` e o `Funil` da biblioteca de
+ * cenas. As barras crescem até o número real, uma vez (`ciclos={1}`, sem laço).
  *
- *  - Nomes, valores e taxas são `<text>` do SVG: selecionáveis, nunca imagem.
- *  - O SVG tem `role="img"` e `aria-describedby` para um parágrafo com o
- *    resumo em texto (`resumoTextualDoFunil`), que é o que o leitor de tela lê.
- *  - Cliques = "indisponível" e a taxa Página/cliques = "—": o console não
- *    recebe os cliques do anúncio. "Conversão total" (compras ÷ cliques) fica
- *    "—" pelo mesmo motivo (`conversaoTotal`).
- *  - Etapa sem evento no período mostra "0" e diz qual evento não chegou.
- *  - A ALTURA das faixas é decorativa (a legenda diz isso): ela não mede os
- *    números, porque sem cliques não há a primeira medida para comparar.
- *
- * O `viewBox` é do tamanho real da caixa (`useLargura`), para o texto ficar no
- * tamanho da escala em qualquer tela.
+ *  - Etapas, só com número de `numerosDaVisaoGeral`: Páginas vistas (PageView)
+ *    → Contato (Lead, só se > 0) → Checkout iniciado → Aguardando pagamento
+ *    (AddPaymentInfo) → Pago (Purchase). Etapa sem dado = contorno + "—".
+ *  - Ramo âmbar "Abandonou o checkout", saindo do Checkout, com a contagem de
+ *    `resumo.abandonos`; sem o campo, "sem sinal" e a dica de como ligar.
+ *  - A taxa entre etapas é a do `Funil` das cenas: em eventos, de 0 a 100%.
+ *  - A cena é `aria-hidden`: o invólucro tem `role="img"` e `aria-describedby`
+ *    para o `resumoTextualDoFunil`, que é o que o leitor de tela lê.
+ *  - Fora do palco, em texto: "Página → compra", o selo "Amostra parcial" e a
+ *    nota de que o funil conta eventos, não pessoas.
  */
 
+import Link from 'next/link';
 import { useId } from 'react';
+import { Funil as FunilDaCena, IconeDoAssunto, Palco, type EtapaDoFunil } from '@/components/cenas';
 import consoleStyles from '@/components/layout/console.module.css';
+import { Badge } from '@/components/ui/badge';
+import { ListFilter } from '@/components/ui/icones';
+import { enderecoDaAba } from '@/lib/abas-empresa';
 import { cn } from '@/lib/utils';
 import {
+  AVISO_DE_AMOSTRA,
   SEM_DADO,
-  conversaoTotal,
   formatarPercentual,
-  formatarPtBr,
+  percentual,
   resumoTextualDoFunil,
   type NumerosDaVisaoGeral,
 } from '@/lib/visao-geral-calculos';
-import { useLargura } from './useLargura';
 
-const ALTURA = 188;
-/** Meia-altura de cada faixa, da primeira à última. DECORATIVA. */
-const MEIA_FAIXA = [44, 35, 26, 18] as const;
-const CENTRO_DA_FAIXA = 108;
-const Y_NOME = 14;
-const Y_VALOR = 44;
-const Y_TAXA = 178;
+const DICA_DO_ABANDONO_SEM_SINAL = 'Assine o evento de abandono na plataforma para ver aqui.';
+const DICA_DO_ABANDONO = 'Entregas da plataforma com "abandon" no nome. Conta eventos, não pessoas.';
 
-interface Etapa {
-  nome: string;
-  /** O que aparece no lugar do número. */
-  valor: string;
-  /** Taxa sobre a etapa anterior. */
-  taxa: string | null;
-  disponivel: boolean;
+/** As etapas da cena, na ordem do O2. "Contato" só entra com Lead no período. */
+function etapasDoFunil(n: NumerosDaVisaoGeral): EtapaDoFunil[] {
+  const etapas: EtapaDoFunil[] = [{ rotulo: 'Páginas vistas', valor: n.paginas }];
+  if ((n.leads ?? 0) > 0) etapas.push({ rotulo: 'Contato', valor: n.leads });
+  etapas.push(
+    { rotulo: 'Checkout iniciado', valor: n.checkouts },
+    { rotulo: 'Aguardando pagamento', valor: n.pagamentos, dica: 'PIX gerado ou cartão tentado' },
+    { rotulo: 'Pago', valor: n.compras }
+  );
+  return etapas;
 }
 
-function etapasDoFunil(n: NumerosDaVisaoGeral): Etapa[] {
-  return [
-    { nome: 'Cliques', valor: 'indisponível', taxa: null, disponivel: false },
-    { nome: 'Página', valor: formatarPtBr(n.paginas), taxa: SEM_DADO, disponivel: true },
-    { nome: 'Checkout', valor: formatarPtBr(n.checkouts), taxa: formatarPercentual(n.taxaCheckout), disponivel: true },
-    { nome: 'Compra', valor: formatarPtBr(n.compras), taxa: formatarPercentual(n.taxaCompra), disponivel: true },
-  ];
+/**
+ * Compras ÷ páginas vistas. Acima de 100% (mais compras que páginas, quando a
+ * página não é medida em toda venda) a conta não diz nada: fica "—".
+ */
+function paginaParaCompra(n: NumerosDaVisaoGeral): number | null {
+  const p = percentual(n.compras, n.paginas);
+  return p !== null && p <= 100 ? p : null;
 }
 
-/** O contorno contínuo das quatro faixas, com curva em S entre uma e outra. */
-function contornoDasFaixas(largura: number): string {
-  const coluna = largura / MEIA_FAIXA.length;
-  const centro = (i: number) => coluna * (i + 0.5);
-  const topo = (i: number) => CENTRO_DA_FAIXA - MEIA_FAIXA[i];
-  const base = (i: number) => CENTRO_DA_FAIXA + MEIA_FAIXA[i];
-  const ultimo = MEIA_FAIXA.length - 1;
-
-  let d = `M 0 ${topo(0)} L ${centro(0)} ${topo(0)}`;
-  for (let i = 1; i <= ultimo; i++) {
-    const divisa = coluna * i;
-    d += ` C ${divisa} ${topo(i - 1)} ${divisa} ${topo(i)} ${centro(i)} ${topo(i)}`;
-  }
-  d += ` L ${largura} ${topo(ultimo)} L ${largura} ${base(ultimo)} L ${centro(ultimo)} ${base(ultimo)}`;
-  for (let i = ultimo; i >= 1; i--) {
-    const divisa = coluna * i;
-    d += ` C ${divisa} ${base(i)} ${divisa} ${base(i - 1)} ${centro(i - 1)} ${base(i - 1)}`;
-  }
-  return `${d} L 0 ${base(0)} Z`;
-}
-
-/** A frase de cada etapa que ficou em zero: diz QUAL evento não chegou. */
-function etapasSemEvento(n: NumerosDaVisaoGeral): string[] {
-  if (!n.temDado) return [];
-  const frases: string[] = [];
-  if (n.paginas === 0) frases.push('nenhum PageView recebido no período');
-  if (n.checkouts === 0) frases.push('nenhum InitiateCheckout recebido no período');
-  if (n.compras === 0) frases.push('nenhum Purchase recebido no período');
-  return frases;
-}
-
-export function Funil({ numeros: n, className }: { numeros: NumerosDaVisaoGeral; className?: string }) {
+export function Funil({
+  numeros: n,
+  amostraParcial = false,
+  slug,
+  className,
+}: {
+  numeros: NumerosDaVisaoGeral;
+  /** `resumo.amostraCobreJanela === false`: mostra o selo "Amostra parcial". */
+  amostraParcial?: boolean;
+  /** Para o link "Ligar" quando nenhuma página vista chegou. */
+  slug?: string;
+  className?: string;
+}) {
   const base = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const idTitulo = `funil-titulo-${base}`;
   const idResumo = `funil-resumo-${base}`;
-  const idGradiente = `funil-cor-${base}`;
-  const [caixa, largura] = useLargura<HTMLDivElement>(640);
 
   const etapas = etapasDoFunil(n);
-  const coluna = largura / etapas.length;
-  const semEvento = etapasSemEvento(n);
-  const conversao = conversaoTotal(n.compras, null);
+  const indiceDoCheckout = etapas.findIndex((e) => e.rotulo === 'Checkout iniciado');
+  const taxa = paginaParaCompra(n);
+  const semPaginas = n.temDado && n.paginas === 0;
 
   return (
     <section
@@ -106,75 +86,39 @@ export function Funil({ numeros: n, className }: { numeros: NumerosDaVisaoGeral;
       className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4 sm:p-5', className)}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id={idTitulo} className="text-title font-semibold text-fg-strong">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 id={idTitulo} className="flex items-center gap-2 text-title font-semibold text-fg-strong">
+            <IconeDoAssunto assunto="evento" icone={ListFilter} />
             Funil do período
           </h2>
-          <p className="mt-0.5 text-caption text-fg-muted">Cliques → Página → Checkout → Compra</p>
+          {amostraParcial ? (
+            <Badge variant="aviso" title={AVISO_DE_AMOSTRA}>
+              Amostra parcial
+            </Badge>
+          ) : null}
         </div>
-        <p
-          className="flex flex-col items-end text-right"
-          title="compras ÷ cliques; sem fonte de cliques"
-        >
-          <span className="text-caption text-fg-muted">Conversão total</span>
+        <p className="flex flex-col items-end text-right" title="Compras dividido por páginas vistas, não por pessoas">
+          <span className="text-caption text-fg-muted">Página → compra</span>
           <span className="text-heading font-bold tabular-nums text-fg-strong">
-            {formatarPercentual(conversao)}
+            {taxa === null ? SEM_DADO : formatarPercentual(taxa)}
           </span>
-          <span className="sr-only">compras ÷ cliques; sem fonte de cliques</span>
         </p>
       </div>
 
-      <div ref={caixa} className="w-full min-w-0">
-        <svg
-          role="img"
-          aria-labelledby={idTitulo}
-          aria-describedby={idResumo}
-          width="100%"
-          height={ALTURA}
-          viewBox={`0 0 ${largura} ${ALTURA}`}
-          className="block select-text overflow-visible"
-        >
-          <defs>
-            <linearGradient id={idGradiente} x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" style={{ stopColor: 'var(--papel)' }} />
-              <stop offset="55%" style={{ stopColor: 'var(--border-focus)' }} />
-              <stop offset="100%" style={{ stopColor: 'var(--success)' }} />
-            </linearGradient>
-          </defs>
-
-          <path d={contornoDasFaixas(largura)} fill={`url(#${idGradiente})`} fillOpacity={0.82} />
-
-          {etapas.map((e, i) => {
-            const x = coluna * (i + 0.5);
-            return (
-              <g key={e.nome}>
-                <text x={x} y={Y_NOME} textAnchor="middle" className="text-caption" fill="var(--fg-muted)">
-                  {e.nome}
-                </text>
-                <text
-                  x={x}
-                  y={Y_VALOR}
-                  textAnchor="middle"
-                  className={e.disponivel ? 'text-heading font-bold tabular-nums' : 'text-caption'}
-                  fill={e.disponivel ? 'var(--fg-strong)' : 'var(--fg-muted)'}
-                >
-                  {e.valor}
-                </text>
-                {e.taxa !== null ? (
-                  <text
-                    x={x}
-                    y={Y_TAXA}
-                    textAnchor="middle"
-                    className="text-caption tabular-nums"
-                    fill="var(--fg-body)"
-                  >
-                    {e.taxa}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-        </svg>
+      <div role="img" aria-labelledby={idTitulo} aria-describedby={idResumo} className="w-full min-w-0">
+        <Palco assunto="evento" estado="ok" ciclos={1} altura="livre">
+          <FunilDaCena
+            assunto="evento"
+            etapas={etapas}
+            taxas
+            ramo={{
+              depoisDe: indiceDoCheckout,
+              rotulo: 'Abandonou o checkout',
+              valor: n.abandonos,
+              dica: n.abandonos === null ? DICA_DO_ABANDONO_SEM_SINAL : DICA_DO_ABANDONO,
+            }}
+          />
+        </Palco>
       </div>
 
       <p id={idResumo} className="sr-only">
@@ -182,14 +126,15 @@ export function Funil({ numeros: n, className }: { numeros: NumerosDaVisaoGeral;
       </p>
 
       <div className="flex flex-col gap-1 text-caption text-fg-muted">
-        {!n.temDado ? <p>Nenhum evento real no período.</p> : null}
-        {semEvento.map((frase) => (
-          <p key={frase}>{frase}</p>
-        ))}
-        <p>
-          Abaixo de cada faixa, a taxa sobre a etapa anterior. A altura das faixas é decorativa: ela não
-          mede os números.
-        </p>
+        {semPaginas && slug ? (
+          <p>
+            Nenhuma página vista no período.{' '}
+            <Link href={enderecoDaAba(slug, 'regras')} className="font-medium text-tinta-texto underline">
+              Ligar
+            </Link>
+          </p>
+        ) : null}
+        <p>Conta eventos do período, não pessoas.</p>
       </div>
     </section>
   );

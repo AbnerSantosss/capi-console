@@ -211,7 +211,7 @@ export function motivoDaRegraIgnorar(eventoOrigem: string): string {
   }
 
   if (nome.startsWith('tag.')) {
-    return 'Tag gerada pelo console. Enquanto a regra estiver em Ignorar ela não envia nada: mude o modo para Fila e confira o evento da Meta para começar a enviar.';
+    return 'Tag gerada pelo console. Enquanto a regra estiver em Ignorar ela não envia nada: mude o modo para Manual e confira o evento da Meta para começar a enviar.';
   }
 
   return 'Nome fora do catálogo conhecido. Enquanto estiver em Ignorar, nada vai para a Meta.';

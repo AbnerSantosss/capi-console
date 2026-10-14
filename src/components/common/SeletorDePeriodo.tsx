@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useId, useSyncExternalStore } from 'react';
+import React, { useId, useState, useSyncExternalStore } from 'react';
 import { CalendarRange } from '@/components/ui/icones';
 
 import { Input } from '@/components/ui/input';
@@ -138,6 +138,11 @@ export function SeletorDePeriodo({
 
   const meio = valor.de !== null && valor.ate !== null;
   const umSo = (valor.de !== null || valor.ate !== null) && !meio;
+  // No celular as datas ficam atrás de "Escolher datas" (13/10, pedido do
+  // dono: filtro grande ocupando a tela). Com uma data preenchida elas nunca
+  // se escondem, senão o filtro valeria sem ninguém ver.
+  const [datasAbertas, setDatasAbertas] = useState(false);
+  const mostrarDatas = datasAbertas || valor.de !== null || valor.ate !== null;
 
   function escolherFixo(dias: DiasEscolhidos) {
     // Limpar as datas junto é o que mantém a tela honesta: campo preenchido
@@ -166,7 +171,10 @@ export function SeletorDePeriodo({
       role="group"
       aria-label={rotuloDoGrupo}
     >
-      <div className="flex min-w-0 flex-wrap gap-1">
+      {/* No celular, régua de cinco colunas iguais com respiro entre elas: os
+          botões soltos com `gap-1` ficavam grandes e colados. De `sm` para
+          cima volta a ser a fileira de sempre. */}
+      <div className="grid min-w-0 grid-cols-5 gap-1.5 sm:flex sm:flex-wrap sm:gap-1">
         {FIXOS.map((f) => {
           const ativo = valor.dias === f.valor;
           return (
@@ -177,7 +185,7 @@ export function SeletorDePeriodo({
               aria-label={f.longo}
               onClick={() => escolherFixo(f.valor)}
               className={cn(
-                'h-control-lg rounded-control border px-1.5 text-label font-medium whitespace-nowrap transition-colors md:h-control-md md:px-3',
+                'h-control-md min-w-0 rounded-control border px-1 text-caption font-medium whitespace-nowrap transition-colors sm:px-3 sm:text-label',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
                 ativo
                   ? 'border-tinta-texto/50 bg-tinta/10 text-tinta-texto'
@@ -196,7 +204,22 @@ export function SeletorDePeriodo({
           vazio empurrando o primeiro numero para fora da tela. O `sm:contents`
           dissolve os invólucros de `sm` para cima: o layout largo e o mesmo de
           antes, elemento por elemento. */}
-      <div className="grid min-w-0 grid-cols-2 items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-2">
+      {!mostrarDatas && (
+        <button
+          type="button"
+          onClick={() => setDatasAbertas(true)}
+          className="flex min-h-control-md items-center gap-1.5 self-start text-caption font-medium text-tinta-texto sm:hidden"
+        >
+          <CalendarRange className="size-4" aria-hidden />
+          Escolher datas
+        </button>
+      )}
+      <div
+        className={cn(
+          mostrarDatas ? 'grid' : 'hidden',
+          'min-w-0 grid-cols-2 items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:gap-2'
+        )}
+      >
         <CalendarRange className="hidden size-4 shrink-0 text-fg-muted sm:block" aria-hidden />
         <div className="flex min-w-0 items-center gap-1.5 sm:contents">
           <label htmlFor={idDe} className="text-caption text-fg-muted">

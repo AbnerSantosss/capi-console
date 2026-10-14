@@ -27,12 +27,14 @@ import { AlertTriangle, ArrowRight, Globe, Plus } from '@/components/ui/icones';
 import { Button } from '@/components/ui/button';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { Callout } from '@/components/common/primitives';
+import { IconeDoAssunto } from '@/components/cenas';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { enderecoDaAba } from '@/lib/abas-empresa';
 import { BASE_FALLBACK } from '@/lib/endereco-da-tag';
 import type { DominioTag } from '@/lib/tag-dominios';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { CartaoDeDominio } from './CartaoDeDominio';
+import { CenaDoDominio, estadoDaCena } from './CenaDoDominio';
 import { enderecoProprioDe } from './mensagens-dominio';
 import {
   ModalAdicionarDominio,
@@ -121,6 +123,8 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
   const [copiado, setCopiado] = useState<string | null>(null);
   // Cada abertura do modal ganha uma `key` nova: o estado dele nasce das props.
   const [aberturas, setAberturas] = useState(0);
+  // O `<details>` "Como funciona" (só no pronto): a cena só monta aberta.
+  const [comoAberto, setComoAberto] = useState(false);
 
   const base =
     publicBaseUrl?.replace(/\/+$/, '') ||
@@ -224,34 +228,56 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
   /* Render                                                            */
   /* ---------------------------------------------------------------- */
 
+  // A cena mostra o estado REAL: o 1º site que espera, ou o 1º com subdomínio.
+  const estadoCena = estadoDaCena(dominios, prontoDe);
+  const comSub = dominios.filter((d) => enderecoProprioDe(d));
+  const hostDaCena =
+    (estadoCena === 'esperando'
+      ? comSub.find((d) => prontoDe(d) !== true)
+      : (comSub[0] ?? dominios[0])
+    )?.host ?? '';
+  const cena = <CenaDoDominio estado={estadoCena} host={hostDaCena} />;
+
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <p className="max-w-3xl text-body text-fg-body">
-        Cada site do cliente pode ter um endereço próprio para a tag, como{' '}
-        <span className="font-mono">m.loja.com.br</span>. Com ele, a tag é
-        chamada pelo domínio do cliente. Sem ele, a tag usa o nosso endereço e
-        coleta do mesmo jeito.
-      </p>
+      <div className="grid min-w-0 items-center gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        {/* Pronto em todos: a cena recolhe e só monta quando é aberta. */}
+        {estadoCena === 'ok' ? (
+          <details
+            className="min-w-0"
+            onToggle={(e) => setComoAberto((e.currentTarget as HTMLDetailsElement).open)}
+          >
+            <summary className="inline-flex cursor-pointer items-center gap-2 text-label font-semibold text-fg-strong">
+              <IconeDoAssunto assunto="dominio" icone={Globe} />
+              Como funciona
+            </summary>
+            {comoAberto && <div className="mt-3">{cena}</div>}
+          </details>
+        ) : (
+          <div className="min-w-0">{cena}</div>
+        )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button onClick={() => abrir({ tipo: 'novo' })} disabled={salvando}>
-          <Plus className="size-4" aria-hidden />
-          Adicionar domínio
-        </Button>
-        <Link
-          href={enderecoDaAba(slug, 'fontes')}
-          className="inline-flex items-center gap-1.5 text-label text-tinta-texto underline-offset-4 hover:underline"
-        >
-          A tag do site e os sites permitidos ficam em Fontes
-          <ArrowRight className="size-3.5" aria-hidden />
-        </Link>
+        <div className="flex min-w-0 flex-col items-start gap-3">
+          <Button onClick={() => abrir({ tipo: 'novo' })} disabled={salvando}>
+            <Plus className="size-4" aria-hidden />
+            Adicionar domínio
+          </Button>
+          <p className="text-body text-fg-body">Opcional: sem endereço próprio a tag usa o nosso.</p>
+          <Link
+            href={enderecoDaAba(slug, 'fontes')}
+            className="inline-flex items-center gap-1.5 text-label text-fg-strong underline underline-offset-4"
+          >
+            Tag e sites permitidos: Instalação
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        </div>
       </div>
 
       {dominios.length === 0 ? (
         <EstadoVazio
           icone={Globe}
-          titulo="Nenhum site cadastrado"
-          motivo="Sem site na lista, o coletor recusa os eventos de qualquer site. Adicione o site do cliente; o endereço próprio é opcional."
+          titulo="Nenhum site ainda"
+          motivo="Sem site na lista, nada é coletado. Adicione o do cliente."
           acao={
             <Button variant="outline" onClick={() => abrir({ tipo: 'novo' })}>
               <Plus className="size-4" aria-hidden />
@@ -286,12 +312,13 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
       )}
 
       {ehLocal && (
-        <Callout tone="warning" icon={AlertTriangle} title="Este console está em localhost">
-          O registro e a mensagem para o cliente apontam para{' '}
-          <code className="font-mono">{base}</code>, que só existe nesta
-          máquina. Defina <code className="font-mono">PUBLIC_BASE_URL</code>{' '}
-          com o endereço público antes de mandar qualquer coisa ao cliente.
-        </Callout>
+        <div title={`O registro e a mensagem apontam para ${base}. Defina PUBLIC_BASE_URL antes de mandar ao cliente.`}>
+          <Callout
+            tone="warning"
+            icon={AlertTriangle}
+            title="Console em localhost: o endereço público não está configurado."
+          />
+        </div>
       )}
 
       {modoDoModal && (

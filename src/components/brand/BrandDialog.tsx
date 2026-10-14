@@ -104,8 +104,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
             {novo ? 'Novo Pixel' : `Editar ${marca.nome}`}
           </DialogTitle>
           <DialogDescription>
-            Um Pixel guarda o número do Pixel, o token de acesso e o código de
-            teste. É para onde o evento vai quando você envia.
+            Dados do Pixel na Meta.
           </DialogDescription>
         </DialogHeader>
 
@@ -200,7 +199,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
               id="marca-conta"
               label="Conta de anúncios"
               param="ad_account_id"
-              helper="Necessária para o link direto do criativo no Gerenciador."
+              helper="Opcional: só serve para abrir o criativo na Meta."
             >
               <Input
                 id="marca-conta"
@@ -215,10 +214,7 @@ export function BrandDialog({ open, onOpenChange, marca = null }: Props) {
           </div>
 
           <Callout tone="info" icon={ShieldCheck}>
-            O token nunca é enviado de volta ao navegador nem gravado no
-            <code className="mx-1 font-mono">localStorage</code>. Ele fica em
-            <code className="mx-1 font-mono">config/marcas.json</code>, que
-            está no <code className="font-mono">.gitignore</code>.
+            O token fica guardado no servidor e não aparece de novo.
           </Callout>
         </div>
 

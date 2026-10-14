@@ -39,40 +39,35 @@ export function estadoDaRegra(regras: RegraRoteamento[], origem: string): Estado
   const regra = regras.find((r) => r.eventoOrigem === origem);
   if (!regra) {
     return {
-      texto: 'Sem regra — não vai à Meta',
+      texto: 'Sem regra: não vai à Meta',
       tom: 'warning',
-      explicacao:
-        'Sem regra, o evento não entra na fila nem vai à Meta. O fbc e o fbp dele ajudam a venda do webhook a achar a campanha.',
+      explicacao: 'Não entra na Fila nem vai à Meta; ainda ajuda a achar a campanha.',
     };
   }
   if (!regra.ativo) {
     return {
       texto: 'Regra desativada',
       tom: 'neutral',
-      explicacao:
-        'A regra existe mas está desligada: o evento chega, é registrado e não vai para a Meta.',
+      explicacao: 'Regra desligada: o evento chega e não vai à Meta.',
     };
   }
   if (regra.modo === 'auto') {
     return {
       texto: 'Ligada',
       tom: 'success',
-      explicacao:
-        'Assim que a tag envia, o evento vai sozinho para a Meta, sem revisão humana.',
+      explicacao: 'O evento vai sozinho para a Meta.',
     };
   }
   if (regra.modo === 'ignorar') {
     return {
       texto: 'Regra em Ignorar',
       tom: 'neutral',
-      explicacao:
-        'O evento chega e fica só no registro. Nunca vai para a Meta enquanto a regra estiver em Ignorar.',
+      explicacao: 'Fica só no registro. Nunca vai à Meta.',
     };
   }
   return {
     texto: 'Na fila',
     tom: 'warning',
-    explicacao:
-      'O evento fica na Fila esperando você revisar e enviar. Nada sai daqui sozinho.',
+    explicacao: 'Espera na Fila você revisar e enviar.',
   };
 }

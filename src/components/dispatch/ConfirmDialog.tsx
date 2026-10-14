@@ -64,7 +64,7 @@ export function ConfirmDialog({
             Confirmar envio real
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Não há código de teste ativo nesta marca.
+            Sem código de teste neste Pixel.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -107,15 +107,14 @@ export function ConfirmDialog({
           </dl>
 
           <Callout tone="warning" icon={AlertTriangle}>
-            Esta conversão entra nas métricas oficiais da conta e alimenta o
-            algoritmo de otimização. Só confirme se a venda aconteceu de verdade.
+            Entra nas métricas da conta e alimenta o algoritmo. Confirme só se a
+            venda aconteceu.
           </Callout>
 
           {!emq.temFbc && (
             <Callout tone="warning">
-              Sem o <code className="font-mono">fbc</code> a Meta ainda registra a
-              conversão pelo e-mail e telefone, mas a atribuição ao criativo pode
-              ficar imprecisa.
+              Sem o <code className="font-mono">fbc</code> a Meta conta pelo e-mail e
+              telefone, mas o anúncio pode ficar sem crédito.
             </Callout>
           )}
         </div>

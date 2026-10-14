@@ -8,10 +8,10 @@
  *
  *  1. o site do cliente (só no modo "novo");
  *  2. o subdomínio, com a sugestão `m` e a dica de nomes que bloqueador de
- *     anúncio derruba. "Salvar sem subdomínio" também serve: a tag usa o nosso
- *     endereço e coleta do mesmo jeito;
- *  3. a mensagem para o cliente criar o registro, com Copiar, WhatsApp e
- *     E-mail.
+ *     anúncio derruba, e a prévia ao vivo do endereço. "Sem subdomínio" também
+ *     serve: a tag usa o nosso endereço e coleta do mesmo jeito;
+ *  3. a mensagem para o cliente criar o registro: Copiar (primário), WhatsApp
+ *     e E-mail só com ícone, e o texto inteiro recolhido em "Ver a mensagem".
  *
  * O modal é montado só quando abre (a aba o monta com `key`), então o estado
  * nasce das props e não precisa de efeito para "zerar" entre uma abertura e
@@ -120,16 +120,17 @@ export function ModalAdicionarDominio({
   const chaveCopia = salvo ? `modal-mensagem-${salvo.id}` : 'modal-mensagem';
 
   const titulo = trocando ? `Subdomínio de ${trocando.host}` : 'Adicionar domínio';
+  // No modo trocar não há passo 1: a descrição perde o "Passo x de 3".
   const descricao =
     passo === 1
-      ? 'Passo 1 de 3: o site do cliente.'
+      ? 'Passo 1 de 3 · O site'
       : passo === 2
         ? trocando
-          ? 'O endereço próprio que a tag vai usar dentro do site do cliente.'
-          : 'Passo 2 de 3: o endereço próprio da tag.'
+          ? 'O endereço'
+          : 'Passo 2 de 3 · O endereço'
         : trocando
-          ? 'Mande esta mensagem ao dono do site.'
-          : 'Passo 3 de 3: mande esta mensagem ao dono do site.';
+          ? 'Mande ao cliente'
+          : 'Passo 3 de 3 · Mande ao cliente';
 
   return (
     <Dialog open onOpenChange={(v) => !v && aoFechar()}>
@@ -150,7 +151,7 @@ export function ModalAdicionarDominio({
             <Field
               id="dominio-site-novo"
               label="Site do cliente"
-              helper="Sem https:// e sem barra. Por exemplo: loja.com.br"
+              helper={<span title="Sem https:// e sem barra.">Ex.: loja.com.br, sem https://</span>}
               error={erroSite ?? undefined}
             >
               <Input
@@ -201,14 +202,13 @@ export function ModalAdicionarDominio({
               />
             </Field>
 
-            <p className="text-caption text-fg-body">
-              Endereço próprio:{' '}
-              <span className="wrap-token font-mono text-fg-strong">
+            {/* Prévia ao vivo do endereço, enquanto digita. */}
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="wrap-token font-mono text-title font-semibold text-fg-strong" aria-live="polite">
                 {subLimpo && !erroSub ? `${subLimpo}.${host}` : `….${host}`}
-              </span>
-              . Enquanto o certificado não fica pronto, a tag usa o nosso
-              endereço e continua coletando.
-            </p>
+              </p>
+              <p className="text-caption text-fg-muted">Até ficar pronto, a tag usa o nosso.</p>
+            </div>
 
             <DialogFooter className="flex-wrap">
               {!trocando && (
@@ -224,11 +224,11 @@ export function ModalAdicionarDominio({
                   disabled={salvando}
                   onClick={() => void gravar('')}
                 >
-                  {trocando ? 'Tirar o subdomínio' : 'Salvar sem subdomínio'}
+                  {trocando ? 'Tirar' : 'Sem subdomínio'}
                 </Button>
               )}
               <Button type="submit" disabled={!subOk || salvando} ocupado={salvando}>
-                Salvar e ver a mensagem
+                Salvar e continuar
               </Button>
             </DialogFooter>
           </form>
@@ -236,54 +236,61 @@ export function ModalAdicionarDominio({
 
         {passo === 3 && mensagem && (
           <div className="flex flex-col gap-4">
-            <Field
-              id="dominio-mensagem"
-              label="Mensagem para o cliente"
-              helper="Escrita para o dono do site, não para quem cuida de DNS. Mande assim, sem editar."
-            >
-              <Textarea
-                id="dominio-mensagem"
-                readOnly
-                spellCheck={false}
-                rows={10}
-                value={mensagem.texto}
-                className="wrap-token font-mono text-caption"
-              />
-            </Field>
+            <p className="text-body text-fg-body">Já escrita para o dono do site. Mande assim.</p>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
-                variant="outline"
+                aria-label="Copiar mensagem para o cliente"
                 onClick={() => copiar(mensagem.texto, chaveCopia)}
               >
                 {copiado === chaveCopia ? (
-                  <Check className="size-3.5 text-success" aria-hidden />
+                  <Check className="size-3.5" aria-hidden />
                 ) : (
                   <Copy className="size-3.5" aria-hidden />
                 )}
-                Copiar mensagem para o cliente
+                Copiar mensagem
               </Button>
               <a
                 href={mensagem.whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                aria-label="Mandar a mensagem pelo WhatsApp"
+                title="WhatsApp"
+                className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
               >
                 <Send className="size-3.5" aria-hidden />
-                WhatsApp
               </a>
               <a
                 href={mensagem.email}
-                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                aria-label="Mandar a mensagem por e-mail"
+                title="E-mail"
+                className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
               >
                 <Mail className="size-3.5" aria-hidden />
-                E-mail
               </a>
             </div>
 
+            {/* A mensagem inteira, recolhida: `mensagem.texto` sem edição. */}
+            <details className="min-w-0">
+              <summary className="cursor-pointer text-label font-semibold text-fg-strong">
+                Ver a mensagem
+              </summary>
+              <Textarea
+                id="dominio-mensagem"
+                aria-label="Mensagem para o cliente"
+                readOnly
+                spellCheck={false}
+                rows={10}
+                value={mensagem.texto}
+                className="wrap-token mt-2 font-mono text-caption"
+              />
+            </details>
+
             <DialogFooter>
-              <Button onClick={aoFechar}>Concluir</Button>
+              <Button variant="outline" onClick={aoFechar}>
+                Concluir
+              </Button>
             </DialogFooter>
           </div>
         )}

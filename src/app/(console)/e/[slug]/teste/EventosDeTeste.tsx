@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 
+import { Balao, Fio, IconeDoAssunto, No, Palco, Trilha } from '@/components/cenas';
 import { Spinner } from '@/components/common/Esqueleto';
 import { Callout, Field, Section, StatusDot, receitaBloco } from '@/components/common/primitives';
 import consoleStyles from '@/components/layout/console.module.css';
@@ -11,6 +12,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -69,6 +71,53 @@ async function esperar(ms: number, parar: () => boolean): Promise<void> {
   while (Date.now() < fim && !parar()) {
     await new Promise((r) => window.setTimeout(r, 100));
   }
+}
+
+/** O3: os ícones dos títulos de seção, com a cor e a entrada curta do assunto. */
+function IconeDoDestino() {
+  return <IconeDoAssunto assunto="teste" icone={Target} />;
+}
+function IconeDoComprador() {
+  return <IconeDoAssunto assunto="teste" icone={User} />;
+}
+function IconeDosEventos() {
+  return <IconeDoAssunto assunto="teste" icone={Send} />;
+}
+
+/**
+ * Cena "Só vai para a tela de teste" (E5): Console → Teste Meta, e o fio para
+ * Vendas sempre cortado. Ilustração só: a frase "Não conta como venda." fica
+ * fora da cena, em texto, e nunca sai. O estado vem do formulário real, sem
+ * enviar nada: código vazio ou inválido → 'apagado'; código válido → 'ok';
+ * alguma linha com erro → 'erro'. Nunca o estado de espera (sem laço nesta aba).
+ */
+function CenaDoTeste({ estado }: { estado: 'ok' | 'apagado' | 'erro' }) {
+  return (
+    <Palco assunto="teste" estado={estado}>
+      <Balao x="22%" y="8%" centro ordem={1}>
+        Código TEST
+      </Balao>
+      <Balao x="50%" y="8%" centro deBaixo forte ordem={2}>
+        Só teste
+      </Balao>
+      <Balao x="10%" y="8%" daDireita tracejado opcional ordem={3}>
+        Não conta
+      </Balao>
+      <Trilha comBalao>
+        <No rotulo="Console" />
+        <Fio ordem={1} estado={estado === 'ok' ? undefined : estado} />
+        <No
+          rotulo="Teste Meta"
+          icone={FlaskConical}
+          forte={estado === 'ok'}
+          estado={estado === 'apagado' ? 'apagado' : undefined}
+          ordem={2}
+        />
+        <Fio ordem={3} estado="apagado" />
+        <No rotulo="Vendas" icone={Ban} estado="apagado" ordem={4} />
+      </Trilha>
+    </Palco>
+  );
 }
 
 /** "97,00" ou "97.00" → 97; vazio ou inválido → NaN. */
@@ -171,10 +220,9 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
   let motivo = '';
   if (!carregado) motivo = 'Carregando os Pixels…';
   else if (!marca) motivo = 'Escolha o Pixel.';
-  else if (!marca.temToken) motivo = 'Este Pixel não tem token. Complete o cadastro na aba Pixels.';
-  else if (!codigo.trim())
-    motivo = 'Falta o código de teste. Copie em Gerenciador de Eventos → Testar eventos (começa com TEST).';
-  else if (!ehCodigoDeTeste(codigo)) motivo = 'O código de teste começa com TEST e só tem letras e números.';
+  else if (!marca.temToken) motivo = 'Falta o token deste Pixel. Complete em Pixels.';
+  else if (!codigo.trim()) motivo = 'Cole o código de teste (TEST…).';
+  else if (!ehCodigoDeTeste(codigo)) motivo = 'O código começa com TEST.';
   else if (fila.length === 0) motivo = 'Marque pelo menos um evento.';
   else if (!dados) motivo = 'Preparando os dados de teste…';
   else if (!valorOk) motivo = 'Informe um valor maior que zero.';
@@ -276,6 +324,11 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
   const enviados = resultados.filter((l) => l && l.estado !== 'aguardando' && l.estado !== 'enviando').length;
   const terminou = !rodando && total > 0;
   const pixelId = marca?.pixelId?.trim() ?? '';
+  const estadoDaCena: 'ok' | 'apagado' | 'erro' = resultados.some((l) => l?.estado === 'erro')
+    ? 'erro'
+    : codigo.trim() && ehCodigoDeTeste(codigo)
+      ? 'ok'
+      : 'apagado';
 
   const alternar = (evento: EventoDeTeste, marcado: boolean) =>
     setMarcados((atual) => {
@@ -287,10 +340,14 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <Callout tone="info" icon={FlaskConical} title="Só para teste">
-        Os eventos vão só para <strong className="font-semibold">Testar eventos</strong> do Gerenciador de
-        Eventos da Meta. Não contam como conversão e não chegam ao CRM.
-      </Callout>
+      {/* A garantia fica em TEXTO, fora da cena: se a cena sumir (tela
+          estreita, leitor de tela), "Não conta como venda." continua. */}
+      <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
+        <Callout tone="info" icon={FlaskConical} title="Só para teste">
+          Não conta como venda.
+        </Callout>
+        <CenaDoTeste estado={estadoDaCena} />
+      </div>
 
       {bloqueio === 'sessao' && (
         <Callout tone="danger" icon={AlertTriangle} title="Sua sessão venceu">
@@ -303,8 +360,8 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
         </Callout>
       )}
       {bloqueio === 'empresa' && (
-        <Callout tone="danger" icon={AlertTriangle} title="Recarregue a página">
-          Esta aba está numa empresa e o navegador em outra. Nada mais foi enviado.
+        <Callout tone="danger" icon={AlertTriangle}>
+          Esta aba é de outra empresa. Recarregue a página; nada foi enviado.
           <span className="mt-2 block">
             <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
               Recarregar agora
@@ -319,10 +376,9 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
           <Section
             id="teste-destino"
             step={1}
-            icon={Target}
+            icon={IconeDoDestino}
             variant="card"
             title="Para onde vai"
-            description="O Pixel da empresa e o código de teste da Meta."
           >
             <SeletorDePixel
               modo="unico"
@@ -337,7 +393,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
               param="test_event_code"
               helper={
                 <>
-                  Copie em Gerenciador de Eventos → Testar eventos (começa com TEST).
+                  Começa com TEST.
                   {pixelId && (
                     <>
                       {' '}
@@ -374,10 +430,10 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
           <Section
             id="teste-dados"
             step={2}
-            icon={User}
+            icon={IconeDoComprador}
             variant="card"
             title="Comprador de teste"
-            description="Preenchido sozinho, com dados de mentira. Pode editar."
+            description="Dados de mentira. Pode editar."
             action={
               <Button size="sm" variant="outline" onClick={gerar} disabled={rodando}>
                 <Wand2 className="size-3.5" aria-hidden />
@@ -434,7 +490,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                     label="Página"
                     helper={
                       semDominio
-                        ? 'A empresa não tem domínio. Informe a página do site: a Meta pede em evento de site.'
+                        ? 'Sem domínio cadastrado. Informe a página do site.'
                         : undefined
                     }
                   >
@@ -486,10 +542,10 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
           <Section
             id="teste-eventos"
             step={3}
-            icon={Send}
+            icon={IconeDosEventos}
             variant="card"
             title="Eventos"
-            description="Na ordem do funil. Desmarque o que não quiser testar."
+            description="Desmarque o que não quiser testar."
           >
             <ul className="flex flex-col gap-1.5">
               {EVENTOS_DE_TESTE.map((evento) => {
@@ -504,8 +560,8 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                           onCheckedChange={(v) => alternar(evento, Boolean(v))}
                         />
                         <span className="flex min-w-0 flex-col">
-                          <span className="truncate font-mono text-label font-medium text-fg-strong">{evento}</span>
-                          <span className="truncate text-caption text-fg-muted">{ROTULO_DO_EVENTO[evento]}</span>
+                          <span className="truncate text-label font-medium text-fg-strong">{ROTULO_DO_EVENTO[evento]}</span>
+                          <span className="truncate font-mono text-caption text-fg-muted">{evento}</span>
                         </span>
                       </label>
                       <EstadoDaLinha linha={linha} />
@@ -552,7 +608,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                 )}
               </div>
               {motivo && !rodando && (
-                <p id="teste-motivo" className="text-caption text-fg-muted">
+                <p id="teste-motivo" className="text-caption text-fg-body">
                   {motivo}
                 </p>
               )}
@@ -619,7 +675,7 @@ function EstadoDaLinha({ linha }: { linha: Linha | undefined }) {
       );
     case 'parado':
       return (
-        <StatusDot tone="neutral" className="shrink-0">
+        <StatusDot tone="warning" className="shrink-0">
           Não enviado
         </StatusDot>
       );

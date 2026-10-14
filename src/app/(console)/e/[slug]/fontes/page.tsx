@@ -9,9 +9,10 @@ import { empresaDosParams } from '../empresa-do-slug';
 
 export const dynamic = 'force-dynamic';
 
-const TITULO = 'Fontes';
-const DESCRICAO =
-  'Por onde o evento entra: o webhook da plataforma de vendas e a tag do site do cliente.';
+// A aba se chama Fontes, mas a tela diz o que se FAZ nela (13/10, pedido do
+// dono: "tem que ter explícito que é a instalação").
+const TITULO = 'Instalação';
+const DESCRICAO = 'Dois passos para a venda chegar à Meta.';
 
 /**
  * Fontes da empresa (`/e/<slug>/fontes`, V2 do v7): a antiga `/instalacao`,

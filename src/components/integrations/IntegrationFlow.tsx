@@ -49,6 +49,7 @@ const PASSOS: PassoDoFluxo[] = [
     id: 'instalacao',
     tipo: 'rota',
     href: '/instalacao',
+    // A antiga tela de Instalação é a aba Fontes desde a V2 (v7).
     title: 'Instalação',
     icon: Webhook,
     tinta: 'var(--tinta-instalacao)',

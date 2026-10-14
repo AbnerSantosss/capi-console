@@ -120,7 +120,7 @@ export function Header({
   const copiarTag = async () => {
     if (!slug || !empresa) return;
     const irParaFontes = {
-      label: 'Abrir Fontes',
+      label: 'Abrir Instalação',
       onClick: () => router.push(`/e/${slug}/fontes`),
     };
     setCopiando(true);
@@ -142,7 +142,7 @@ export function Header({
       const trecho = resposta.tags?.find((t) => t.evento.origem === 'tag.pageview')?.site;
       if (!trecho) {
         toast.error('A tag do site não veio pronta.', {
-          description: 'Abra a aba Fontes: a tag completa fica lá, com o botão de copiar.',
+          description: 'Abra a aba Instalação: a tag completa fica lá, com o botão de copiar.',
           action: irParaFontes,
         });
         return;
@@ -152,7 +152,7 @@ export function Header({
       } catch {
         // Área de transferência bloqueada (permissão negada, página em http).
         toast.error('O navegador bloqueou a cópia.', {
-          description: 'Abra a aba Fontes: a tag fica num campo que dá para selecionar e copiar à mão.',
+          description: 'Abra a aba Instalação: a tag fica num campo que dá para selecionar e copiar à mão.',
           action: irParaFontes,
         });
         return;

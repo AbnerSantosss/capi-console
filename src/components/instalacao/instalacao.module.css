@@ -1,0 +1,204 @@
+/* =========================================================================
+   Aba Fontes (Instalação) — contraste entre seções e cartões (13/10)
+
+   Pedido do dono: "tá tudo azul", "azul cinza não dá para ver direito", os
+   cartões sem sombra e as seções parecendo uma página só. Três degraus:
+
+   1. Cada SEÇÃO (Tag do site, Webhook de vendas) ganha um acento próprio —
+      ciano e menta, as duas cores de apoio do design Abner Tracker — numa
+      faixa de 3px no topo, numa faixa clara no cabeçalho, no contorno e numa
+      sombra longa que a descola do fundo.
+   2. Cada PAINEL dentro da seção (Gerar a tag, Sites permitidos, Chave…)
+      sobe DOIS degraus de superfície (--surface-3) e ganha sombra própria: antes
+      era --surface-1 sobre --surface-1, a mesma cor do cartão de fora.
+   3. O que já era --surface-2 DENTRO de um painel (lista de sites, formulário)
+      afunda para --surface-1 — um "poço", para não repetir a cor do painel.
+
+   Sem hexadecimal e sem font-size (G6/G7): só tokens do globals.css.
+   ========================================================================= */
+
+.pagina {
+  --acento-ciano: var(--border-focus);
+  --acento-menta: var(--success);
+  --acento-ambar: var(--warning);
+  --acento-violeta: var(--chart-4);
+}
+
+/* --- 1. Seções ---------------------------------------------------------- */
+
+.secao {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    var(--realce-interno),
+    0 0 0 1px color-mix(in srgb, var(--acento) 28%, transparent),
+    0 2px 4px rgb(0 0 0 / 35%),
+    0 28px 56px -28px rgb(0 0 0 / 85%);
+}
+
+.secaoTag {
+  --acento: var(--acento-ciano);
+}
+
+.secaoWebhook {
+  --acento: var(--acento-menta);
+}
+
+/* Faixa de 3px no topo: diz, antes de ler, de que seção é este pedaço. */
+.secao::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    var(--acento),
+    color-mix(in srgb, var(--acento) 25%, transparent)
+  );
+}
+
+/* O cabeçalho da seção vira uma faixa tingida de borda a borda. Os -1rem /
+   -1.25rem desfazem o p-4 / sm:p-5 da receita Cartão. */
+.secao > div:first-child {
+  margin: -1rem -1rem 0;
+  padding: 1.125rem 1rem 1rem;
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--acento) 16%, transparent),
+    color-mix(in srgb, var(--acento) 4%, transparent) 70%
+  );
+  border-bottom-color: color-mix(in srgb, var(--acento) 35%, transparent);
+}
+
+@media (min-width: 40rem) {
+  .secao > div:first-child {
+    margin: -1.25rem -1.25rem 0;
+    padding: 1.375rem 1.25rem 1.125rem;
+  }
+}
+
+/* O número do passo (1, 2) na cor da seção. */
+.secao > div:first-child > div > span:first-child {
+  border-color: var(--acento);
+  background-color: color-mix(in srgb, var(--acento) 18%, var(--surface-1));
+  color: var(--fg-strong);
+}
+
+/* --- 2. Painéis dentro da seção ---------------------------------------- */
+
+.secao [data-painel] {
+  background-color: var(--surface-3);
+  background-image: none;
+  box-shadow:
+    var(--realce-interno-forte),
+    0 0 0 1px var(--border-subtle),
+    0 12px 28px -16px rgb(0 0 0 / 80%);
+}
+
+/* --- 3. Poços dentro do painel ---------------------------------------- */
+
+.secao [data-painel] :global(.bg-surface-2) {
+  background-color: var(--surface-1);
+}
+
+/* =========================================================================
+   Texto mais forte nesta aba (13/10, pedido do dono: "o texto está muito
+   opaco… azul com azul"). Redefinir --fg-body/--fg-muted aqui reprova no G4
+   (token de cor só nasce no :root), então quem muda é a COR dos textos que
+   usam essas classes, só dentro desta aba: um cinza claro neutro, misturado
+   do --fg-strong com o fundo, sem cor nova. A hierarquia fica no peso e no
+   tamanho.
+   ========================================================================= */
+
+.pagina :global(.text-fg-body) {
+  color: color-mix(in srgb, var(--fg-strong) 86%, var(--surface-0));
+}
+
+.pagina :global(.text-fg-muted) {
+  color: color-mix(in srgb, var(--fg-strong) 72%, var(--surface-0));
+}
+
+/* =========================================================================
+   Passo a passo (topo da aba). O cartão, a cena e o movimento vêm de
+   `@/components/cenas` desde 14/10; aqui só o invólucro da seção.
+   ========================================================================= */
+
+.roteiro {
+  min-width: 0;
+}
+
+/* =========================================================================
+   Cenas da seção 1 (§12, O1). Só arrumação: o movimento, a cor e as peças
+   vêm de `@/components/cenas`. Nenhuma animação própria aqui.
+   ========================================================================= */
+
+/* CenaDaDuplicidade: dois quadros ("Pelos dois" e "Só um caminho"). Um
+   embaixo do outro; lado a lado quando o palco tem largura para os dois. */
+.duplicidade {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+@container cena (min-width: 34rem) {
+  .duplicidade {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.quadro {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 2.25rem;
+}
+
+.quadroFluxo {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ramos {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ramo {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Palco estreito: os fios ficam em pé sozinhos (cenas.module.css). Os dois
+   ramos viram colunas lado a lado e a Meta desce para baixo deles. */
+@container cena (max-width: 23rem) {
+  .quadro {
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0;
+  }
+
+  .quadroFluxo {
+    flex-direction: column;
+  }
+
+  .ramos {
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .ramo {
+    flex-direction: column;
+  }
+}

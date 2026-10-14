@@ -35,7 +35,7 @@ console.log('-- motivos, na ordem do servidor --');
     { ...base, modoPorMarca: { prod: 'fila' }, motivoFila: { prod: 'regra-em-fila' } },
     PIXELS
   );
-  ok(e?.frase.includes('regra deste evento estava em Fila'), 'regra em Fila: a frase diz a regra', e);
+  ok(e?.frase.includes('regra deste evento estava em Manual'), 'regra em Manual: a frase diz a regra', e);
   ok(e?.acao?.aba === 'regras', 'regra em Fila: a ação leva a Regras', e?.acao);
   ok(e?.avisoTeste === undefined, 'Pixel de produção: sem aviso de teste', e?.avisoTeste);
 }

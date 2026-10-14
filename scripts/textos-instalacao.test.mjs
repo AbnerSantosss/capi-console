@@ -85,9 +85,8 @@ ok(!PROMESSA_DURACAO.test(tela), '🔴 TagDoSite.tsx não promete que o cookie "
 
 console.log('\n  B. Item da lista de domínios diz o que a tag faz hoje');
 
-const TEXTO_SUBDOMINIO =
-  'subdomínio do cliente — a tag é chamada pelo domínio dele. O cookie de primeira parte gravado pelo servidor ainda depende do certificado, que está em preparação.';
-const TEXTO_NOSSO = 'nosso endereço — funciona, mas ainda como terceiro.';
+const TEXTO_SUBDOMINIO = 'domínio do cliente; o cookie próprio ainda depende do certificado.';
+const TEXTO_NOSSO = 'nosso endereço: funciona, ainda como terceiro.';
 
 const ternario = tela.match(/\{\s*d\.subdominio\s*\?\s*'([^']*)'\s*:\s*'([^']*)'\s*\}/);
 ok(Boolean(ternario), 'o item escolhe o texto por d.subdominio (dois ramos)');

@@ -1,17 +1,17 @@
 'use client';
 
 /**
- * "Últimas conversões" (V5 do plano v7; spec :26, :64): as 5 mais recentes do
- * período, sem visita de página e sem teste da equipe ou da plataforma
- * (`ultimasConversoes`). Colunas Hora · Evento · Valor · Status · event_id.
+ * "Últimas conversões" (V5 do plano v7; spec :26, :64; HyperFrames E1): as 5
+ * últimas vendas do período, sem visita de página e sem teste interno ou da
+ * plataforma (`ultimasConversoes`; a regra vai no `title` do subtítulo).
+ * Colunas Hora · Evento · Valor · Status. O `event_id` saiu da tela (E1) e
+ * continua na planilha.
  *
  *  - Status em TEXTO e cor: Aceito, Recusado, Na fila...
  *  - Clicar na linha (ou Enter no nome do evento) abre a aba Eventos filtrada
  *    pelo NOME do evento, no mesmo período: é a tela "quem mandou este evento".
  *    O filtro da aba casa pelo nome que a origem usou (`eventoOrigem`), e não
  *    pelo `event_id`, que abriria uma lista vazia (R4 da revisão da V4).
- *  - O `event_id` fica visível e selecionável: um clique nele seleciona o
- *    texto inteiro para copiar, e não navega.
  *  - Nada de dado pessoal do comprador: a linha só tem o que
  *    `ultimasConversoes` devolve.
  *  - O botão de baixar a planilha mora no cabeçalho da Visão geral, não aqui.
@@ -24,8 +24,11 @@ import consoleStyles from '@/components/layout/console.module.css';
 import { Esqueleto, RegiaoDeEspera } from '@/components/common/Esqueleto';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { StatusDot } from '@/components/common/primitives';
+import { IconeDoAssunto } from '@/components/cenas';
 import { parMeta } from '@/components/integrations/eventos-legiveis';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ShoppingBag } from '@/components/ui/icones';
+import { enderecoDaAba } from '@/lib/abas-empresa';
 import { cn } from '@/lib/utils';
 import {
   ROTULO_DO_STATUS,
@@ -84,11 +87,12 @@ export function AtividadeRecente({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id={idTitulo} className="text-title font-semibold text-fg-strong">
+          <h2 id={idTitulo} className="flex items-center gap-2 text-title font-semibold text-fg-strong">
+            <IconeDoAssunto assunto="evento" icone={ShoppingBag} />
             Últimas conversões
           </h2>
-          <p className="mt-0.5 text-caption text-fg-muted">
-            as 5 mais recentes do período, sem visita de página e sem teste da equipe
+          <p className="mt-0.5 text-caption text-fg-muted" title="Sem visitas e sem testes internos">
+            as 5 últimas vendas
           </p>
         </div>
         <Link href={`${abaEventos}?${busca}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
@@ -116,19 +120,19 @@ export function AtividadeRecente({
       ) : !linhas || linhas.length === 0 ? (
         <EstadoVazio
           titulo="Nenhuma conversão no período"
-          motivo="Nenhum evento além de visita de página chegou neste período. Confira o webhook de vendas na aba Fontes."
+          motivo="Nenhuma venda chegou. Confira o webhook em Instalação."
           acao={
             <Link
-              href={`/e/${encodeURIComponent(slug)}/fontes`}
+              href={enderecoDaAba(encodeURIComponent(slug), 'fontes')}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
-              Abrir a aba Fontes
+              Abrir Instalação
             </Link>
           }
         />
       ) : (
         <div className={cn(consoleStyles.rolagemDoPainel, '-mx-1 px-1')}>
-          <table className="w-full min-w-[34rem] border-collapse text-left text-label">
+          <table className="w-full min-w-[26rem] border-collapse text-left text-label">
             <thead>
               <tr className="border-b border-line text-caption text-fg-muted">
                 <th scope="col" className="py-2 pr-3 font-medium">
@@ -140,11 +144,8 @@ export function AtividadeRecente({
                 <th scope="col" className="py-2 pr-3 text-right font-medium">
                   Valor
                 </th>
-                <th scope="col" className="py-2 pr-3 font-medium">
-                  Status
-                </th>
                 <th scope="col" className="py-2 font-medium">
-                  event_id
+                  Status
                 </th>
               </tr>
             </thead>
@@ -179,17 +180,8 @@ export function AtividadeRecente({
                     <td className="py-2 pr-3 text-right whitespace-nowrap tabular-nums text-fg-body">
                       {formatarMoeda(l.valor, l.moeda)}
                     </td>
-                    <td className="py-2 pr-3 whitespace-nowrap">
+                    <td className="py-2 whitespace-nowrap">
                       <StatusDot tone={TOM_DO_STATUS[l.status]}>{ROTULO_DO_STATUS[l.status]}</StatusDot>
-                    </td>
-                    <td className="py-2" onClick={(e) => e.stopPropagation()}>
-                      {l.eventId ? (
-                        <code className="cursor-text break-all font-mono text-caption text-fg-body select-all">
-                          {l.eventId}
-                        </code>
-                      ) : (
-                        <span className="text-caption text-fg-muted">{SEM_DADO}</span>
-                      )}
                     </td>
                   </tr>
                 );

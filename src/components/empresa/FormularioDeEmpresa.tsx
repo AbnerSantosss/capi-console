@@ -4,8 +4,10 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, Info, Lock, Save, Trash2 } from '@/components/ui/icones';
+import { AlertTriangle, Check, Lock, Save, Trash2 } from '@/components/ui/icones';
 
+import { IconeDoAssunto } from '@/components/cenas';
+import { letraEscura } from '@/components/empresa/SeletorDeEmpresa';
 import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
 import { destinoAoTrocar } from '@/lib/empresa-do-endereco';
 import { normalizarRotulo } from '@/components/integrations/rotulo';
@@ -102,6 +104,31 @@ function iniciais(nome: string): string {
   return (partes[0][0] + (partes[1]?.[0] ?? '')).toUpperCase();
 }
 
+/** Avatar redondo: logo, ou iniciais sobre a cor, com letra legível em qualquer cor. */
+function AvatarDaEmpresa({ nome, cor, imagem }: { nome: string; cor: string; imagem: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line-control bg-surface-2 text-label font-semibold ${
+        letraEscura(cor) ? 'text-surface-0' : 'text-white'
+      }`}
+      style={imagem || !cor ? undefined : { backgroundColor: cor }}
+    >
+      {imagem ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imagem} alt="" className="size-full object-cover" />
+      ) : (
+        iniciais(nome)
+      )}
+    </span>
+  );
+}
+
+/** Ícone do título da seção (O3): a peça de cenas no lugar do glifo pequeno. */
+function IconeDaSecao() {
+  return <IconeDoAssunto assunto="configuracoes" icone={Save} />;
+}
+
 /* ------------------------------------------------------------------ */
 /* Os campos                                                           */
 /* ------------------------------------------------------------------ */
@@ -147,7 +174,7 @@ export function CamposDaEmpresa({
   logoSalvo,
   prefixo = 'empresa',
   autoFocus = false,
-  ajudaDoApelido = 'Vai na URL do webhook desta empresa. Só minúsculas, dígitos e hífen.',
+  ajudaDoApelido = 'Vai na URL do webhook desta empresa.',
 }: CamposDaEmpresaProps) {
   const [erroLogo, setErroLogo] = useState('');
   const refArquivo = useRef<HTMLInputElement>(null);
@@ -196,7 +223,7 @@ export function CamposDaEmpresa({
         id={id('nome')}
         label="Nome"
         required
-        helper="Como esta empresa aparece na lista de empresas."
+        helper="Aparece na lista de empresas."
       >
         <Input
           id={id('nome')}
@@ -213,23 +240,12 @@ export function CamposDaEmpresa({
         id={id('logo')}
         label="Foto ou logo"
         error={erroLogo || undefined}
-        helper="PNG, JPEG, SVG ou WebP, até 150 KB. Sem imagem, o avatar usa as iniciais."
+        helper={`PNG, JPG, SVG ou WebP, até ${Math.round(LOGO_MAX_BYTES / 1024)} KB.`}
       >
         <div className="flex items-center gap-3">
           {/* Prévia redonda: é assim que o logo vai aparecer na lista de
               empresas, então é assim que ele é mostrado aqui. */}
-          <span
-            aria-hidden
-            className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-line-control bg-surface-2 text-label font-semibold text-white"
-            style={previa || !corDoAvatar ? undefined : { backgroundColor: corDoAvatar }}
-          >
-            {previa ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previa} alt="" className="size-full object-cover" />
-            ) : (
-              iniciais(valores.nome)
-            )}
-          </span>
+          <AvatarDaEmpresa nome={valores.nome} cor={corDoAvatar} imagem={previa} />
 
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <Input
@@ -239,7 +255,7 @@ export function CamposDaEmpresa({
               accept="image/png,image/jpeg,image/svg+xml,image/webp"
               onChange={escolherLogo}
               aria-describedby={descrito(id('logo'), true, Boolean(erroLogo))}
-              className="h-auto cursor-pointer px-0 py-0 text-caption file:mr-3 file:cursor-pointer file:rounded-l-control file:border-0 file:bg-surface-3 file:px-3 file:py-2.5 file:text-label file:font-medium file:text-fg-body"
+              className="h-auto min-h-11 cursor-pointer px-0 py-0 text-caption file:mr-3 file:cursor-pointer file:rounded-l-control file:border-0 file:bg-surface-3 file:px-3 file:py-3 file:text-label file:font-medium file:text-fg-body"
             />
             {valores.logoDataUrl && (
               <Button size="sm" variant="ghost" onClick={removerLogo} className="self-start">
@@ -254,7 +270,7 @@ export function CamposDaEmpresa({
       <Field
         id={id('plataforma')}
         label="Plataforma de vendas"
-        helper="Aparece nos textos de instalação do webhook desta empresa."
+        helper="Aparece nos textos da Instalação."
       >
         <Input
           id={id('plataforma')}
@@ -285,7 +301,7 @@ export function CamposDaEmpresa({
         />
       </Field>
 
-      <Field id={id('cor')} label="Cor" helper="Cor do avatar quando a empresa não tem logo.">
+      <Field id={id('cor')} label="Cor" helper="Usada quando não há logo.">
         <div className="flex items-center gap-3">
           <Input
             id={id('cor')}
@@ -335,6 +351,7 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
   const marcarRascunho = useEmpresaStore((s) => s.marcarRascunho);
   const router = useRouter();
   const pathname = usePathname();
+  const corDoTema = useCorDoTema();
 
   // Semeado uma vez: a página monta este formulário com `key={empresaId}`,
   // então trocar de empresa monta outro, já com os dados da nova.
@@ -394,17 +411,36 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
     <Section
       id="dados-da-empresa"
       title="Dados da empresa"
-      icon={Save}
+      icon={IconeDaSecao}
       variant="card"
-      description="Nome, logo, plataforma de vendas, apelido da URL e cor."
       action={
         sujo ? (
-          <StatusDot tone="warning">Alterações não salvas</StatusDot>
+          <StatusDot tone="warning">Não salvo</StatusDot>
         ) : (
-          <StatusDot tone="success">Tudo salvo</StatusDot>
+          <StatusDot tone="success" icon={Check}>
+            Salvo
+          </StatusDot>
         )
       }
     >
+      {/* Prévia estática: o que o operador vê na lista de empresas, lido do
+          estado local do formulário. Não anima. */}
+      <div className="flex items-center gap-3 rounded-control bg-surface-2 p-3">
+        <AvatarDaEmpresa
+          nome={valores.nome}
+          cor={valores.cor || corDoTema}
+          imagem={valores.logoDataUrl || empresa.logoUrl || ''}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-body font-semibold text-fg-strong">
+            {valores.nome.trim() || 'Sem nome'}
+          </p>
+          <p className="truncate font-mono text-caption text-fg-muted">
+            /e/{slugNovo || empresa.slug}
+          </p>
+        </div>
+      </div>
+
       {erro && (
         <Callout tone="danger" icon={AlertTriangle} title="Não foi possível salvar">
           {erro}
@@ -417,34 +453,40 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
         slugEfetivo={valores.slug}
         logoSalvo={empresa.logoUrl}
         prefixo="configuracoes-empresa"
-        ajudaDoApelido={`O endereço desta empresa no console: /e/${slugNovo || empresa.slug}. Só minúsculas, dígitos e hífen. A URL do webhook não muda.`}
+        ajudaDoApelido="Vira o endereço /e/<apelido>. O webhook não muda."
       />
 
       {apelidoMuda && (
         <Callout tone="warning" icon={AlertTriangle} title="O endereço desta empresa vai mudar">
           De <span className="font-mono">/e/{empresa.slug}</span> para{' '}
-          <span className="font-mono">/e/{slugNovo}</span>. Favoritos e links com o endereço
-          antigo deixam de abrir esta empresa.
+          <span className="font-mono">/e/{slugNovo}</span>. Links antigos deixam de abrir.
         </Callout>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => void salvar()} disabled={!sujo || salvando}>
-          <Save className="size-4" aria-hidden />
-          {salvando ? 'Salvando…' : 'Salvar alterações'}
-        </Button>
-        {sujo && !salvando && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setValores(valoresDe(empresa));
-              setErro('');
-            }}
-          >
-            Descartar alterações
+      {/* Barra de salvar: só existe quando há mudança, e fica colada no rodapé
+          da tela enquanto o formulário estiver à vista. */}
+      {sujo && (
+        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-line-strong bg-surface-1 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5">
+          <Button onClick={() => void salvar()} disabled={salvando}>
+            <Save className="size-4" aria-hidden />
+            {salvando ? 'Salvando…' : 'Salvar alterações'}
           </Button>
-        )}
-      </div>
+          {!salvando && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setValores(valoresDe(empresa));
+                setErro('');
+              }}
+            >
+              Descartar alterações
+            </Button>
+          )}
+          <StatusDot tone="warning" className="ml-auto">
+            Não salvo
+          </StatusDot>
+        </div>
+      )}
     </Section>
   );
 }
@@ -476,10 +518,7 @@ export function ExcluirEmpresa({ empresa }: { empresa: Pick<EmpresaPublica, 'id'
           </StatusDot>
         }
       >
-        <p className="text-body text-fg-body">
-          Esta é a empresa principal do console: é nela que ficam o webhook e a tag que já
-          recebem vendas hoje. Por isso ela não tem o botão de excluir.
-        </p>
+        <p className="text-body text-fg-body">É a empresa principal: recebe as vendas hoje.</p>
       </Section>
     );
   }
@@ -501,62 +540,60 @@ export function ExcluirEmpresa({ empresa }: { empresa: Pick<EmpresaPublica, 'id'
   };
 
   return (
-    <Section
+    <details
       id="excluir-empresa"
-      title="Excluir empresa"
-      icon={Trash2}
-      variant="card"
-      description="Apaga esta empresa e os Pixels dela."
+      className="min-w-0 rounded-panel border border-line-strong bg-surface-1"
     >
-      <p className="text-body text-fg-body">
-        Excluir apaga <strong className="font-semibold text-fg-strong">{empresa.nome}</strong> e
-        os Pixels dela, e o webhook desta empresa deixa de receber vendas. Não dá para desfazer
-        por aqui.
-      </p>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-body font-medium text-fg-body [&::-webkit-details-marker]:hidden sm:px-5">
+        <Trash2 className="size-4 shrink-0 text-fg-muted" aria-hidden />
+        Excluir empresa
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-line-strong p-4 sm:p-5">
+        <p className="text-body text-fg-body">
+          Apaga <strong className="font-semibold text-fg-strong">{empresa.nome}</strong>, os
+          Pixels dela e o webhook. Não tem volta.
+        </p>
 
-      <Callout tone="info" icon={Info}>
-        Pixel com envio automático ligado impede a exclusão. Desligue antes em{' '}
-        <Link href={abaPixels} className="font-medium text-tinta-texto underline-offset-4 hover:underline">
-          Pixels
-        </Link>
-        .
-      </Callout>
-
-      {erro && (
-        <Callout tone="danger" icon={AlertTriangle} title="A empresa não foi excluída">
-          <p>{erro}</p>
-          <Link
-            href={abaPixels}
-            className="mt-1 inline-block font-medium text-tinta-texto underline-offset-4 hover:underline"
-          >
-            Abrir Pixels desta empresa
+        <p className="text-body text-fg-body">
+          Pixel com envio automático ligado impede a exclusão.{' '}
+          <Link href={abaPixels} className="font-medium text-fg-strong underline">
+            Abrir Pixels
           </Link>
-        </Callout>
-      )}
+        </p>
 
-      <Field
-        id="excluir-empresa-nome"
-        label="Nome para confirmar"
-        helper={`Digite ${empresa.nome} para liberar o botão.`}
-      >
-        <Input
+        {erro && (
+          <Callout tone="danger" icon={AlertTriangle} title="A empresa não foi excluída">
+            <p>{erro}</p>
+            <Link href={abaPixels} className="mt-1 inline-block font-medium text-fg-strong underline">
+              Abrir Pixels desta empresa
+            </Link>
+          </Callout>
+        )}
+
+        <Field
           id="excluir-empresa-nome"
-          value={digitado}
-          onChange={(e) => setDigitado(e.target.value)}
-          placeholder={empresa.nome}
-          autoComplete="off"
-          spellCheck={false}
-          aria-describedby={descrito('excluir-empresa-nome', true, false)}
-        />
-      </Field>
+          label="Nome para confirmar"
+          helper={`Digite ${empresa.nome} para liberar o botão.`}
+        >
+          <Input
+            id="excluir-empresa-nome"
+            value={digitado}
+            onChange={(e) => setDigitado(e.target.value)}
+            placeholder={empresa.nome}
+            autoComplete="off"
+            spellCheck={false}
+            aria-describedby={descrito('excluir-empresa-nome', true, false)}
+          />
+        </Field>
 
-      <div>
-        <Button variant="destructive" onClick={() => void excluir()} disabled={!confere || excluindo}>
-          <Trash2 className="size-4" aria-hidden />
-          {excluindo ? 'Excluindo…' : 'Excluir empresa'}
-        </Button>
+        <div>
+          <Button variant="destructive" onClick={() => void excluir()} disabled={!confere || excluindo}>
+            <Trash2 className="size-4" aria-hidden />
+            {excluindo ? 'Excluindo…' : 'Excluir empresa'}
+          </Button>
+        </div>
       </div>
-    </Section>
+    </details>
   );
 }
 

@@ -19,6 +19,7 @@ import { ErrorSummary } from '@/components/common/ErrorSummary';
 import { Stepper } from '@/components/common/Stepper';
 import { Section } from '@/components/common/primitives';
 import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
+import { IconeDoAssunto } from '@/components/cenas';
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EntraESai, Entrada } from '@/components/common/motion';
 import type { DispatchResult } from '@/components/dispatch/tipos';
@@ -39,6 +40,11 @@ import { buttonVariants } from '@/components/ui/button';
  * estiver no formulário, e sem o formulário na mesma tela o operador não teria
  * como montar o evento. O seletor de vistas de Eventos é da V7.
  */
+/** Ícone do título da seção (O3): a peça de cenas no lugar do glifo pequeno. */
+function IconeDeConferir() {
+  return <IconeDoAssunto assunto="evento" icone={Target} />;
+}
+
 export function EnvioManual({ slug }: { slug: string }) {
   const router = useRouter();
   const [resultado, setResultado] = useState<DispatchResult | null>(null);
@@ -70,7 +76,7 @@ export function EnvioManual({ slug }: { slug: string }) {
       <main className={consoleStyles.page} data-area="manual">
         <ConsolePageHeader
           title="Envio manual"
-          description="Prepare os dados, confira o pixel e envie o evento à Meta."
+          description="Prepare os dados, confira o Pixel e envie o evento à Meta."
           icon={Send}
           action={
             <Link
@@ -83,7 +89,7 @@ export function EnvioManual({ slug }: { slug: string }) {
           }
         />
 
-        <ExplicacaoDoDisparo atual="manual" className="mb-6" />
+        <ExplicacaoDoDisparo atual="manual" slug={slug} className="mb-6" />
 
         <Stepper className="mb-8" />
 
@@ -111,7 +117,7 @@ export function EnvioManual({ slug }: { slug: string }) {
             <Section
               id="secao-disparo"
               step={4}
-              icon={Target}
+              icon={IconeDeConferir}
               variant="card"
               title="Conferir e enviar"
               description="Para onde vai e o que a Meta vai receber."

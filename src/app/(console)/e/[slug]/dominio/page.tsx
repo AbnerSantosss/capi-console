@@ -10,8 +10,7 @@ import { empresaDosParams } from '../empresa-do-slug';
 export const dynamic = 'force-dynamic';
 
 const TITULO = 'Domínio';
-const DESCRICAO =
-  'O endereço próprio da tag dentro do site do cliente e o registro de DNS que ele cria.';
+const DESCRICAO = 'O endereço da tag dentro do site do cliente.';
 
 /**
  * Domínio da empresa (`/e/<slug>/dominio`, V2 do v7; conteúdo da V8).

@@ -8,6 +8,7 @@ import { EVENTOS_META, acharEvento } from '@/lib/meta-events';
 import { janelaRestante } from '@/lib/event-schema';
 import { Field, Section, ParamChip } from '@/components/common/primitives';
 import { Input } from '@/components/ui/input';
+import { IconeDoAssunto } from '@/components/cenas';
 import { Button } from '@/components/ui/button';
 import { PixMark } from '@/components/ui/brand-icons';
 import {
@@ -16,6 +17,11 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select';
+
+/** O3: o ícone do título com a cor e a entrada curta do assunto. */
+function IconeDoEvento() {
+  return <IconeDoAssunto assunto="evento" icone={ReceiptText} />;
+}
 
 export function TransactionSection() {
   const s = useEventStore();
@@ -32,10 +38,10 @@ export function TransactionSection() {
     <Section
       id="secao-evento"
       step={2}
-      icon={ReceiptText}
+      icon={IconeDoEvento}
       variant="card"
       title="O que aconteceu"
-      description="Qual foi o evento, o dia e a hora em que aconteceu, e o valor da venda."
+      description="Evento, dia e hora, e valor da venda."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Evento */}
@@ -89,7 +95,7 @@ export function TransactionSection() {
               id="campo-custom"
               label="Nome do evento"
               required
-              helper="Escreva exatamente como está no Gerenciador de Eventos. Diferencia maiúsculas."
+              helper="Igual ao Gerenciador de Eventos (maiúsculas contam)."
               error={erros.customEventName}
             >
               <Input
@@ -113,7 +119,7 @@ export function TransactionSection() {
           helper={
             <span className="inline-flex items-center gap-1.5">
               <PixMark size={13} />
-              Valor decimal da venda. Ex.: 197.00
+              Ex.: 197.00
             </span>
           }
           error={erros.value}
@@ -138,7 +144,7 @@ export function TransactionSection() {
           label="Moeda"
           param="currency"
           required={evento.exigeValor}
-          helper="Código ISO de 3 letras."
+          helper="Ex.: BRL"
           error={erros.currency}
         >
           <Input
@@ -191,7 +197,7 @@ export function TransactionSection() {
           id="campo-eventid"
           label="ID do evento"
           param="event_id"
-          helper="Evita contagem dupla se o Pixel também disparar. Use order_<número>."
+          helper="Evita contar a venda duas vezes. Use order_<número>."
           error={erros.eventId}
           action={
             <Button
@@ -256,7 +262,7 @@ export function TransactionSection() {
             id="campo-url"
             label="URL da página"
             param="event_source_url"
-            helper="Cole a URL com ?fbclid= e as UTMs — é dela que sai a atribuição ao criativo."
+            helper="Cole a URL com ?fbclid= e UTMs: dela vem o anúncio."
             error={erros.sourceUrl}
           >
             <Input

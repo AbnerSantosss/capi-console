@@ -28,13 +28,34 @@ export type EstadoDoDominio = 'sem-subdominio' | 'aguardando' | 'pronto';
 
 export interface TextoDoCartao {
   estado: EstadoDoDominio;
-  /** Primeira linha do cartão: o apontamento (ou "Pronto"). */
+  /** Primeira linha (vai para o `aria-label` do miniestado; no pronto, é a frase visível). */
   apontamento: string;
-  /** Segunda linha do cartão: o certificado (ou o que fazer agora que ficou pronto). */
+  /** Segunda linha (no `aria-label`; no pronto, é o que fazer agora, visível). */
   certificado: string;
-  /** Frase que explica o que a tag faz enquanto isso. */
+  /** Frase que explica o que a tag faz enquanto isso (no `aria-label` do miniestado). */
   detalhe: string;
 }
+
+/**
+ * O que o cartão MOSTRA de cada estado (E2 do plano HyperFrames): o título da
+ * pílula e uma frase curta. As linhas de `textoDoCartao` continuam existindo
+ * e vão para o `aria-label` do miniestado.
+ */
+export const ROTULO_DO_ESTADO: Record<EstadoDoDominio, string> = {
+  'sem-subdominio': 'Usando o nosso endereço',
+  aguardando: 'Aguardando ativação',
+  pronto: 'Pronto',
+};
+
+/** A frase visível do estado aguardando (o atraso pode ser do cliente OU do certificado). */
+export const FRASE_AGUARDANDO =
+  'Falta o registro do cliente e o certificado. Enquanto isso a tag continua coletando.';
+
+/**
+ * A frase visível do estado pronto, embaixo de `apontamento`. A linha
+ * `certificado` ("…copie de novo.") fica no `aria-label`.
+ */
+export const FRASE_PRONTO = 'Copie a tag de novo em Instalação.';
 
 /** Subdomínio limpo, ou '' quando não há. */
 function subDe(d: DominioDoCartao): string {
@@ -81,9 +102,9 @@ export function textoDoCartao(dominio: DominioDoCartao, enderecoPronto = false):
   if (enderecoPronto === true) {
     return {
       estado: 'pronto',
-      apontamento: `Pronto: a tag já usa ${proprio}.`,
+      apontamento: `Pronto: a tag usa ${proprio}.`,
       certificado: 'Se a tag foi instalada antes, copie de novo.',
-      detalhe: `O endereço ${proprio} respondeu por este console, com certificado válido. Copie a tag em Fontes e troque a que está no site do cliente.`,
+      detalhe: `O endereço ${proprio} respondeu por este console, com certificado válido. Copie a tag em Instalação e troque a que está no site do cliente.`,
     };
   }
 
@@ -153,8 +174,8 @@ export function erroDoSubdominio(v: string): string | null {
   const s = String(v ?? '').trim().toLowerCase();
   if (!s) return null;
   if (s.length > 63) return 'Máximo de 63 caracteres.';
-  if (s.includes('.')) return 'Escreva só o rótulo, sem ponto — por exemplo m.';
-  if (!/^[a-z0-9-]+$/.test(s)) return 'Só minúsculas, dígitos e hífen.';
+  if (s.includes('.')) return 'Escreva só a primeira parte, sem ponto. Ex.: m.';
+  if (!/^[a-z0-9-]+$/.test(s)) return 'Só letras minúsculas, números e hífen.';
   if (s.startsWith('-') || s.endsWith('-')) {
     return 'Não pode começar nem terminar com hífen.';
   }
@@ -167,13 +188,14 @@ export function erroDoSubdominio(v: string): string | null {
 
 /**
  * O que costuma impedir o endereço próprio de ficar pronto. Só texto: o
- * console não mede nenhuma destas coisas.
+ * console não mede nenhuma destas coisas. Uma frase de até 10 palavras por
+ * causa (E2 do plano HyperFrames); a 2ª e a 4ª são as frases exatas do plano.
  */
 export const SINTOMAS_NAO_FICOU_ATIVO: ReadonlyArray<string> = [
-  'O registro ainda não foi criado, ou o Nome ficou diferente do da tabela. Peça ao cliente uma foto da tela de DNS.',
-  'O registro foi criado como A ou TXT. Ele precisa ser CNAME.',
-  'Já existe outro registro com o mesmo nome. Só pode haver um; o antigo tem de sair.',
-  'O painel do cliente é da Cloudflare e a nuvem está laranja. Ela tem de ficar cinza (DNS only).',
-  'O DNS ainda está se espalhando. Depois de criado, pode levar algumas horas.',
-  'O certificado é liberado do nosso lado, no painel da Cloudflare. Se o registro está certo há mais de um dia, confira lá.',
+  'Registro faltando ou Nome errado. Peça um print do DNS.',
+  'Criado como A ou TXT. Tem de ser CNAME.',
+  'Outro registro com o mesmo nome. O antigo tem de sair.',
+  'Nuvem laranja. Deixe cinza (DNS only).',
+  'DNS ainda se espalhando. Pode levar algumas horas.',
+  'Certo há um dia? Confira o certificado na nossa Cloudflare.',
 ];

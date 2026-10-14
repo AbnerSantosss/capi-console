@@ -1,6 +1,8 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Plus, Target } from '@/components/ui/icones';
 
@@ -12,11 +14,15 @@ import {
 } from '@/hooks/useEstadoAutomatico';
 import { BrandDialog } from '@/components/brand/BrandDialog';
 import { CardDePixel } from '@/components/pixels/CardDePixel';
+import { CenaDoPixel, faixaDaCena } from '@/components/pixels/CenaDoPixel';
 import {
   contarRegrasAuto,
   contarRegrasQueEnviam,
+  estadoDePixel,
   nomesDasRegrasAuto,
 } from '@/components/pixels/estado-pixel';
+import { IconeDoAssunto } from '@/components/cenas';
+import { enderecoDaAba } from '@/lib/abas-empresa';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import {
   Esqueleto,
@@ -95,6 +101,12 @@ export function PixelsPanel() {
    * na hora de apagar.
    */
   const regras = useRegrasDeRoteamento();
+
+  // "Abrir Regras" vai para a aba Regras DA empresa do endereço. Sem slug
+  // (nunca deveria acontecer: a `/pixels` antiga redireciona), o link some
+  // em vez de apontar para rota antiga.
+  const params = useParams<{ slug?: string }>();
+  const abaRegras = params?.slug ? enderecoDaAba(params.slug, 'regras') : null;
 
   /**
    * 🔴 T3 (C6) — a confirmacao de ligar rele as regras ao abrir.
@@ -303,8 +315,8 @@ export function PixelsPanel() {
     conteudo = (
       <EstadoVazio
         icone={Target}
-        titulo="Nenhum Pixel cadastrado"
-        motivo="Um Pixel guarda o número do Pixel, o token da API de Conversões e o código de teste. Sem pelo menos um, não há para onde enviar."
+        titulo="Nenhum Pixel ainda."
+        motivo="Cadastre o Pixel da Meta para começar a enviar."
         acao={botaoAdicionar}
       />
     );
@@ -325,6 +337,7 @@ export function PixelsPanel() {
             regrasAuto={regras ? contarRegrasAuto(regras, marca.id) : 0}
             onUsar={() => usar(marca)}
             onEditar={() => abrirEdicao(marca)}
+            hrefRegras={abaRegras}
             onAlternarAuto={(ligado) => pedirAlternarAuto(marca, ligado)}
             salvandoAuto={salvandoAuto === marca.id}
             // 9.7.2 — com um Pixel so, o cartao admite que este botao equivale
@@ -353,15 +366,13 @@ export function PixelsPanel() {
     // seria o pior dos mundos: a frase mais tranquilizadora no momento em que
     // menos se pode garantir.
     consequencia =
-      'Não foi possível conferir quantas regras enviam para ele — a lista de regras não carregou. As regras que apontarem para este Pixel continuarão existindo, mas ficarão sem Pixel.';
+      'As regras que usam ele param de enviar para ele (a lista de regras não carregou para contar).';
   } else if (afetadas === 0) {
-    consequencia =
-      'Nenhuma regra envia para ele. Eventos já enviados não são afetados.';
+    consequencia = 'Nenhuma regra usa ele.';
   } else if (afetadas === 1) {
-    consequencia =
-      '1 regra envia para ele. Ela continuará existindo, mas ficará sem Pixel. Eventos já enviados não são afetados.';
+    consequencia = '1 regra usa ele e para de enviar para ele.';
   } else {
-    consequencia = `${afetadas} regras enviam para ele. Elas continuarão existindo, mas ficarão sem Pixel. Eventos já enviados não são afetados.`;
+    consequencia = `${afetadas} regras usam ele e param de enviar para ele.`;
   }
 
   /* ---------------------------------------------------------------- */
@@ -391,20 +402,46 @@ export function PixelsPanel() {
     );
   } else if (autoAfetadas === null) {
     oQueVaiAcontecer =
-      'Não foi possível conferir quantas regras estão no modo automático — a lista de regras não carregou. Ligue apenas se souber o que está em automático hoje.';
+      'Regras que vão enviar: não deu para conferir, a lista de regras não carregou. Ligue só se souber o que está em Automático hoje.';
   } else if (autoAfetadas.length === 0) {
     oQueVaiAcontecer =
-      'Hoje nenhuma regra está no modo automático, então nada será enviado ainda.';
-  } else if (autoAfetadas.length === 1) {
-    oQueVaiAcontecer = `Hoje 1 regra está no modo automático: ${autoAfetadas[0]}.`;
+      'Regras que vão enviar: nenhuma hoje, então nada sai ainda.';
   } else {
-    oQueVaiAcontecer = `Hoje ${autoAfetadas.length} regras estão no modo automático: ${autoAfetadas.join(', ')}.`;
+    oQueVaiAcontecer = `Regras que vão enviar: ${autoAfetadas.join(', ')}.`;
   }
+
+  /* ---------------------------------------------------------------- */
+  /* A cena do topo — o estado real, pela faixa de cada Pixel          */
+  /* ---------------------------------------------------------------- */
+
+  const comLista = carregado && !erro && marcas.length > 0;
+  const faixasDosCartoes = marcas.map(
+    (m) =>
+      estadoDePixel({
+        temToken: m.temToken,
+        // Mesma leitura do cartão: só `=== true` liga (decisão #12).
+        autoDisparo: m.autoDisparo === true,
+        regrasAuto: regras ? contarRegrasAuto(regras, m.id) : 0,
+      }).faixa
+  );
+  const faixaDoTopo = faixaDaCena(faixasDosCartoes);
+  // 14/10 (pendência 2): um "Abrir Regras" só por tela. Quando algum cartão
+  // já mostra o dele (ligado e sem regra), a legenda não repete o link.
+  const cartaoJaLevaARegras = faixasDosCartoes.includes('ligado-sem-regra');
+  // Regras ainda não lidas: um Pixel com token e automático ligado pode estar
+  // enviando ou parado sem regra, e a cena não chuta. Sem token não depende
+  // das regras, então esse aparece de todo jeito.
+  const cenaIncerta =
+    regras === null &&
+    marcas.some((m) => m.temToken && m.autoDisparo === true);
+  const faixaMostrada =
+    faixaDoTopo === 'sem-token' || !cenaIncerta ? faixaDoTopo : null;
 
   return (
     <>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-title font-semibold text-fg-strong">
+        <h2 className="flex items-center gap-2 text-title font-semibold text-fg-strong">
+          <IconeDoAssunto assunto="pixel" />
           {carregado && !erro
             ? marcas.length === 1
               ? '1 Pixel'
@@ -413,13 +450,29 @@ export function PixelsPanel() {
         </h2>
         {botaoAdicionar}
       </div>
-      {/* V7: a frase do topo diz as DUAS travas do envio automático, do lado
-          do Pixel. A outra metade (a regra) mora na aba Regras. */}
-      <p className="mb-4 max-w-3xl text-body text-fg-muted">
-        Cada Pixel tem o próprio envio automático. Um evento só sai sozinho
-        quando a regra dele está em Automático e o Pixel está Ligado; com o
-        Pixel Desligado, ele fica na Fila esperando você.
-      </p>
+      {/* A cena (a única da aba) e a legenda das DUAS travas do envio
+          automático. A cena é ilustração; a legenda diz o mesmo em texto, e
+          a outra metade (a regra) mora na aba Regras. */}
+      {comLista && (
+        <div className="mb-4 flex flex-col gap-2">
+          {faixaMostrada && <CenaDoPixel faixa={faixaMostrada} />}
+          <p className="text-body text-fg-muted">
+            Só sai sozinho quando as duas estão ligadas.
+            <span className="sr-only">
+              {' '}
+              A regra em Automático e o envio automático do Pixel.
+            </span>{' '}
+            {abaRegras && !cartaoJaLevaARegras && (
+              <Link
+                href={abaRegras}
+                className="font-medium text-fg-strong underline underline-offset-4"
+              >
+                Abrir Regras
+              </Link>
+            )}
+          </p>
+        </div>
+      )}
 
       {conteudo}
 
@@ -441,8 +494,7 @@ export function PixelsPanel() {
               Apagar o Pixel &ldquo;{aApagar?.nome}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {consequencia} O token de acesso guardado para este Pixel é
-              apagado junto e não volta.
+              {consequencia} O token é apagado e não volta.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -478,15 +530,9 @@ export function PixelsPanel() {
               render={<div />}
             >
               <p>
-                A partir de agora, os eventos das regras automáticas serão
-                enviados para o Pixel{' '}
-                <span className="wrap-token font-mono tabular text-fg-body">
-                  {aLigar?.pixelId}
-                </span>{' '}
-                <span className="font-semibold text-fg-body">
-                  sem passar pela sua aprovação
-                </span>
-                .
+                Ao ligar, os eventos que casam com uma regra Automática vão
+                para a Meta{' '}
+                <span className="font-semibold text-fg-body">sozinhos</span>.
               </p>
 
               {/* `aria-live`: quem usa leitor de tela ouve a frase trocar de

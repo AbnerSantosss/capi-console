@@ -7,7 +7,6 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ErroApi, pedir, SessaoExpirada } from '@/lib/cliente-api';
@@ -16,66 +15,57 @@ import {
   FlaskConical,
   GitBranch,
   Inbox,
-  Plug,
-  ShieldAlert,
 } from '@/components/ui/icones';
 
-import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Section, Panel, Callout } from '@/components/common/primitives';
+import { Section } from '@/components/common/primitives';
+import { IconeDoAssunto } from '@/components/cenas';
+import { CenaDuasChaves, fatosDasDuasChaves } from './CenaDuasChaves';
 import { InboxList } from './InboxList';
 import { RulesSection } from './RulesSection';
 import { Repasse } from './Repasse';
 import type { Destino, Entrega, Integracoes } from './tipos';
-import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import {
-  IntegrationFlow,
-  type IntegrationTab,
-} from './IntegrationFlow';
+import { useBrandStore } from '@/stores/useBrandStore';
+import type { IntegrationTab } from './IntegrationFlow';
 import { ChaveDoAutomatico } from './ChaveDoAutomatico';
 import { ListaDeTestes } from './ListaDeTestes';
 import type { ListaDeTeste } from '@/lib/deteccao-de-teste';
 
 /**
- * Tres abas em dois grupos rotulados. O grupo responde "em que parte do caminho
- * do evento isto acontece", que e a pergunta que a lista plana de seis abas nao
- * respondia (§7.6).
+ * E6a: as quatro sub-abas numa linha só, sem os rótulos de grupo ("O que
+ * acontece" / "O que sai"). Com quatro nomes curtos, o rótulo de grupo era
+ * palavra a mais para ler e não ajudava a escolher.
  *
- * O grupo "O que entra" — Recebimento e Tag do site — saiu inteiro daqui na
- * FASE A do plano multi-empresa e virou a rota `/instalacao`. As duas abas nao
- * eram "o que acontece com o evento": eram o que se faz UMA vez, antes de
- * qualquer evento existir. Enquanto moravam dentro de uma tela chamada "Disparo
- * automatico", a primeira tarefa do produto era tambem a mais escondida.
+ * Recebimento e Tag do site saíram daqui na FASE A do plano multi-empresa e
+ * viraram a rota `/instalacao`.
  */
-const GRUPOS: Array<{
-  id: string;
-  label: string;
-  abas: Array<{ value: IntegrationTab; label: string; icon: typeof Inbox }>;
-}> = [
-  {
-    id: 'acontece',
-    label: 'O que acontece',
-    abas: [
-      { value: 'inbox', label: 'Fila', icon: Inbox },
-      { value: 'regras', label: 'Regras', icon: GitBranch },
-      // Fica junto de Regras porque responde a mesma pergunta — "o que decide
-      // o destino deste evento?" —, so que pelo lado de quem mandou em vez do
-      // lado do que foi mandado.
-      { value: 'testes', label: 'Teste interno', icon: FlaskConical },
-    ],
-  },
-  {
-    id: 'sai',
-    label: 'O que sai',
-    abas: [{ value: 'retornos', label: 'Repasse', icon: ArrowUpRight }],
-  },
+const ABAS: Array<{ value: IntegrationTab; label: string; icon: typeof Inbox }> = [
+  { value: 'inbox', label: 'Fila', icon: Inbox },
+  { value: 'regras', label: 'Regras', icon: GitBranch },
+  // Junto de Regras: as duas respondem "o que decide o destino deste evento?".
+  { value: 'testes', label: 'Teste interno', icon: FlaskConical },
+  { value: 'retornos', label: 'Repasse', icon: ArrowUpRight },
 ];
 
-const ABAS = GRUPOS.flatMap((grupo) => grupo.abas);
+/* O3 (E6a): o ícone de cada título de seção, na cor do assunto. */
+function IconeDaFila() {
+  return <IconeDoAssunto assunto="evento" icone={Inbox} />;
+}
+function IconeDasRegras() {
+  return <IconeDoAssunto assunto="regra" icone={GitBranch} />;
+}
+function IconeDoTeste() {
+  return <IconeDoAssunto assunto="teste" icone={FlaskConical} />;
+}
 
-const ABA_PADRAO: IntegrationTab = 'inbox';
+// 'regras' e nao 'inbox': esta tela so existe hoje como a aba Regras da
+// empresa, e a Fila mora em Eventos. O `AbaInicialDeRegras` escreve `?aba=regras`
+// pelo replaceState, mas o `useSearchParams` nao reflete isso no primeiro
+// render — a URL dizia "regras" com a sub-aba Fila marcada (auditoria de UX de
+// 13/10, P1). `?aba=inbox` e `#inbox` continuam abrindo a Fila.
+const ABA_PADRAO: IntegrationTab = 'regras';
 
 /** `?aba=` so aceita o que existe; qualquer outra coisa cai no padrao. */
 function abaDaConsulta(valor: string | null): IntegrationTab | null {
@@ -207,6 +197,11 @@ export function IntegrationsPage({
   // primeiro paint vazio. `carregar` fica so para o botao de atualizar.
   const [cfg, setCfg] = useState<Integracoes>(inicial.integracoes);
   const [entregas, setEntregas] = useState<Entrega[]>(inicial.entregas);
+  // Só leitura, para a cena das duas chaves: quem carrega é a
+  // ChaveDoAutomatico. Antes de carregar, cena apagada, nunca um "ok" falso.
+  const marcas = useBrandStore((s) => s.marcas);
+  const marcaAtivaId = useBrandStore((s) => s.marcaAtivaId);
+  const marcasCarregadas = useBrandStore((s) => s.carregado);
   const [salvando, setSalvando] = useState(false);
 
   // C2 (T6): o que está no disco, para saber se a tela tem rascunho. Com
@@ -621,10 +616,21 @@ export function IntegrationsPage({
       <div className="mb-6 min-w-0">
         <ChaveDoAutomatico
           regras={cfg.regras ?? []}
-          onIrParaRegras={() => selecionarAba('regras')}
+          onIrParaRegras={() => {
+            // Já estamos na aba Regras: o botão abre a lista de regras logo
+            // abaixo e traz a faixa de abas para a vista.
+            selecionarAba('regras');
+            faixaDeAbas.current?.scrollIntoView({ block: 'nearest' });
+          }}
         />
       </div>
-      <IntegrationFlow onNavigate={selecionarAba} />
+      {/* E6a: "As duas chaves" no lugar do trilho de 5 estações. Só LÊ o que
+          a ChaveDoAutomatico lê: as regras GRAVADAS (as que valem no
+          servidor) e os Pixels do store. Antes de os Pixels carregarem, a
+          cena fica apagada — nunca um "ok" sem prova. */}
+      <CenaDuasChaves
+        {...fatosDasDuasChaves(cfg.regras ?? [], marcas, marcaAtivaId, marcasCarregadas)}
+      />
       <Tabs
         value={aba}
         onValueChange={(value) => value && selecionarAba(value as IntegrationTab)}
@@ -634,136 +640,68 @@ export function IntegrationsPage({
           ref={faixaDeAbas}
           className="max-w-full overflow-x-auto rounded-panel border border-line-strong bg-surface-1 p-1.5"
         >
-          {/* Os grupos sao divisoria visual (P6, proximidade) e nao semantica:
-              `role="presentation"` mantem a `tablist` com abas como unicos
-              filhos reconhecidos, e cada aba aponta o rotulo do seu grupo por
-              `aria-describedby` — quem usa leitor de tela ouve "Recebimento,
-              O que entra", e nao uma lista plana de cinco nomes soltos. */}
+          {/* E6a: as quatro abas numa linha só. Em tela estreita a FAIXA rola
+              na horizontal (nunca a página). */}
           <TabsList
             aria-label="Seções da aba Regras"
-            className="h-auto w-max min-w-full items-stretch gap-2 bg-transparent p-0"
+            className="h-auto w-max min-w-full items-center justify-start gap-1 bg-transparent p-0"
           >
-            {GRUPOS.map((grupo, indice) => (
-              <div
-                key={grupo.id}
-                role="presentation"
-                className={cn(
-                  'flex min-w-0 flex-col gap-1 px-1',
-                  indice > 0 && 'border-l border-line pl-3'
-                )}
-              >
-                <span
-                  id={`grupo-${grupo.id}`}
-                  className="px-1 text-caption font-semibold tracking-wide text-fg-muted uppercase"
+            {ABAS.map((item) => {
+              const Icon = item.icon;
+              const count =
+                item.value === 'regras'
+                  ? regrasNaTela.length
+                  : item.value === 'retornos'
+                    ? cfg.saida.length
+                    : item.value === 'testes'
+                      ? // Os dois somados: a pergunta é "quantas pessoas
+                        // estão barradas", e não por qual campo entrou.
+                        (cfg.testes?.emails?.length ?? 0) +
+                        (cfg.testes?.nomes?.length ?? 0)
+                      : undefined;
+              return (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="h-11 flex-none gap-2 rounded-control px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
                 >
-                  {grupo.label}
-                </span>
-                <div role="presentation" className="flex items-center gap-1">
-                  {grupo.abas.map((item) => {
-                    const Icon = item.icon;
-                    const count =
-                      item.value === 'regras'
-                        ? regrasNaTela.length
-                        : item.value === 'retornos'
-                          ? cfg.saida.length
-                          : item.value === 'testes'
-                            ? // Os dois somados: para quem olha a aba, a
-                              // pergunta é "quantas pessoas estão barradas",
-                              // e não por qual dos dois campos cada uma entrou.
-                              (cfg.testes?.emails?.length ?? 0) +
-                              (cfg.testes?.nomes?.length ?? 0)
-                            : undefined;
-                    return (
-                      <TabsTrigger
-                        key={item.value}
-                        value={item.value}
-                        aria-describedby={`grupo-${grupo.id}`}
-                        className="h-11 gap-2 rounded-control px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
-                      >
-                        <Icon className="size-[18px]" aria-hidden />
-                        {item.label}
-                        {count !== undefined && (
-                          <Badge className="font-mono tabular">{count}</Badge>
-                        )}
-                        {/* C5: de qualquer aba se vê que há regra sem salvar
-                            (quem salva um teste não leva a regra junto). */}
-                        {item.value === 'regras' && regrasSujas && (
-                          <span
-                            className="size-2 shrink-0 rounded-full bg-warning"
-                            title="Regras alteradas, não salvas"
-                          >
-                            <span className="sr-only">Regras alteradas, não salvas</span>
-                          </span>
-                        )}
-                      </TabsTrigger>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                  <Icon className="size-[18px]" aria-hidden />
+                  {item.label}
+                  {count !== undefined && (
+                    <Badge className="font-mono tabular">{count}</Badge>
+                  )}
+                  {/* C5: de qualquer aba se vê que há regra sem salvar
+                      (quem salva um teste não leva a regra junto). */}
+                  {item.value === 'regras' && regrasSujas && (
+                    <span
+                      className="size-2 shrink-0 rounded-full bg-warning"
+                      title="Regras alteradas, não salvas"
+                    >
+                      <span className="sr-only">Regras alteradas, não salvas</span>
+                    </span>
+                  )}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
         </div>
 
         <TabsContent value="inbox" className="min-w-0 outline-none">
-          <div className="flex min-w-0 flex-col gap-5">
-            {/* Este painel vivia na aba Recebimento, que virou `/instalacao`. Ele
-                NAO foi junto: a pergunta que ele responde — "por que este evento
-                parou aqui em vez de ir para a Meta?" — so aparece olhando a
-                caixa de entrada. Em `/instalacao` seria um aviso sobre uma tela
-                que o operador ainda nem abriu. */}
-            <Panel title="Modo de recebimento" icon={Inbox}>
-              <p className="text-caption text-fg-muted">
-                Quem decide o que acontece com cada webhook é a tabela de{' '}
-                <strong className="text-fg-body">regras</strong>{' '}
-                (aba Regras). Um evento sem regra própria fica na fila.
-              </p>
-
-              <Callout tone="warning" icon={ShieldAlert} className="mt-3">
-                Eventos de teste da plataforma (<code className="font-mono">lead@example.com</code>,{' '}
-                <code className="font-mono">evt_preview…</code>, cupons de R$ 0,01)
-                são barrados antes da Meta, mesmo em modo automático. O e-mail pessoal que a equipe
-                usa para testar o checkout, o console não adivinha — esse se cadastra em{' '}
-                <strong className="text-fg-body">Teste interno</strong>.
-              </Callout>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => selecionarAba('regras')}>
-                  <GitBranch className="size-4" aria-hidden />
-                  Ver regras
-                </Button>
-                <Button variant="outline" onClick={() => selecionarAba('testes')}>
-                  <FlaskConical className="size-4" aria-hidden />
-                  Teste interno
-                </Button>
-                <Link
-                  href="/instalacao#webhook"
-                  className={buttonVariants({ variant: 'ghost' })}
-                >
-                  <Plug className="size-4" aria-hidden />
-                  Onde a URL do webhook é gerada
-                </Link>
-              </div>
-            </Panel>
-
-            <Section
-              id="inbox"
-              icon={Inbox}
-              variant="card"
-              title="Fila"
-              description="Eventos recebidos das plataformas. Carregue no formulário para revisar ou use Enviar agora."
-            >
-              <InboxList />
-            </Section>
-          </div>
+          {/* E6a: a Fila fica, mas só com os textos do `InboxList` (dono: E5).
+              O painel "Modo de recebimento", o aviso de teste e os três botões
+              saíram: a cena das duas chaves já diz por que um evento para aqui. */}
+          <Section id="inbox" icon={IconeDaFila} variant="card" title="Fila">
+            <InboxList />
+          </Section>
         </TabsContent>
 
       {/* ---------------------------------------------------------- */}
         <TabsContent value="regras" className="min-w-0 outline-none">
       <Section
-        icon={GitBranch}
+        icon={IconeDasRegras}
         variant="card"
         title="Regras"
-        description="Para cada evento da plataforma: qual evento vira na Meta, para quais Pixels vai e se sai sozinho ou espera revisão."
+        description="Cada evento da plataforma vira um evento na Meta."
       >
         {/* C5 (T10): a aba edita o rascunho e só "Salvar regras" grava.
             Voltar ao que está gravado apaga o rascunho, para o aviso de "não
@@ -793,10 +731,10 @@ export function IntegrationsPage({
       {/* ---------------------------------------------------------- */}
         <TabsContent value="testes" className="min-w-0 outline-none">
       <Section
-        icon={FlaskConical}
+        icon={IconeDoTeste}
         variant="card"
         title="Teste interno"
-        description="Quem da equipe bate no checkout para testar. O que casa com esta lista nunca chega à Meta."
+        description="Gente da equipe que testa o checkout. Nunca vai para a Meta."
       >
         {/* 🔴 A gravação passa pelo MESMO `salvar` das outras abas, e manda a
             configuração inteira MENOS as regras (C5: regras só pelo "Salvar

@@ -120,7 +120,7 @@ export function explicarFila(
   // Item antigo, sem `motivoFila`, mas com a regra em Fila: mesma resposta.
   if (idsPor('regra-em-fila').length > 0 || (!item.motivoFila && item.modo === 'fila')) {
     return {
-      frase: 'Ficou na fila porque a regra deste evento estava em Fila.',
+      frase: 'Ficou na fila porque a regra deste evento estava em Manual.',
       acao: { rotulo: 'Pôr a regra em Automático', aba: 'regras' },
       avisoTeste,
     };

@@ -168,9 +168,19 @@ const comToken = (p: PixelDoChecklist) => cadastrado(p) && p.temToken === true;
 export interface EnvioAutomatico {
   /** Só com as duas travas: a chave do Pixel ligada E uma regra automática para ele. */
   ligado: boolean;
+  /**
+   * A chave de algum Pixel com token está ligada, mesmo sem regra automática.
+   * A aba Pixels mostra essa chave como "Ligado"; quem resume o estado precisa
+   * saber dela para não dizer "desligado" ao lado de um "Ligado" (auditoria de
+   * UX de 13/10, P1).
+   */
+  chaveLigada: boolean;
   /** O que falta, em palavra, quando está desligado. */
   falta: string[];
-  /** "Envio automático: ligado" / "Envio automático: desligado (falta: …)". */
+  /**
+   * "Envio automático: ligado" / "Envio automático: ligado, mas não sai
+   * sozinho (falta: …)" / "Envio automático: desligado (falta: …)".
+   */
   frase: string;
 }
 
@@ -187,11 +197,11 @@ export function envioAutomaticoDaEmpresa(
   const chaveLigada = validos.filter((p) => p.autoDisparo === true);
   const disparando = regras ? chaveLigada.filter((p) => regrasAutoDoPixel(regras, p.id) > 0) : [];
   if (disparando.length > 0) {
-    return { ligado: true, falta: [], frase: 'Envio automático: ligado' };
+    return { ligado: true, chaveLigada: true, falta: [], frase: 'Envio automático: ligado' };
   }
   const falta: string[] = [];
   if (validos.length === 0) falta.push('um Pixel com token');
-  else if (chaveLigada.length === 0) falta.push('a chave do Pixel ligada');
+  else if (chaveLigada.length === 0) falta.push('ligar o envio automático do Pixel');
   if (regras === null) {
     falta.push('ler as regras desta empresa');
   } else {
@@ -200,7 +210,14 @@ export function envioAutomaticoDaEmpresa(
     const alvo = chaveLigada.length > 0 ? chaveLigada : validos;
     if (!alvo.some((p) => regrasAutoDoPixel(regras, p.id) > 0)) falta.push('uma regra automática para o Pixel');
   }
-  return { ligado: false, falta, frase: `Envio automático: desligado (falta: ${falta.join(' e ')})` };
+  const temChave = chaveLigada.length > 0;
+  const estado = temChave ? 'ligado, mas não sai sozinho' : 'desligado';
+  return {
+    ligado: false,
+    chaveLigada: temChave,
+    falta,
+    frase: `Envio automático: ${estado} (falta: ${falta.join(' e ')})`,
+  };
 }
 
 /* ------------------------------------------------------------------ */

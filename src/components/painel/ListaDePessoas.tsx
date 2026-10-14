@@ -27,6 +27,7 @@ import { pedir } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { Callout, Panel, Section } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
+import { IconeDoAssunto } from '@/components/cenas';
 import { Esqueleto } from '@/components/common/Esqueleto';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -156,7 +157,7 @@ const TOM_ATRIBUICAO: Record<
 
 const ROTULO_STATUS: Record<string, string> = {
   novo: 'na fila',
-  carregado: 'carregado no disparo',
+  carregado: 'carregado no envio',
   disparado: 'enviado à Meta',
   ignorado: 'não enviado',
   erro: 'erro no envio',
@@ -535,6 +536,11 @@ export interface ListaDePessoasProps {
   descricao: string;
 }
 
+/** Ícone do título da seção (O3): a peça de cenas no lugar do glifo pequeno. */
+function IconeDaLista() {
+  return <IconeDoAssunto assunto="evento" icone={Users} />;
+}
+
 export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasProps) {
   const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
   const router = useRouter();
@@ -640,7 +646,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
           {dados && ` · ${pessoas.length} ${pessoas.length === 1 ? 'pessoa' : 'pessoas'}`}
           {somaVisivel &&
             ` · ${formatarDinheiro(somaVisivel.total, somaVisivel.moeda)}`}
-          {!comTestes && ' · teste da equipe fora da lista'}
+          {!comTestes && ' · teste interno fora da lista'}
           {atualizando && (
             <span className="text-fg-body"> Refazendo a lista para a nova janela…</span>
           )}
@@ -662,11 +668,9 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
       )}
 
       {dados && dados.amostra >= dados.tetoDaAmostra && (
-        <Callout tone="warning" title="Esta leitura bateu o teto">
+        <Callout tone="warning" title="Há mais eventos do que o painel lê">
           <p className="text-caption text-fg-body">
-            A lista olha os {dados.tetoDaAmostra} eventos mais recentes desta empresa. Como o teto
-            foi atingido, pode existir gente deste período que ficou de fora: escolha um período
-            mais curto para ver a lista fechada.
+            Pode faltar gente deste período. Escolha um período mais curto para ver a lista completa.
           </p>
         </Callout>
       )}
@@ -674,7 +678,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
       <Section
         title={titulo}
         description={descricao}
-        icon={Users}
+        icon={IconeDaLista}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -684,7 +688,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
               onClick={() => setComTestes((v) => !v)}
             >
               <FlaskConical className="size-4" aria-hidden />
-              {comTestes ? 'Esconder testes da equipe' : 'Mostrar testes da equipe'}
+              {comTestes ? 'Esconder testes internos' : 'Mostrar testes internos'}
             </Button>
             {voltar}
           </div>
@@ -707,8 +711,8 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
             }
             motivo={
               comTestes
-                ? 'Nem com os testes da equipe à mostra há algo nesta janela.'
-                : 'Pode ser que não tenha entrado nada, ou que tudo o que entrou seja teste da equipe — que fica fora da lista por padrão.'
+                ? 'Nada nesta janela, nem com os testes internos.'
+                : 'Nada entrou, ou só entrou teste interno (fica escondido). Mostre os testes para conferir.'
             }
             acao={
               <div className="flex flex-wrap items-center justify-center gap-2">
@@ -717,11 +721,11 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
                   size="sm"
                   onClick={() => trocarPeriodo({ dias: '90', de: null, ate: null })}
                 >
-                  Olhar os últimos 90 dias
+                  Ver os últimos 90 dias
                 </Button>
                 {!comTestes && (
                   <Button variant="ghost" size="sm" onClick={() => setComTestes(true)}>
-                    Mostrar testes da equipe
+                    Mostrar testes internos
                   </Button>
                 )}
               </div>

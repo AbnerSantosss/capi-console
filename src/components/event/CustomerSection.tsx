@@ -1,13 +1,19 @@
 'use client';
 
 import React from 'react';
-import { Fingerprint, Lock } from '@/components/ui/icones';
+import { Fingerprint, Globe, Lock } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
 import { Field, Section } from '@/components/common/primitives';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { WhatsAppMark } from '@/components/ui/brand-icons';
+import { IconeDoAssunto } from '@/components/cenas';
+
+/** O3: o ícone do título com a cor e a entrada curta do assunto. */
+function IconeDoCliente() {
+  return <IconeDoAssunto assunto="evento" icone={Fingerprint} />;
+}
 
 export function CustomerSection() {
   const s = useEventStore();
@@ -21,23 +27,29 @@ export function CustomerSection() {
     <Section
       id="secao-cliente"
       step={3}
-      icon={Fingerprint}
+      icon={IconeDoCliente}
       variant="card"
       title="Quem é o cliente"
-      description={
-        <span className="inline-flex items-center gap-1.5">
-          <Lock className="size-3 text-success" aria-hidden />
-          Quanto mais dados, maior a chance de a Meta reconhecer a pessoa. E-mail,
-          telefone, nome e CPF saem embaralhados em SHA-256 — a Meta nunca recebe o dado legível.
-        </span>
-      }
+      description="Quanto mais dados, mais fácil a Meta reconhecer a pessoa."
     >
+      {/* E5: o que vai embaralhado e o que vai aberto, em duas linhas com
+          ícone estático (sem cena). O embaralhamento é SHA-256, feito antes do
+          envio; o dado legível nunca sai daqui. */}
+      <ul className="mb-4 flex flex-col gap-1.5 text-caption text-fg-body">
+        <li className="flex items-start gap-2">
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
+          Embaralhados: e-mail, telefone, nome, CPF.
+        </li>
+        <li className="flex items-start gap-2">
+          <Globe className="mt-0.5 size-3.5 shrink-0 text-fg-muted" aria-hidden />
+          Vão abertos: fbc, IP, fbp, navegador.
+        </li>
+      </ul>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="campo-email"
           label="E-mail"
           param="em"
-          helper="Transformado em hash SHA-256 antes do envio. Se já chegar em hash, passa como está."
           error={erros.email}
         >
           <Input
@@ -58,7 +70,7 @@ export function CustomerSection() {
           helper={
             <span className="inline-flex items-center gap-1.5">
               <WhatsAppMark size={13} />
-              Com DDD. De fora do Brasil, com o DDI (+598…). O país sai do próprio número.
+              Com DDD. De fora, com o DDI (+598…).
             </span>
           }
           error={erros.phone}
@@ -119,7 +131,7 @@ export function CustomerSection() {
           id="campo-cpf"
           label="CPF"
           param="external_id"
-          helper="Ou o ID do cliente no seu CRM. Também vai transformado em hash SHA-256."
+          helper="Ou o ID do cliente no CRM."
           className="sm:col-span-2"
         >
           <Input
@@ -137,9 +149,6 @@ export function CustomerSection() {
             <Fingerprint className="size-4 text-tinta-texto" aria-hidden />
             Dados de rastreamento
           </h3>
-          <p className="mt-1 text-caption text-fg-muted">
-            Estes dados seguem o formato exigido pela Meta e não recebem SHA-256.
-          </p>
         </div>
 
         <div className="min-w-0">
@@ -147,7 +156,7 @@ export function CustomerSection() {
             id="campo-fbc"
             label="Click ID do anúncio"
             param="fbc"
-            helper="Vale 2.5 dos 10 pontos. Vem do cookie _fbc ou do ?fbclid= da URL."
+            helper="Liga a venda ao anúncio. Vem do cookie _fbc ou do ?fbclid=."
             error={erros.fbc}
             tip="Formato fb.1.<timestamp em ms>.<fbclid>. É o único parâmetro que liga a venda ao anúncio exato no Gerenciador; sem ele a Meta atribui por aproximação."
           >
@@ -168,7 +177,7 @@ export function CustomerSection() {
             id="campo-ip"
             label="IP do cliente"
             param="client_ip_address"
-            helper="IP público do comprador. Vai como está, sem hash, por exigência da Meta."
+            helper="IP público do comprador."
             error={erros.ip}
             tip="IP de proxy, de rede interna (10.x, 192.168.x, 172.16–31.x) ou loopback não serve: a Meta descarta e o dado geográfico fica errado."
           >

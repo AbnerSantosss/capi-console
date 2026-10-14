@@ -1,0 +1,1105 @@
+/* =========================================================================
+   Cenas animadas — o ÚNICO CSS de cena do console (padrão HyperFrames §2)
+
+   Regras que este arquivo cumpre e que `scripts/cenas.test.mjs` confere:
+   - toda regra de animação mora dentro de
+     `@media (prefers-reduced-motion: no-preference)`;
+   - keyframe só mexe em `transform` e `opacity`;
+   - repetição infinita só no seletor de estado "esperando" (espera real);
+   - o CSS BASE é o QUADRO FINAL: sem animação, tudo está visível e no lugar
+     (pulso parado no meio do fio, barra no valor, cursor aceso).
+
+   Cor só por `var()` dos tokens do :root (G4/G7); tamanho de texto só pelas
+   classes text-caption/label/body/title (G6). A cor vem do assunto
+   (`data-assunto`) e, nas peças, do estado real (`data-estado`).
+   ========================================================================= */
+
+/* --- Assunto: cor e tempos ----------------------------------------------- */
+
+.assunto {
+  --acento: var(--border-focus);
+  --tinta-do-acento: var(--surface-0);
+
+  --cena-micro: 150ms;
+  --cena-entrada: 600ms;
+  --cena-defasagem: 120ms;
+  --cena-pausa: 400ms;
+  /* Mais curtos que os 2400/3200 do padrão §2.4: com 2 ciclos e dois fios em
+     sequência a cena inteira termina em menos de 5 s (WCAG 2.2.2). */
+  --cena-ciclo: 1600ms;
+  --cena-flutuar: 2000ms;
+  --cena-ciclos: 2;
+  --cena-sair: cubic-bezier(0.2, 0, 0, 1);
+  --cena-ir-e-voltar: cubic-bezier(0.65, 0, 0.35, 1);
+  --cena-pop: cubic-bezier(0.34, 1.5, 0.64, 1);
+  /* 5 peças em defasagem + a entrada da última. */
+  --cena-fim-da-entrada: calc(4 * var(--cena-defasagem) + var(--cena-entrada));
+}
+
+.assunto[data-assunto="tag"],
+.assunto[data-assunto="dominio"] {
+  --acento: var(--border-focus);
+}
+
+.assunto[data-assunto="webhook"] {
+  --acento: var(--success);
+}
+
+/* O azul da Meta: texto escuro sobre ele fica abaixo de 4,5; o claro passa. */
+.assunto[data-assunto="pixel"] {
+  --acento: var(--papel);
+  --tinta-do-acento: var(--fg-strong);
+}
+
+.assunto[data-assunto="evento"],
+.assunto[data-assunto="teste"] {
+  --acento: var(--chart-4);
+}
+
+.assunto[data-assunto="regra"] {
+  --acento: var(--warning);
+}
+
+/* Ajuste não é assunto do funil: não disputa cor. */
+.assunto[data-assunto="configuracoes"] {
+  --acento: var(--border-control);
+  --tinta-do-acento: var(--fg-strong);
+  --traco-do-acento: var(--fg-muted);
+}
+
+.assunto [data-ordem="1"] { --ordem: 1; }
+.assunto [data-ordem="2"] { --ordem: 2; }
+.assunto [data-ordem="3"] { --ordem: 3; }
+.assunto [data-ordem="4"] { --ordem: 4; }
+
+.assunto[data-ciclos="1"] { --cena-ciclos: 1; }
+.assunto[data-ciclos="3"] { --cena-ciclos: 3; }
+
+/* --- Palco ----------------------------------------------------------------- */
+
+.comControle {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.palco {
+  position: relative;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: cena;
+  contain: layout paint;
+  border-radius: 0.75rem;
+}
+
+.cena {
+  position: relative;
+  display: flex;
+  height: 8.5rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background-color: var(--surface-0);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--acento) 22%, transparent) 1px,
+    transparent 1.5px
+  );
+  background-size: 14px 14px;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.palco[data-altura="baixa"] .cena {
+  height: 7rem;
+}
+
+.palco[data-altura="livre"] .cena {
+  display: block;
+  height: auto;
+  padding: 1rem;
+}
+
+/* O botão existe só no estado "esperando" e fica FORA da cena (aria-hidden). */
+.pausar {
+  align-self: flex-end;
+  min-height: 2rem;
+  border-radius: var(--radius-control);
+  padding: 0 0.75rem;
+  background-color: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  color: var(--fg-strong);
+  font-weight: 600;
+}
+
+.pausar[aria-pressed="true"] {
+  background-color: color-mix(in srgb, var(--warning) 18%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px var(--warning);
+}
+
+.pausar:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Sem movimento não há o que pausar. */
+@media (prefers-reduced-motion: reduce) {
+  .pausar {
+    display: none;
+  }
+}
+
+/* --- Trilha: nós e fios lado a lado ------------------------------------- */
+
+.trilha {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+}
+
+/* Espaço em cima para o balão que fica sobre a trilha. */
+.trilha[data-balao] {
+  padding-top: 2.25rem;
+}
+
+.trilha[data-direcao="baixo"] {
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+
+/* --- Nó ------------------------------------------------------------------ */
+
+.no {
+  --cor-da-peca: var(--acento);
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  background-color: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--border-default);
+  color: var(--fg-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.no[data-forte] {
+  background-color: color-mix(in srgb, var(--acento) 22%, var(--surface-2));
+  box-shadow: 0 0 0 1px var(--acento);
+}
+
+.no[data-estado="esperando"],
+.no[data-estado="pausado"] {
+  --cor-da-peca: var(--warning);
+  box-shadow: 0 0 0 1px var(--warning);
+}
+
+.no[data-estado="erro"] {
+  --cor-da-peca: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.no[data-estado="apagado"] {
+  --cor-da-peca: var(--border-control);
+  background-color: var(--surface-1);
+  box-shadow: none;
+  outline: 1px dashed var(--border-control);
+  outline-offset: -1px;
+  color: var(--fg-muted);
+}
+
+.iconeDoNo {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--cor-da-peca);
+}
+
+/* O halo de quem recebe: parado ele não aparece (quadro final). */
+.no::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--cor-da-peca) 25%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- Fio ----------------------------------------------------------------- */
+
+.fio {
+  --cor-da-peca: var(--acento);
+  position: relative;
+  height: 2px;
+  min-width: 1rem;
+  flex: 1 1 0;
+  transform-origin: left center;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--cor-da-peca) 60%, transparent) 50%,
+    transparent 50%
+  );
+  background-size: 8px 2px;
+}
+
+.fio ~ .fio {
+  --trecho: 1;
+}
+
+.fio ~ .fio ~ .fio {
+  --trecho: 2;
+}
+
+.fio ~ .fio ~ .fio ~ .fio {
+  --trecho: 3;
+}
+
+.fio[data-estado="esperando"],
+.fio[data-estado="pausado"] {
+  --cor-da-peca: var(--warning);
+}
+
+.fio[data-estado="erro"] {
+  --cor-da-peca: var(--danger);
+}
+
+.fio[data-estado="apagado"] {
+  --cor-da-peca: var(--border-control);
+  opacity: 0.6;
+}
+
+/* O pulso viaja no trilho (largura do fio menos o pulso); parado, fica no
+   meio do fio, visível. */
+.trilhoDoPulso {
+  position: absolute;
+  inset: 0 0.5rem 0 0;
+  transform: translateX(50%);
+  will-change: transform;
+}
+
+.pulsoDoFio {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: -0.25rem;
+  border-radius: 999px;
+  background-color: var(--cor-da-peca);
+  box-shadow: 0 0 10px var(--cor-da-peca);
+}
+
+/* Fluxo parado, com erro ou desligado: não há o que viaje. */
+.fio[data-estado="pausado"] .trilhoDoPulso,
+.fio[data-estado="erro"] .trilhoDoPulso,
+.fio[data-estado="apagado"] .trilhoDoPulso {
+  display: none;
+}
+
+.fio[data-direcao="baixo"] {
+  width: 2px;
+  height: 1.25rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  transform-origin: center top;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cor-da-peca) 60%, transparent) 50%,
+    transparent 50%
+  );
+  background-size: 2px 8px;
+}
+
+.fio[data-direcao="baixo"] .trilhoDoPulso {
+  inset: 0 0 0.5rem 0;
+  transform: translateY(50%);
+}
+
+.fio[data-direcao="baixo"] .pulsoDoFio {
+  top: 0;
+  left: 50%;
+  margin-top: 0;
+  margin-left: -0.25rem;
+}
+
+/* --- Janela do navegador --------------------------------------------------- */
+
+.janela {
+  width: min(13rem, 62%);
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background-color: var(--surface-2);
+  box-shadow:
+    0 0 0 1px var(--border-default),
+    0 10px 24px -10px color-mix(in srgb, var(--surface-0) 85%, transparent);
+}
+
+.janelaBarra {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  background-color: var(--surface-3);
+}
+
+.janelaBarra span {
+  width: 0.4rem;
+  height: 0.4rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background-color: var(--border-control);
+}
+
+.janelaBarra em {
+  margin-left: 0.375rem;
+  overflow: hidden;
+  color: var(--fg-body);
+  font-style: normal;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.janelaCorpo {
+  display: flex;
+  height: 3.75rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--acento);
+}
+
+.codigo {
+  width: 2.25rem;
+  height: 2.25rem;
+  stroke: currentColor;
+}
+
+/* --- Balão: posição no invólucro, entrada no meio, flutuar no corpo -------- */
+
+.balao {
+  position: absolute;
+  z-index: 1;
+}
+
+.balao[data-centro] {
+  transform: translateX(-50%);
+}
+
+.balaoEntra {
+  display: block;
+  transform-origin: 1rem 100%;
+}
+
+.balaoCorpo {
+  position: relative;
+  display: block;
+  border-radius: 0.625rem;
+  padding: 0.2rem 0.55rem;
+  background-color: var(--acento);
+  color: var(--tinta-do-acento);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--surface-0) 80%, transparent);
+}
+
+/* O biquinho do balão. */
+.balaoCorpo::after {
+  content: '';
+  position: absolute;
+  bottom: -0.25rem;
+  left: 0.75rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: rotate(45deg);
+  background-color: inherit;
+}
+
+.balao[data-centro] .balaoCorpo::after {
+  left: calc(50% - 0.25rem);
+}
+
+/* O único destaque da cena. */
+.balao[data-forte] .balaoCorpo {
+  box-shadow:
+    0 0 0 2px var(--surface-0),
+    0 0 0 3px var(--acento),
+    0 6px 14px -6px color-mix(in srgb, var(--surface-0) 80%, transparent);
+}
+
+/* "Não conta como venda": contorno tracejado, sem preenchimento. */
+.balao[data-tracejado] .balaoCorpo {
+  background-color: var(--surface-0);
+  box-shadow: none;
+  outline: 1.5px dashed var(--acento);
+  outline-offset: -1.5px;
+  color: var(--fg-strong);
+}
+
+.balao[data-tracejado] .balaoCorpo::after {
+  display: none;
+}
+
+/* --- Selo de passo (o número grande) -------------------------------------- */
+
+.selo {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background-color: var(--acento);
+  color: var(--tinta-do-acento);
+  font-weight: 800;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--acento) 18%, transparent);
+}
+
+.selo[data-estado="proximo"] {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--acento) 55%, transparent);
+  color: var(--fg-strong);
+}
+
+.marca {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* --- Cartão de passo ------------------------------------------------------- */
+
+.cartao {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.875rem;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--radius-panel);
+  padding: 1.25rem;
+  background-color: var(--surface-1);
+  background-image: radial-gradient(
+    120% 70% at 100% 0%,
+    color-mix(in srgb, var(--acento) 20%, transparent),
+    transparent 60%
+  );
+  box-shadow:
+    var(--realce-interno-forte),
+    0 0 0 1px color-mix(in srgb, var(--acento) 40%, transparent),
+    0 2px 4px color-mix(in srgb, var(--surface-0) 50%, transparent),
+    0 24px 48px -24px color-mix(in srgb, var(--surface-0) 92%, transparent);
+}
+
+/* Faixa do acento no topo do cartão, igual à da seção lá embaixo. */
+.cartao::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    var(--acento),
+    color-mix(in srgb, var(--acento) 25%, transparent)
+  );
+}
+
+@media (min-width: 40rem) {
+  .cartao {
+    padding: 1.5rem;
+  }
+}
+
+.rotuloDoPasso {
+  color: var(--acento);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.miniNumero {
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  text-align: center;
+  background-color: color-mix(in srgb, var(--acento) 18%, transparent);
+  color: var(--fg-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.irAoPasso {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+  margin-top: 0.25rem;
+  border-radius: var(--radius-control);
+  padding: 0 0.875rem;
+  background-color: color-mix(in srgb, var(--acento) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acento) 55%, transparent);
+  color: var(--fg-strong);
+  font-weight: 600;
+  transition: background-color 150ms ease;
+}
+
+.irAoPasso:hover {
+  background-color: color-mix(in srgb, var(--acento) 28%, transparent);
+}
+
+.irAoPasso:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* --- Funil ----------------------------------------------------------------- */
+
+.funil {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.etapa {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+
+.etapaRotulo {
+  overflow: hidden;
+  color: var(--fg-body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.etapaValor {
+  color: var(--fg-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.barraFundo {
+  position: relative;
+  height: 0.625rem;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--acento) 12%, transparent);
+}
+
+/* Sem dado: a barra é só o contorno, e o valor é "—". */
+.barraFundo[data-vazia] {
+  background-color: transparent;
+  outline: 1px dashed var(--border-control);
+  outline-offset: -1px;
+}
+
+/* A largura (o valor) vem do componente; o crescer só escala até ela. */
+.barraCrescer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  transform-origin: left center;
+  background-color: var(--acento);
+}
+
+.taxa {
+  padding-left: 0.75rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* O ramo lateral (abandono): âmbar, fino, saindo da etapa de cima. */
+.ramo {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-left: 1rem;
+  border-left: 2px dashed color-mix(in srgb, var(--warning) 60%, transparent);
+  padding: 0.125rem 0 0.125rem 0.625rem;
+}
+
+.ramoSeta {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--warning);
+}
+
+.ramo .barraFundo {
+  height: 0.375rem;
+  background-color: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.ramo .barraFundo[data-vazia] {
+  background-color: transparent;
+}
+
+.ramo .barraCrescer {
+  background-color: var(--warning);
+}
+
+.ramoValor {
+  color: var(--fg-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ramo[data-sem-sinal] .ramoValor {
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
+/* --- Ícones (os 7 da Instalação e o IconeDoAssunto) ----------------------- */
+
+.icone {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--traco-do-acento, var(--acento));
+}
+
+.icone[data-grande] {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.icone svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Só os desenhos de traço da Instalação; os do barril são preenchidos. */
+.desenhoDeTraco svg {
+  stroke: currentColor;
+}
+
+/* O halo que acende uma vez quando o ícone aparece. */
+.iconeDoAssunto::after {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  border-radius: 999px;
+  background-image: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--acento) 35%, transparent),
+    transparent
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pulsoDoIcone {
+  fill: currentColor;
+  stroke: none;
+  transform: translate(5px, 17px);
+}
+
+.trilhoDoIcone {
+  opacity: 0.55;
+}
+
+.brilho,
+.meridiano {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* A cópia preenchida do raio: aparece num lampejo e some. */
+.raioCheio {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0;
+}
+
+.reflexo {
+  fill: currentColor;
+}
+
+/* --- Tela estreita (palco com menos de 23rem) ----------------------------- */
+/* R (14/10): 23rem, não 22rem. Num celular de 390 px o palco de largura
+   cheia tem 358 px (390 - 2 x 16), acima de 22rem (352 px), e a trilha
+   ficava em linha. */
+
+@container cena (max-width: 23rem) {
+  .cena {
+    height: auto;
+    min-height: 7rem;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 0.75rem;
+  }
+
+  .trilha {
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .trilha[data-balao] {
+    padding-top: 0;
+  }
+
+  .fio {
+    width: 2px;
+    height: 1.25rem;
+    min-width: 0;
+    flex: 0 0 auto;
+    transform-origin: center top;
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cor-da-peca) 60%, transparent) 50%,
+      transparent 50%
+    );
+    background-size: 2px 8px;
+  }
+
+  .trilhoDoPulso {
+    inset: 0 0 0.5rem 0;
+    transform: translateY(50%);
+  }
+
+  .pulsoDoFio {
+    top: 0;
+    left: 50%;
+    margin-top: 0;
+    margin-left: -0.25rem;
+  }
+
+  .janela {
+    width: min(13rem, 100%);
+  }
+
+  /* No fluxo, embaixo do que vem antes; no máximo um balão. */
+  .balao,
+  .balao[data-centro] {
+    position: static;
+    align-self: center;
+    transform: none;
+    /* R (14/10): com altura="livre" a cena é bloco, não flex, e o balão
+       esticava na largura toda (Regras). */
+    display: block;
+    width: fit-content;
+    margin-inline: auto;
+  }
+
+  .balao ~ .balao,
+  .cena [data-opcional] {
+    display: none;
+  }
+}
+
+/* =========================================================================
+   Movimento — só com prefers-reduced-motion: no-preference
+   ========================================================================= */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A cena começa quando é vista e para quando sai da tela ou da aba. */
+  .palco:not([data-visivel]) *,
+  .palco:not([data-visivel]) *::before,
+  .palco:not([data-visivel]) *::after,
+  .palco[data-oculto] *,
+  .palco[data-oculto] *::before,
+  .palco[data-oculto] *::after,
+  .palco[data-pausado] *,
+  .palco[data-pausado] *::before,
+  .palco[data-pausado] *::after,
+  .funil:not([data-visivel]) *,
+  .funil[data-oculto] *,
+  .icone:not([data-visivel]) *,
+  .icone:not([data-visivel])::after,
+  .icone[data-oculto] *,
+  .icone[data-oculto]::after {
+    animation-play-state: paused;
+  }
+
+  /* Entradas, em defasagem pela ordem. */
+  .janela,
+  .no {
+    animation: entrar var(--cena-entrada) var(--cena-sair)
+      calc(var(--ordem, 0) * var(--cena-defasagem)) both;
+  }
+
+  .fio {
+    animation: desenhar 500ms var(--cena-sair)
+      calc(var(--ordem, 0) * var(--cena-defasagem)) both;
+  }
+
+  .fio[data-direcao="baixo"] {
+    animation-name: desenharBaixo;
+  }
+
+  .balaoEntra {
+    animation: estourar 450ms var(--cena-pop)
+      calc(var(--ordem, 0) * var(--cena-defasagem)) both;
+  }
+
+  .balaoCorpo {
+    animation: flutuar var(--cena-flutuar) ease-in-out
+      calc(var(--ordem, 0) * var(--cena-defasagem) + 450ms) var(--cena-ciclos) both;
+  }
+
+  /* O pulso: `ciclos` viagens e, na sombra da última, assenta no meio. */
+  .trilhoDoPulso {
+    --atraso-do-pulso: calc(
+      var(--cena-fim-da-entrada) + var(--trecho, 0) * 0.45 * var(--cena-ciclo)
+    );
+    animation:
+      viajar var(--cena-ciclo) var(--cena-ir-e-voltar) var(--atraso-do-pulso)
+        var(--cena-ciclos) both,
+      assentar 300ms ease-out
+        calc(var(--atraso-do-pulso) + (var(--cena-ciclos) - 0.4) * var(--cena-ciclo))
+        1 forwards;
+  }
+
+  .fio[data-direcao="baixo"] .trilhoDoPulso {
+    animation-name: viajarBaixo, assentarBaixo;
+  }
+
+  /* O nó forte acende quando o pulso chega. */
+  .no[data-forte]::after {
+    animation: acender var(--cena-ciclo) ease-out var(--cena-fim-da-entrada)
+      var(--cena-ciclos) both;
+  }
+
+  /* Cursor do código: três piscadas e fica aceso. */
+  .cursor {
+    animation: piscar 2400ms linear var(--cena-fim-da-entrada) 1 both;
+  }
+
+  /* Espera real fora do console: o único laço contínuo. */
+  .palco[data-estado="esperando"] .fio[data-estado="esperando"] .trilhoDoPulso {
+    animation: viajar var(--cena-ciclo) var(--cena-ir-e-voltar)
+      var(--cena-fim-da-entrada) infinite both;
+  }
+
+  .palco[data-estado="esperando"] .fio[data-estado="esperando"][data-direcao="baixo"] .trilhoDoPulso {
+    animation-name: viajarBaixo;
+  }
+
+  .palco[data-estado="esperando"] .no[data-estado="esperando"]::after {
+    animation: acender var(--cena-ciclo) ease-out var(--cena-fim-da-entrada)
+      infinite both;
+  }
+
+  /* Funil: cada barra cresce até o valor, em defasagem; o ramo vem depois. */
+  .barraCrescer {
+    animation: crescer 700ms var(--cena-sair)
+      calc(var(--ordem, 0) * var(--cena-defasagem)) both;
+  }
+
+  .ramo {
+    animation: entrar var(--cena-entrada) var(--cena-sair)
+      calc(5 * var(--cena-defasagem) + 700ms) both;
+  }
+
+  .ramo .barraCrescer {
+    animation-delay: calc(5 * var(--cena-defasagem) + 900ms);
+  }
+
+  .marca {
+    animation: marcar var(--cena-micro) ease-out var(--cena-entrada) both;
+  }
+
+  /* IconeDoAssunto: entra e acende uma vez. */
+  .iconeDoAssunto > svg {
+    animation: entrar var(--cena-entrada) var(--cena-sair) 120ms both;
+  }
+
+  .iconeDoAssunto::after {
+    animation: acender 1200ms ease-out 300ms both;
+  }
+
+  /* Os 7 ícones da Instalação: o movimento de cada um, uma vez. */
+  .chaveEsq {
+    animation: abrirEsq 1600ms ease-in-out 200ms both;
+  }
+
+  .chaveDir {
+    animation: abrirDir 1600ms ease-in-out 200ms both;
+  }
+
+  .cursorDoIcone {
+    animation: piscar 2400ms linear 200ms both;
+  }
+
+  .pulsoDoIcone {
+    animation: percorrer 2400ms var(--cena-ir-e-voltar) 200ms both;
+  }
+
+  .brilho {
+    animation: cintilar 1600ms ease-in-out 200ms both;
+  }
+
+  .raioCheio {
+    animation: lampejo 1800ms ease-in-out 200ms both;
+  }
+
+  .meridiano {
+    animation: girar 2000ms ease-in-out 200ms both;
+  }
+
+  .reflexo {
+    animation: refletir 1600ms ease-in-out 200ms both;
+  }
+
+  .subindo {
+    animation: subir 1600ms var(--cena-ir-e-voltar) 200ms both;
+  }
+
+  /* Tela estreita: os fios ficam em pé, e o pulso desce. */
+  @container cena (max-width: 23rem) {
+    .fio {
+      animation-name: desenharBaixo;
+    }
+
+    .trilhoDoPulso {
+      animation-name: viajarBaixo, assentarBaixo;
+    }
+
+    .palco[data-estado="esperando"] .fio[data-estado="esperando"] .trilhoDoPulso {
+      animation-name: viajarBaixo;
+    }
+  }
+}
+
+/* --- Keyframes (só transform e opacity) ----------------------------------- */
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes estourar {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes desenhar {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+
+@keyframes desenharBaixo {
+  from { transform: scaleY(0); }
+  to { transform: none; }
+}
+
+@keyframes viajar {
+  0% { opacity: 0; transform: translateX(0); }
+  8% { opacity: 1; }
+  45% { opacity: 1; transform: translateX(100%); }
+  55%, 100% { opacity: 0; transform: translateX(100%); }
+}
+
+@keyframes viajarBaixo {
+  0% { opacity: 0; transform: translateY(0); }
+  8% { opacity: 1; }
+  45% { opacity: 1; transform: translateY(100%); }
+  55%, 100% { opacity: 0; transform: translateY(100%); }
+}
+
+@keyframes assentar {
+  from { opacity: 0; transform: translateX(50%); }
+  to { opacity: 1; transform: translateX(50%); }
+}
+
+@keyframes assentarBaixo {
+  from { opacity: 0; transform: translateY(50%); }
+  to { opacity: 1; transform: translateY(50%); }
+}
+
+@keyframes flutuar {
+  0%, 100% { transform: none; }
+  25% { transform: translateY(-3px) rotate(-2deg); }
+  50% { transform: translateY(-6px) rotate(2deg); }
+  75% { transform: translateY(-3px) rotate(0deg); }
+}
+
+@keyframes acender {
+  0%, 40% { opacity: 0; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+  75%, 100% { opacity: 0; transform: scale(1.15); }
+}
+
+@keyframes crescer {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+
+@keyframes marcar {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Três piscadas num ciclo só; termina aceso. */
+@keyframes piscar {
+  0%, 12% { opacity: 1; }
+  16%, 28% { opacity: 0; }
+  32%, 44% { opacity: 1; }
+  48%, 60% { opacity: 0; }
+  64%, 76% { opacity: 1; }
+  80%, 92% { opacity: 0; }
+  96%, 100% { opacity: 1; }
+}
+
+@keyframes abrirEsq {
+  0%, 30%, 100% { transform: translateX(0); }
+  60% { transform: translateX(-1.5px); }
+}
+
+@keyframes abrirDir {
+  0%, 30%, 100% { transform: translateX(0); }
+  60% { transform: translateX(1.5px); }
+}
+
+@keyframes percorrer {
+  0% { transform: translate(5px, 17px); }
+  33% { transform: translate(12px, 5.5px); }
+  66% { transform: translate(19px, 17px); }
+  100% { transform: translate(5px, 17px); }
+}
+
+@keyframes cintilar {
+  0% { opacity: 0.3; transform: scale(0.6) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.15) rotate(45deg); }
+  100% { opacity: 1; transform: scale(1) rotate(90deg); }
+}
+
+@keyframes lampejo {
+  0%, 50%, 100% { opacity: 0; }
+  70% { opacity: 0.55; }
+}
+
+@keyframes girar {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.15); }
+}
+
+@keyframes refletir {
+  0% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+
+@keyframes subir {
+  0% { opacity: 0.4; transform: translateY(2px); }
+  50% { opacity: 1; transform: translateY(-1.5px); }
+  100% { opacity: 1; transform: none; }
+}

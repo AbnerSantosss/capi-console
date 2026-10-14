@@ -16,7 +16,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { IconeDoAssunto } from '@/components/cenas';
 import { NumeroAnimado, BarraAnimada } from '@/components/common/motion';
+
+/** O3: o ícone do título com a cor e a entrada curta do assunto. */
+function IconeDaQualidade() {
+  return <IconeDoAssunto assunto="evento" icone={Gauge} />;
+}
 
 /** Le os campos do store e devolve o EMQ. Um unico ponto de calculo. */
 export function useEmq(): ResultadoEmq {
@@ -61,12 +67,12 @@ export function QualityPanel() {
     <>
       <Panel
         title="Qualidade do evento"
-        icon={Gauge}
+        icon={IconeDaQualidade}
         tone={emq.nivel === 'alto' ? 'success' : emq.nivel === 'medio' ? 'warning' : 'danger'}
         action={
           <HelpTip
             side="left"
-            content="Soma ponderada dos 9 parâmetros que a Meta usa para casar o evento com um perfil. Acima de 8.0 a atribuição ao anúncio é direta."
+            content="Nota de 0 a 10 pelos 9 sinais que a Meta usa. Acima de 8, o anúncio é identificado direto."
           />
         }
       >

@@ -187,9 +187,12 @@ export const TAREFAS: Tarefa[] = [
     resposta:
       'Primeiro o Código de teste, depois a regra. É essa ordem que segura o erro.',
     passos: [
-      'Preencha o Código de teste em Pixel e token.',
-      'Em Regras → aba Regras, mude `purchase_approved` de Fila para Automático.',
-      'Salve e confira o selo do menu: ele sai de Desligado para "1 em teste".',
+      // Auditoria de UX de 13/10: "Pixel e token" e o "selo do menu" não
+      // existem mais. E o envio só sai com as duas travas: a regra E a chave
+      // "Envio automático" do Pixel — o passo da chave faltava aqui.
+      'Na aba Pixels, preencha o Código de teste do Pixel.',
+      'Na aba Regras, sub-aba Regras, mude `purchase_approved` de Manual para Automático e salve.',
+      'Ligue a chave "Envio automático" do Pixel e confira na aba Pixels: o estado dele passa a "Enviando sozinho".',
     ],
     cta: {
       rotulo: 'Ver o passo a passo completo',
@@ -296,7 +299,7 @@ export const TOPICOS: Topico[] = [
         resumo: 'Chegou e esperou. Nenhuma regra mandou enviar.',
         icone: QueueIcon,
         oQue:
-          'Evento sem regra própria, ou com regra em modo Fila, fica esperando uma decisão humana. É o estado normal enquanto o automático está desligado — e é ele que permite conferir o payload antes do go-live.',
+          'Evento sem regra própria, ou com regra em modo Manual, fica na Fila esperando uma decisão humana. É o estado normal enquanto o automático está desligado — e é ele que permite conferir o payload antes do go-live.',
         onde: 'Regras → aba Regras mostra o modo de cada evento.',
       },
       {
@@ -412,10 +415,11 @@ export const TOPICOS: Topico[] = [
         icone: MapTrifoldIcon,
         oQue:
           'A URL já vem com o segredo no caminho. Quem tiver essa URL consegue inserir eventos na sua Fila — trate como senha.',
-        // O recebimento saiu das abas de Disparo automático e virou o bloco 1
-        // de Instalação. O ponteiro precisa levar ao lugar certo: passo com
-        // endereco errado e o tipo de erro que faz o operador desistir do Guia.
-        onde: 'Instalação → Webhook da plataforma de vendas → "URL para a plataforma" → Copiar.',
+        // O recebimento saiu das abas de Disparo automático, virou o bloco 1
+        // de Instalação e hoje mora na aba Fontes. O ponteiro precisa levar ao
+        // lugar certo: passo com endereco errado e o tipo de erro que faz o
+        // operador desistir do Guia.
+        onde: 'Aba Instalação → campo "URL para a plataforma" → Copiar.',
       },
       {
         id: 'endpoint',
@@ -451,7 +455,7 @@ export const TOPICOS: Topico[] = [
         icone: LightningIcon,
         oQue:
           'Preencha o Código de teste do Pixel, depois mude a regra de `purchase_approved` para Automático. A próxima compra vai sozinha e aparece só no Testar eventos.',
-        onde: 'Pixel e token → Código de teste; depois Regras → aba Regras.',
+        onde: 'Aba Pixels → Código de teste; depois aba Regras → sub-aba Regras; por fim a chave "Envio automático" do Pixel.',
       },
       {
         id: 'go-live',
@@ -460,7 +464,7 @@ export const TOPICOS: Topico[] = [
         icone: SealCheckIcon,
         oQue:
           'Depois de ver o `Purchase` certo no Testar eventos, apague o Código de teste. A partir daí as compras entram nas métricas reais da campanha.',
-        onde: 'Pixel e token → Código de teste → salvar vazio.',
+        onde: 'Aba Pixels → Código de teste → salvar vazio.',
       },
     ],
   },

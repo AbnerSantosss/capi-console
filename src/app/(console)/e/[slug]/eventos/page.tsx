@@ -76,7 +76,7 @@ export default async function EventosDaEmpresa({
       <main className={consoleStyles.page} data-area="painel">
         <ConsolePageHeader
           title="Quem comprou"
-          description="Quem comprou no período. E-mail mascarado; nome inteiro, para achar a pessoa no backoffice."
+          description="Quem comprou, para achar a pessoa no sistema de vendas."
           icon={ShoppingBag}
         />
         {/* `useSearchParams` precisa de fronteira de suspense mesmo em rota
@@ -86,7 +86,7 @@ export default async function EventosDaEmpresa({
             key={empresaId}
             recorte={{ compras: true }}
             titulo="Compras do período"
-            descricao="Tudo o que chegou como Purchase nesta janela, na ordem em que entrou."
+            descricao="Da mais recente para a mais antiga."
           />
         </Suspense>
       </main>
@@ -99,7 +99,7 @@ export default async function EventosDaEmpresa({
       <main className={consoleStyles.page} data-area="automatico">
         <ConsolePageHeader
           title="Fila"
-          description="Eventos recebidos das plataformas. Carregue no formulário para revisar ou use Enviar agora."
+          description="Vendas que chegaram. Revise no formulário ou use Enviar agora."
           icon={Inbox}
         />
         {/* Sem o `Section` em volta (que o Disparo automático usava): ele é
@@ -120,8 +120,8 @@ export default async function EventosDaEmpresa({
           title="Quem mandou este evento"
           description={
             <>
-              Quem mandou <span className="font-mono">{evento}</span> no período. E-mail mascarado;
-              nome inteiro, para achar a pessoa no backoffice.
+              Quem mandou <span className="font-mono">{evento}</span>, da mais recente para a mais
+              antiga.
             </>
           }
           icon={Inbox}
@@ -131,7 +131,7 @@ export default async function EventosDaEmpresa({
             key={empresaId}
             recorte={{ evento }}
             titulo={`Eventos ${evento}`}
-            descricao="Tudo o que chegou com este nome nesta janela, na ordem em que entrou."
+            descricao="Só os eventos com este nome."
           />
         </Suspense>
       </main>
@@ -143,7 +143,7 @@ export default async function EventosDaEmpresa({
     <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
         title="Painel de eventos"
-        description="O que chegou, o que saiu para a Meta e de onde veio o tráfego. Os testes internos ficam fora das porcentagens."
+        description="O que chegou, o que saiu para a Meta e de onde veio o tráfego."
         icon={Gauge}
       />
       <PainelDeEventos key={empresaId} />

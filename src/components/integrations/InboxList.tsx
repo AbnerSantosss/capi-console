@@ -58,6 +58,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { ItemDeLista, AnimatePresence } from '@/components/common/motion';
 import { SeletorDePixel, nomeDoPixel } from '@/components/pixels/SeletorDePixel';
@@ -209,13 +219,13 @@ const hora = (iso: string) =>
 
 const ROTULO_MODO: Record<'auto' | 'fila' | 'ignorar', string> = {
   auto: 'envio automático',
-  fila: 'fica na fila',
+  fila: 'manual',
   ignorar: 'não enviar',
 };
 
 /**
  * Cada modo tem ícone próprio (R-07, regra 4): selo é ícone + texto, nunca só
- * cor. Sem isto, "fica na fila" e "não enviar" só se distinguiam pela palavra.
+ * cor. Sem isto, "manual" e "não enviar" só se distinguiam pela palavra.
  */
 const ICONE_MODO: Record<'auto' | 'fila' | 'ignorar', React.ElementType> = {
   auto: Zap,
@@ -412,6 +422,11 @@ export function InboxList({
   // Vazio ate abrir: a escolha nasce a cada abertura, de `pixelsIniciais` (F1).
   const [marcasDoLote, setMarcasDoLote] = useState<string[]>([]);
   const [lote, setLote] = useState<ProgressoLote | null>(null);
+  // Apagar a Fila e irreversivel: o botao so abre a pergunta, e o foco nasce no
+  // Cancelar para um Enter distraido nao apagar nada.
+  const [confirmandoApagar, setConfirmandoApagar] = useState(false);
+  const [apagando, setApagando] = useState(false);
+  const refCancelarApagar = useRef<HTMLButtonElement>(null);
   const [resumoLote, setResumoLote] = useState<ProgressoLote | null>(null);
   /**
    * "Parar" precisa ser visto DENTRO do laço, que roda fora do ciclo de render.
@@ -448,6 +463,11 @@ export function InboxList({
   // enquanto nao se sabe qual e, e igual ao que o servidor renderiza.
   const empresaAtiva = useEmpresaStore((s) => s.ativa());
   const rotuloWebhook = nomeDaPlataforma(empresaAtiva?.plataforma);
+  /** Vazio sem webhook: leva à aba Instalação da empresa, já no bloco do webhook. */
+  const paramsDaRota = useParams<{ slug?: string }>();
+  const hrefDoWebhook = paramsDaRota?.slug
+    ? `/e/${paramsDaRota.slug}/fontes#webhook`
+    : '/instalacao#webhook';
 
   /**
    * T2 (C4): a empresa de onde vieram os itens desta lista.
@@ -845,7 +865,10 @@ export function InboxList({
     }
   };
 
+  // So roda pelo botao do AlertDialog: o `confirmar: true` do corpo agora
+  // corresponde a uma confirmacao de verdade do operador.
   const limpar = async () => {
+    setApagando(true);
     try {
       // B11-b: apagar a caixa de entrada e irreversivel, entao a rota exige a
       // confirmacao explicita no corpo. Sem ela a resposta e 400, de proposito.
@@ -855,17 +878,20 @@ export function InboxList({
         body: JSON.stringify({ confirmar: true }),
       });
       setItens([]);
-      toast.success('Fila limpa.');
+      setConfirmandoApagar(false);
+      toast.success('Entregas apagadas.');
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
-      toast.error('Falha ao limpar a Fila.', {
+      toast.error('Falha ao apagar as entregas.', {
         description: e instanceof Error ? e.message : '',
       });
+    } finally {
+      setApagando(false);
     }
   };
 
   /* ------------------------------------------------------------------ */
-  /* Recorte de EXIBIÇÃO — filtros                                       */
+  /* Recorte de EXIBIÇÃO — filtros                                      */
   /* ------------------------------------------------------------------ */
 
   /**
@@ -1125,11 +1151,29 @@ export function InboxList({
             <RefreshCw className="size-3.5" aria-hidden />
             Atualizar
           </Button>
+          {/* Apagar mora num menu à parte, longe do Atualizar: um clique
+              errado no botão vizinho não pode custar a Fila inteira. */}
           {itens.length > 0 && (
-            <Button size="sm" variant="ghost" onClick={limpar}>
-              <Trash2 className="size-3.5" aria-hidden />
-              Limpar
-            </Button>
+            <Menu>
+              <MenuTrigger
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="ml-2 max-md:min-h-control-lg max-md:min-w-control-lg"
+                    aria-label="Mais ações da Fila"
+                  />
+                }
+              >
+                <MoreHorizontal className="size-4" aria-hidden />
+              </MenuTrigger>
+              <MenuContent>
+                <MenuItem onClick={() => setConfirmandoApagar(true)}>
+                  <Trash2 aria-hidden />
+                  Apagar todas as entregas…
+                </MenuItem>
+              </MenuContent>
+            </Menu>
           )}
         </div>
       </div>
@@ -1143,9 +1187,8 @@ export function InboxList({
           tamanho da caixa inteira. */}
       {noPeriodo.length > 0 && (
         <p className="text-caption text-fg-muted">
-          {noPeriodo.length} entrega{noPeriodo.length > 1 ? 's' : ''} nesta lista
-          {aguardando > 0 ? ` · ${aguardando} ainda sem tratamento` : ''} · tudo o que chega
-          aparece aqui, inclusive o que não vai para a Meta.
+          {noPeriodo.length} entrega{noPeriodo.length > 1 ? 's' : ''}
+          {aguardando > 0 ? ` · ${aguardando} esperando você` : ''}.
         </p>
       )}
 
@@ -1155,8 +1198,8 @@ export function InboxList({
       {limite > 50 && noPeriodo.length > 0 && (
         <p className="text-caption text-fg-muted">
           {janela
-            ? `Mostrando os ${noPeriodo.length} recebidos dentro do período escolhido no Painel.`
-            : `Mostrando os últimos ${noPeriodo.length} recebidos desta empresa.`}
+            ? `Período do Resumo: ${noPeriodo.length} eventos.`
+            : `Últimos ${noPeriodo.length} recebidos.`}
         </p>
       )}
 
@@ -1225,8 +1268,7 @@ export function InboxList({
           titulo="Nenhum evento neste período"
           motivo={
             <>
-              As {itens.length} entregas desta empresa continuam na caixa: nenhuma delas caiu
-              dentro da janela escolhida no Painel.
+              As {itens.length} entregas continuam na Fila; nenhuma caiu nesta janela.
             </>
           }
           acao={acaoJanelaVazia}
@@ -1236,15 +1278,14 @@ export function InboxList({
           titulo="Nenhum webhook recebido"
           motivo={
             <>
-              A plataforma ainda não apontou para este console, ou nenhuma venda entrou
-              desde então. Enquanto isso, use a aba <strong>Colar JSON</strong> ou
-              preencha os campos abaixo.
+              Nenhuma venda chegou ainda. Ligue o webhook na aba Instalação, ou use{' '}
+              <strong>Colar JSON</strong>.
             </>
           }
           acao={
-            <Button variant="outline" render={<Link href="/automatico" />}>
+            <Button variant="outline" render={<Link href={hrefDoWebhook} />}>
               <Workflow className="size-4" aria-hidden />
-              Configurar o endpoint
+              Ligar o webhook
             </Button>
           }
         />
@@ -1256,8 +1297,7 @@ export function InboxList({
           titulo="Nenhum evento com este filtro"
           motivo={
             <>
-              As {noPeriodo.length} entregas continuam na caixa — só nenhuma casa com{' '}
-              <strong>{descreverFiltros(filtros)}</strong>
+              Nada casa com <strong>{descreverFiltros(filtros)}</strong>.
             </>
           }
           acao={
@@ -1312,7 +1352,7 @@ export function InboxList({
             </DialogDescription>
           </DialogHeader>
 
-          <p className="rounded-control bg-surface-2 p-2.5 text-caption text-fg-muted">
+          <p className="rounded-control bg-surface-2 p-2.5 text-caption text-fg-body">
             No Gerenciador de Eventos isto aparece com o nome{' '}
             <span className="font-mono text-fg-body">{parDoAlvo?.tecnico ?? '—'}</span>.{' '}
             {parDoAlvo?.descricao}
@@ -1340,8 +1380,8 @@ export function InboxList({
 
           {escolhidasEmProducao.length > 0 && (
             <Callout tone="danger" icon={AlertTriangle} title="Isto entra nas métricas reais">
-              {escolhidasEmProducao.map((m) => m.nome).join(', ')} está sem Código de teste. O
-              evento vai contar como conversão de verdade na campanha.
+              {escolhidasEmProducao.map((m) => m.nome).join(', ')} está sem código de teste: o
+              evento conta como venda de verdade.
             </Callout>
           )}
 
@@ -1374,6 +1414,37 @@ export function InboxList({
         onMarcas={setMarcasDoLote}
         onConfirmar={() => void executarLote()}
       />
+
+      <AlertDialog
+        open={confirmandoApagar}
+        onOpenChange={(v) => {
+          if (!v && !apagando) setConfirmandoApagar(false);
+        }}
+      >
+        <AlertDialogContent initialFocus={refCancelarApagar}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {itens.length === 1
+                ? 'Apagar a entrega da Fila?'
+                : `Apagar as ${itens.length} entregas da Fila?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Some da Fila desta empresa tudo o que chegou, inclusive o que ainda não foi
+              enviado. Não dá para desfazer. Nada é enviado à Meta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={refCancelarApagar} disabled={apagando} />
+            <AlertDialogAction
+              variant="destructive"
+              disabled={apagando}
+              onClick={() => void limpar()}
+            >
+              {apagando ? 'Apagando…' : 'Apagar todas'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1643,14 +1714,14 @@ function LinhaEntrada({
             {explicacao.frase}{' '}
             {explicacao.acao && (
               <>
-                Envie agora, deixe esperando ou, para os próximos saírem sozinhos,{' '}
+                Enviar agora, deixar esperando ou{' '}
                 <Link
                   href={hrefDaAba(explicacao.acao.aba)}
                   className="font-medium text-tinta-texto underline underline-offset-2"
                 >
                   {explicacao.acao.rotulo.charAt(0).toLowerCase() + explicacao.acao.rotulo.slice(1)}
-                </Link>
-                .
+                </Link>{' '}
+                para os próximos.
               </>
             )}
           </p>
@@ -1843,13 +1914,19 @@ function LinhaEntrada({
             {disparavel && (
               <MenuItem onClick={aoDisparar}>
                 <Send aria-hidden />
-                Enviar agora
+                <span className="flex flex-col">
+                  Enviar agora
+                  <span className="text-caption text-fg-muted">Envia como chegou</span>
+                </span>
               </MenuItem>
             )}
             {!naoLido && (
               <MenuItem onClick={aoCarregar}>
                 <ArrowDownToLine aria-hidden />
-                Carregar no formulário
+                <span className="flex flex-col">
+                  Carregar no formulário
+                  <span className="text-caption text-fg-muted">Revisa primeiro</span>
+                </span>
               </MenuItem>
             )}
             {/* Sempre presente, inclusive no item que não pôde ser lido — é

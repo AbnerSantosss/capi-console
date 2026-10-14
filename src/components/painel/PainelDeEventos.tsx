@@ -7,6 +7,7 @@ import {
   ArrowDownRight,
   ArrowRight,
   Ban,
+  Check,
   CheckCircle2,
   ChevronDown,
   Clock,
@@ -43,6 +44,8 @@ import { parMeta, type ParMeta } from '@/components/integrations/eventos-legivei
 import { MAPA_EVENTOS_ORIGEM } from '@/lib/parser';
 import { cn } from '@/lib/utils';
 import { formatarDinheiro } from '@/lib/moeda';
+import { Funil, IconeDoAssunto, No, Palco } from '@/components/cenas';
+import cenas from '@/components/cenas/cenas.module.css';
 
 /**
  * Painel de eventos — a primeira tela do console.
@@ -152,9 +155,9 @@ const SO_REAIS: FiltrosInboxValor = { ...FILTROS_VAZIOS, equipe: 'reais' };
  */
 function avisoDeModoTeste(n: number): string | null {
   if (n <= 0) return null;
-  return `${n} em modo teste, fora da conta: ${
+  return `${n} só ${
     n === 1 ? 'foi' : 'foram'
-  } só para o Testar eventos da Meta. Os que já saíram em teste podem ir de verdade: apague o código de teste do Pixel na aba Pixels e use Enviar agora na Fila.`;
+  } para Testar eventos da Meta. Os que já saíram em teste podem ir de verdade: tire o código de teste em Pixels e use Enviar agora na Fila.`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,7 +231,8 @@ function CardPainel({
   aviso,
 }: {
   titulo: string;
-  explicacao: string;
+  /** Opcional: os cartões de origem dizem tudo no título. */
+  explicacao?: string;
   total: number;
   pct?: number | null;
   icone: React.ElementType;
@@ -277,7 +281,9 @@ function CardPainel({
         <BarraAnimada percentual={pct ?? 0} corBarra={BARRA_DO_MATIZ[matiz]} className="h-1.5 w-full" />
       )}
 
-      <span className="min-w-0 text-caption break-words text-fg-muted">{explicacao}</span>
+      {explicacao && (
+        <span className="min-w-0 text-caption break-words text-fg-muted">{explicacao}</span>
+      )}
 
       {aviso && <span className="min-w-0 text-caption break-words text-fg-body">{aviso}</span>}
     </>
@@ -416,10 +422,10 @@ function CardDeEvento({
           destinoPelaRegra(evento, regras)
         ) : par ? (
           <>
-            Equivale na Meta a {par.pt} · <span className="font-mono">{par.tecnico}</span>.
+            Na Meta: {par.pt}.
           </>
         ) : (
-          'Não vira conversão na Meta: não existe evento padrão equivalente.'
+          'Não conta como conversão na Meta.'
         )}
       </span>
     </button>
@@ -453,7 +459,7 @@ function dinheiro(valor: number | null, moeda: string | null): string {
  * onde ir (o valor de cada compra está na lista). Sem travessão e sem jargão.
  */
 const AVISO_MOEDAS_DIFERENTES =
-  'Houve compras em moedas diferentes. Um total único ficaria errado, por isso o valor aparece em cada compra na lista.';
+  'Moedas diferentes: o valor aparece em cada compra, sem total único.';
 
 function AvisoDeMoedasDiferentes({ valor }: { valor: number | null }) {
   if (valor !== null) return null;
@@ -477,6 +483,69 @@ function AvisoDeMoedasDiferentes({ valor }: { valor: number | null }) {
  * direita é o que chegou sem rastro de clique. Os dois somam o total de cima, e
  * os dois foram enviados à Meta — separar aqui é contabilidade, não filtro.
  */
+/**
+ * Cena "Da compra à Meta" (padrão HyperFrames, E5): três barras com os números
+ * REAIS do período — compras, as que vieram do anúncio e as que a Meta já
+ * aceitou. Sem `taxas`: as barras não são etapas em sequência.
+ *
+ * O estado sai do dado: tudo aceito → `ok`, com o ✓ em menta; falta enviar →
+ * `pausado`, âmbar parado com "Na fila" (depende de uma Regra ou de você, não
+ * é espera; nunca laço). Com zero compras ela nem monta: fica o vazio.
+ * Decorativa: os mesmos números estão no trio do cartão, em texto.
+ */
+function CenaDaCompraAMeta({ compras }: { compras: ComprasDoPeriodo }) {
+  const tudoAceito = compras.enviadas >= compras.total;
+  return (
+    <Palco assunto="evento" ciclos={1} altura="livre" estado={tudoAceito ? 'ok' : 'pausado'}>
+      <div className="flex min-w-0 flex-col gap-3">
+        <Funil
+          assunto="evento"
+          etapas={[
+            { rotulo: 'Compras', valor: compras.total },
+            { rotulo: 'Do anúncio', valor: compras.atribuidasMeta.total },
+            { rotulo: 'Na Meta', valor: compras.enviadas },
+          ]}
+        />
+        <span className="flex justify-end">
+          {tudoAceito ? (
+            // O ✓ é verde de "aceito" (menta), não o violeta do assunto.
+            <span className={cenas.assunto} data-assunto="webhook">
+              <No rotulo="Aceitas" icone={Check} ordem={3} />
+            </span>
+          ) : (
+            <No rotulo="Na fila" estado="pausado" ordem={3} />
+          )}
+        </span>
+      </div>
+    </Palco>
+  );
+}
+
+/** Ícones dos títulos de seção (O3): a peça de cenas no lugar do glifo pequeno. */
+function IconeDeCompras() {
+  return <IconeDoAssunto assunto="evento" icone={ShoppingBag} />;
+}
+
+function IconeDosEventos() {
+  return <IconeDoAssunto assunto="evento" icone={Target} />;
+}
+
+function IconeDoVolume() {
+  return <IconeDoAssunto assunto="evento" icone={Inbox} />;
+}
+
+function IconeDaOrigem() {
+  return <IconeDoAssunto assunto="evento" icone={MousePointerClick} />;
+}
+
+function IconeDaQualidade() {
+  return <IconeDoAssunto assunto="evento" icone={Gauge} />;
+}
+
+function IconeDoRecorte() {
+  return <IconeDoAssunto assunto="evento" icone={Inbox} />;
+}
+
 function DestaqueDeCompras({
   compras,
   periodo,
@@ -495,98 +564,102 @@ function DestaqueDeCompras({
   return (
     <Section
       title="Compras no período"
-      description={`${periodo}. Clique para ver quem comprou.`}
-      icon={ShoppingBag}
+      description={periodo}
+      icon={IconeDeCompras}
       variant="card"
       tinta
     >
-      <Link
-        href={href}
-        aria-label={`${compras.total} ${plural}, ${valorFalado}${
-          emTeste ? ` ${emTeste}` : ''
-        } Abrir a lista de quem comprou.`}
+      {/* A cena fica FORA do link (ela não pode ficar dentro de um alvo de
+          clique) e ao lado dele a partir de md; em tela estreita, embaixo. */}
+      <div
         className={cn(
-          'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
-          'hover:border-tinta-texto hover:bg-surface-3',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
+          'grid min-w-0 gap-4',
+          compras.total > 0 && 'md:grid-cols-[minmax(0,1fr)_minmax(13rem,17rem)] md:items-start'
         )}
       >
-        <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          {/* O rótulo vem ACIMA do número, e o número é o maior objeto da
-              tela (--text-display, o sétimo degrau, fluido de 40 a 56px).
-              Quem abre o console lê primeiro QUANTO entrou; o rótulo só é
-              procurado por quem já viu o número. Invertido — rótulo embaixo —
-              o olho pousa no texto pequeno antes do dado, que é exatamente o
-              "sem contraste" que o dono descreveu: nada dominava a tela.
-              Mono + tabular porque dinheiro se lê pela coluna do separador. */}
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-label text-fg-muted">Valor no período</span>
-            <span className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
-              <span className="min-w-0 font-mono text-display font-medium text-fg-strong tabular-nums">
-                {dinheiro(compras.valor, compras.moeda)}
+        <Link
+          href={href}
+          aria-label={`${compras.total} ${plural}, ${valorFalado}${
+            emTeste ? ` ${emTeste}` : ''
+          } Abrir a lista de quem comprou.`}
+          className={cn(
+            'group flex min-w-0 flex-col gap-4 rounded-panel border border-line-strong bg-surface-2 p-4 transition-colors sm:p-5',
+            'hover:border-tinta-texto hover:bg-surface-3',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto'
+          )}
+        >
+          <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            {/* O rótulo vem ACIMA do número, e o número é o maior objeto da
+                tela (--text-display, o sétimo degrau, fluido de 40 a 56px).
+                Quem abre o console lê primeiro QUANTO entrou; o rótulo só é
+                procurado por quem já viu o número. Invertido — rótulo embaixo —
+                o olho pousa no texto pequeno antes do dado, que é exatamente o
+                "sem contraste" que o dono descreveu: nada dominava a tela.
+                Mono + tabular porque dinheiro se lê pela coluna do separador. */}
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-label text-fg-muted">Valor no período</span>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+                <span className="min-w-0 font-mono text-display font-medium text-fg-strong tabular-nums">
+                  {dinheiro(compras.valor, compras.moeda)}
+                </span>
+                {/* A quantidade acompanha o valor na mesma linha de base, um
+                    degrau abaixo: é a mesma frase ("R$ X em N compras"), não um
+                    segundo indicador. `number-flow` continua aqui — é o número
+                    que troca quando o período muda. */}
+                <span className="flex shrink-0 items-baseline gap-1.5 text-data text-fg-body">
+                  <NumeroAnimado valor={compras.total} casas={0} className="tabular-nums" />
+                  <span className="text-label text-fg-muted">{plural}</span>
+                </span>
               </span>
-              {/* A quantidade acompanha o valor na mesma linha de base, um
-                  degrau abaixo: é a mesma frase ("R$ X em N compras"), não um
-                  segundo indicador. `number-flow` continua aqui — é o número
-                  que troca quando o período muda. */}
-              <span className="flex shrink-0 items-baseline gap-1.5 text-data text-fg-body">
-                <NumeroAnimado valor={compras.total} casas={0} className="tabular-nums" />
-                <span className="text-label text-fg-muted">{plural}</span>
+              <AvisoDeMoedasDiferentes valor={compras.valor} />
+            </div>
+
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-tinta-texto">
+              Ver quem comprou
+              <ArrowRight
+                className="size-4 transition-transform group-hover:translate-x-0.5"
+                aria-hidden
+              />
+            </span>
+          </div>
+
+          {/* UMA linha com três pares rótulo·valor, divididos por filete — e não
+              três caixas. Três caixas diziam "três coisas diferentes"; o filete
+              diz "a mesma conta, repartida". Abaixo de sm o filete sai e os três
+              empilham, porque filete vertical em coluna única não divide nada. */}
+          <div className="grid min-w-0 grid-cols-1 gap-y-3 border-t border-line pt-3 sm:grid-cols-3 sm:gap-y-0 sm:divide-x sm:divide-line">
+            <div className="flex min-w-0 flex-col gap-0.5 sm:pr-4">
+              <span className="text-caption text-fg-muted">Do anúncio</span>
+              <span className="text-label font-semibold text-fg-strong tabular-nums">
+                {compras.atribuidasMeta.total} · {dinheiro(compras.atribuidasMeta.valor, compras.moeda)}
               </span>
-            </span>
-            <AvisoDeMoedasDiferentes valor={compras.valor} />
-          </div>
+            </div>
 
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-label font-medium text-tinta-texto">
-            Ver quem comprou
-            <ArrowRight
-              className="size-4 transition-transform group-hover:translate-x-0.5"
-              aria-hidden
-            />
-          </span>
-        </div>
+            <div className="flex min-w-0 flex-col gap-0.5 sm:px-4">
+              <span className="text-caption text-fg-muted">Sem rastro</span>
+              <span className="text-label font-semibold text-fg-strong tabular-nums">
+                {compras.semAtribuicaoMeta.total} ·{' '}
+                {dinheiro(compras.semAtribuicaoMeta.valor, compras.moeda)}
+              </span>
+              <span className="text-caption text-fg-muted">Também vão para a Meta.</span>
+            </div>
 
-        {/* UMA linha com três pares rótulo·valor, divididos por filete — e não
-            três caixas. Três caixas diziam "três coisas diferentes"; o filete
-            diz "a mesma conta, repartida". Abaixo de sm o filete sai e os três
-            empilham, porque filete vertical em coluna única não divide nada. */}
-        <div className="grid min-w-0 grid-cols-1 gap-y-3 border-t border-line pt-3 sm:grid-cols-3 sm:gap-y-0 sm:divide-x sm:divide-line">
-          <div className="flex min-w-0 flex-col gap-0.5 sm:pr-4">
-            <span className="text-caption text-fg-muted">Contam para a campanha da Meta</span>
-            <span className="text-label font-semibold text-fg-strong tabular-nums">
-              {compras.atribuidasMeta.total} · {dinheiro(compras.atribuidasMeta.valor, compras.moeda)}
-            </span>
-            <span className="text-caption text-fg-muted">Chegaram com fbclid ou cookie _fbc.</span>
+            <div className="flex min-w-0 flex-col gap-0.5 sm:pl-4">
+              <span className="text-caption text-fg-muted">Aceitas pela Meta</span>
+              <span className="text-label font-semibold text-fg-strong tabular-nums">
+                {compras.enviadas} de {compras.total}
+              </span>
+              {/* C9 (D20): compra que só foi para o "Testar eventos" não é
+                  aceite da Meta. Sem esta linha, "o resto" esconderia justamente
+                  a venda que o Pixel em modo teste não contou. */}
+              {compras.enviadasEmTeste > 0 && (
+                <span className="text-caption text-fg-body">{emTeste}</span>
+              )}
+            </div>
           </div>
-
-          <div className="flex min-w-0 flex-col gap-0.5 sm:px-4">
-            <span className="text-caption text-fg-muted">Sem atribuição da Meta</span>
-            <span className="text-label font-semibold text-fg-strong tabular-nums">
-              {compras.semAtribuicaoMeta.total} ·{' '}
-              {dinheiro(compras.semAtribuicaoMeta.valor, compras.moeda)}
-            </span>
-            <span className="text-caption text-fg-muted">
-              Fora do resultado da campanha — mas enviadas à Meta do mesmo jeito.
-            </span>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-0.5 sm:pl-4">
-            <span className="text-caption text-fg-muted">Já aceitas pela Meta</span>
-            <span className="text-label font-semibold text-fg-strong tabular-nums">
-              {compras.enviadas} de {compras.total}
-            </span>
-            {/* C9 (D20): compra que só foi para o "Testar eventos" não é
-                aceite da Meta. Sem esta linha, "o resto" esconderia justamente
-                a venda que o Pixel em modo teste não contou. */}
-            {compras.enviadasEmTeste > 0 && (
-              <span className="text-caption text-fg-body">{emTeste}</span>
-            )}
-            <span className="text-caption text-fg-muted">
-              O resto está na fila ou foi marcado para não enviar.
-            </span>
-          </div>
-        </div>
-      </Link>
+        </Link>
+        {compras.total > 0 && <CenaDaCompraAMeta compras={compras} />}
+      </div>
     </Section>
   );
 }
@@ -755,8 +828,7 @@ export function PainelDeEventos() {
     return [
       {
         chave: 'fbclid',
-        titulo: 'Vieram de anúncio da Meta',
-        explicacao: 'Chegaram com fbclid, o carimbo do clique no criativo.',
+        titulo: 'Anúncio da Meta (fbclid)',
         dado: a.metaFbclid,
         icone: MousePointerClick,
         matiz: 'chart-1' as Matiz,
@@ -764,8 +836,7 @@ export function PainelDeEventos() {
       },
       {
         chave: 'fbc',
-        titulo: 'Com cookie da Meta',
-        explicacao: 'O _fbc estava no navegador na hora da compra.',
+        titulo: 'Navegador (_fbc)',
         dado: a.metaFbc,
         icone: Sparkles,
         matiz: 'chart-1' as Matiz,
@@ -773,8 +844,7 @@ export function PainelDeEventos() {
       },
       {
         chave: 'gclid',
-        titulo: 'Vieram do Google Ads',
-        explicacao: 'Chegaram com gclid, gbraid ou wbraid.',
+        titulo: 'Google (gclid)',
         dado: a.google,
         icone: Globe,
         matiz: 'chart-3' as Matiz,
@@ -782,8 +852,7 @@ export function PainelDeEventos() {
       },
       {
         chave: 'ttclid',
-        titulo: 'Vieram do TikTok Ads',
-        explicacao: 'Chegaram com ttclid.',
+        titulo: 'TikTok (ttclid)',
         dado: a.tiktok,
         icone: Globe,
         matiz: 'chart-4' as Matiz,
@@ -791,8 +860,7 @@ export function PainelDeEventos() {
       },
       {
         chave: 'msclkid',
-        titulo: 'Vieram do Microsoft Ads',
-        explicacao: 'Chegaram com msclkid.',
+        titulo: 'Microsoft (msclkid)',
         dado: a.microsoft,
         icone: Globe,
         matiz: 'chart-5' as Matiz,
@@ -800,8 +868,7 @@ export function PainelDeEventos() {
       },
       {
         chave: 'sem',
-        titulo: 'Sem atribuição',
-        explicacao: 'Orgânico, direto, ou o clique se perdeu antes da compra.',
+        titulo: 'Sem origem conhecida',
         dado: a.semAtribuicao,
         icone: ArrowDownRight,
         matiz: 'neutro' as Matiz,
@@ -860,12 +927,9 @@ export function PainelDeEventos() {
       <div className="flex min-w-0 flex-col gap-3">
         {seletorDePeriodo}
         <p className="min-w-0 text-caption text-fg-muted">
-          {rotuloDoPeriodo(periodo)}: contagem feita sobre os últimos {resumo.amostra}{' '}
-          {resumo.amostra === 1 ? 'evento recebido' : 'eventos recebidos'} desta empresa. Teste da
-          equipe fica fora das porcentagens.
-          {atualizando && (
-            <span className="text-fg-body"> Refazendo a conta para a nova janela…</span>
-          )}
+          {rotuloDoPeriodo(periodo)} · {resumo.amostra === 1 ? 'último' : 'últimos'} {resumo.amostra}{' '}
+          {resumo.amostra === 1 ? 'evento' : 'eventos'}.
+          {atualizando && <span className="text-fg-body"> Refazendo a conta…</span>}
         </p>
       </div>
 
@@ -876,12 +940,9 @@ export function PainelDeEventos() {
       )}
 
       {!resumo.amostraCobreJanela && (
-        <Callout tone="warning" title="Este período é maior que a leitura">
+        <Callout tone="warning" title="Há mais eventos do que o painel lê">
           <p className="text-caption text-fg-body">
-            A conta olha os {resumo.amostra} eventos mais recentes desta empresa, e o mais antigo
-            deles já está dentro do período escolhido. Existe evento nesta janela que ficou de fora:
-            os números abaixo são um piso, não o total. Escolha um período mais curto para ter a
-            contagem fechada.
+            Os números abaixo são um mínimo. Escolha um período mais curto para ver o total.
           </p>
         </Callout>
       )}
@@ -890,14 +951,14 @@ export function PainelDeEventos() {
         <EstadoVazio
           icone={Inbox}
           titulo="Nenhum evento chegou neste período"
-          motivo="Nada desta empresa chegou na janela escolhida. Se o webhook acabou de ser instalado, o primeiro evento aparece aqui assim que a primeira venda entrar."
+          motivo="Nada chegou nesta janela. A primeira venda aparece aqui assim que entrar."
           acao={
             <Button
               variant="outline"
               size="sm"
               onClick={() => setPeriodo({ dias: '90', de: null, ate: null })}
             >
-              Olhar os últimos 90 dias
+              Ver os últimos 90 dias
             </Button>
           }
         />
@@ -922,8 +983,8 @@ export function PainelDeEventos() {
           {porEvento.length > 0 && (
             <Section
               title="Os eventos que mais chegaram"
-              description="Clique num evento para ver, logo abaixo, a lista só dele."
-              icon={Target}
+              description="Clique para ver quem mandou."
+              icon={IconeDosEventos}
             >
               <div className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
                 {porEvento.map((e) => (
@@ -943,9 +1004,6 @@ export function PainelDeEventos() {
                   />
                 ))}
               </div>
-              <p className="text-caption text-fg-muted">
-                A contagem é dos eventos reais do período — teste interno fica de fora.
-              </p>
             </Section>
           )}
 
@@ -965,7 +1023,7 @@ export function PainelDeEventos() {
                 className={cn('size-3.5 transition-transform', detalhes && 'rotate-180')}
                 aria-hidden
               />
-              {detalhes ? 'Esconder' : 'Ver'} como o console está funcionando
+              {detalhes ? 'Esconder' : 'Ver'} como o painel funciona
             </Button>
 
             {detalhes && (
@@ -973,8 +1031,8 @@ export function PainelDeEventos() {
                 {/* ---------------- volume ---------------- */}
                 <Section
                   title="O que chegou e o que saiu"
-                  description="Cada card abre, aqui embaixo, a lista dos eventos que ele conta."
-                  icon={Inbox}
+                  description="Clique num cartão para ver a lista."
+                  icon={IconeDoVolume}
                 >
                   <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                     <CardPainel
@@ -988,7 +1046,7 @@ export function PainelDeEventos() {
                     />
                     <CardPainel
                       titulo="Enviados à Meta"
-                      explicacao="A API de Conversões aceitou o evento."
+                      explicacao="A Meta aceitou."
                       total={volume.enviados.total}
                       pct={volume.enviados.pct}
                       icone={CheckCircle2}
@@ -1002,7 +1060,7 @@ export function PainelDeEventos() {
                     />
                     <CardPainel
                       titulo="Na fila"
-                      explicacao="Esperando um clique seu ou uma regra automática."
+                      explicacao="Esperando você ou uma Regra."
                       total={volume.naFila.total}
                       pct={volume.naFila.pct}
                       icone={Clock}
@@ -1024,7 +1082,7 @@ export function PainelDeEventos() {
                     />
                     <CardPainel
                       titulo="Testes internos"
-                      explicacao="Ficam fora de toda porcentagem, de propósito."
+                      explicacao="Fora das porcentagens."
                       total={volume.testesEquipe}
                       icone={FlaskConical}
                       matiz="chart-4"
@@ -1040,14 +1098,13 @@ export function PainelDeEventos() {
                 <Section
                   title="De onde veio o tráfego"
                   description="A porcentagem é sobre os eventos reais do período, sem os testes internos."
-                  icon={MousePointerClick}
+                  icon={IconeDaOrigem}
                 >
                   <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                     {cardsDeAtribuicao.map((c) => (
                       <CardPainel
                         key={c.chave}
                         titulo={c.titulo}
-                        explicacao={c.explicacao}
                         total={c.dado.total}
                         pct={c.dado.pct}
                         icone={c.icone}
@@ -1059,16 +1116,15 @@ export function PainelDeEventos() {
                     ))}
                   </div>
                   <p className="text-caption text-fg-muted">
-                    Um mesmo evento pode carregar mais de um sinal — quem clicou no anúncio da Meta e já
-                    tinha o cookie conta nos dois cards. Por isso estas porcentagens não somam 100 %.
+                    Um evento pode ter mais de um sinal; por isso não soma 100%.
                   </p>
                 </Section>
 
                 {/* ---------------- qualidade ---------------- */}
                 <Section
                   title="Qualidade do que saiu"
-                  description="O EMQ é a nota que a Meta dá ao pareamento de cada evento enviado."
-                  icon={Gauge}
+                  description="Nota da Meta de 0 a 10 (EMQ) para cada evento enviado."
+                  icon={IconeDaQualidade}
                 >
                   <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <CardPainel
@@ -1110,7 +1166,7 @@ export function PainelDeEventos() {
                           {formatarDinheiro(receitaEnviada.total, receitaEnviada.moeda)}
                         </span>
                         <span className="text-caption text-fg-muted">
-                          Soma do valor dos eventos que a Meta aceitou no período.
+                          Valor enviado: soma dos eventos aceitos.
                           {volume.enviadosEmTeste > 0 &&
                             ' Os envios em modo teste ficam fora da soma.'}
                         </span>
@@ -1129,8 +1185,8 @@ export function PainelDeEventos() {
         <Section
           id="recorte-do-painel"
           title={`Eventos: ${recorte.rotulo}`}
-          description={`A mesma lista da Fila, no período "${rotuloDoPeriodo(periodo)}", já filtrada pelo card que você clicou.`}
-          icon={Inbox}
+          description="Só os eventos deste cartão."
+          icon={IconeDoRecorte}
           action={
             /* Os dois botões empilham no celular em vez de empurrar o
                cabeçalho para fora da tela. */
@@ -1173,7 +1229,7 @@ export function PainelDeEventos() {
                 size="sm"
                 onClick={() => setPeriodo({ dias: '90', de: null, ate: null })}
               >
-                Olhar os últimos 90 dias
+                Ver os últimos 90 dias
               </Button>
             }
             limite={1000}

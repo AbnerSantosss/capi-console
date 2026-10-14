@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { AlertTriangle, Eraser, FlaskConical, Target } from '@/components/ui/icones';
 
@@ -21,6 +22,7 @@ import { CORES_EMQ } from '@/lib/emq';
 import { cn } from '@/lib/utils';
 import type { DispatchResult } from './tipos';
 import { useBrandStore } from '@/stores/useBrandStore';
+import { IconeDoAssunto } from '@/components/cenas';
 
 interface Props {
   onResult: (r: DispatchResult) => void;
@@ -34,23 +36,35 @@ interface Props {
   onAbrirMarcas: () => void;
 }
 
-/** Um so destino, um so link: "Trocar pixel" leva para a pagina dos Pixels. */
-const LINK_TROCAR_PIXEL = '/pixels';
+/**
+ * Um so destino, um so link: "Trocar pixel" leva para a aba Pixels da empresa
+ * desta tela (`/e/<slug>/pixels`). Fora de `/e/<slug>/…`, a rota antiga.
+ */
+function useLinkTrocarPixel(): string {
+  const params = useParams<{ slug?: string }>();
+  return params?.slug ? `/e/${encodeURIComponent(params.slug)}/pixels` : '/pixels';
+}
+
+/** O3: o ícone do título com a cor e a entrada curta do assunto. */
+function IconeDoPixel() {
+  return <IconeDoAssunto assunto="evento" icone={Target} />;
+}
 
 export function DestinationSummary() {
   const marcas = useBrandStore((state) => state.marcas);
   const marcaAtivaId = useBrandStore((state) => state.marcaAtivaId);
   const ativa = marcas.find((marca) => marca.id === marcaAtivaId) ?? marcas[0];
   const emTeste = Boolean(ativa?.testCode?.trim());
+  const linkTrocarPixel = useLinkTrocarPixel();
 
   return (
     <Panel
       title="Pixel e ambiente"
-      icon={Target}
+      icon={IconeDoPixel}
       tone={emTeste ? 'default' : 'warning'}
       action={
         <Link
-          href={LINK_TROCAR_PIXEL}
+          href={linkTrocarPixel}
           className={buttonVariants({ size: 'sm', variant: 'ghost' })}
         >
           Trocar pixel
@@ -113,14 +127,13 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
           são coisas diferentes: este diz COMO sai, aquele diz o que sair
           custa. */}
       <p className="text-caption text-fg-muted">
-        Um evento por vez, revisado por você. Nada vai para a Meta antes de você
-        clicar em{' '}
+        Nada sai antes de você clicar em{' '}
         <strong className="font-medium text-fg-body">Enviar evento</strong>.
       </p>
 
       <Panel
         title="Pixel que recebe"
-        icon={Target}
+        icon={IconeDoPixel}
         tone={d.emTeste ? 'default' : 'warning'}
         action={
           <Button size="sm" variant="ghost" onClick={onAbrirMarcas}>
@@ -176,9 +189,9 @@ export function DispatchPanel({ onResult, onAbrirMarcas }: Props) {
               aparece em <strong>Testar eventos</strong> e não entra nas métricas.
             </Callout>
           ) : (
-            <Callout tone="warning" icon={AlertTriangle} title="Produção — evento real">
-              Esta conversão entra nas métricas da conta e alimenta o algoritmo.
-              Só envie vendas que aconteceram de verdade.
+            <Callout tone="warning" icon={AlertTriangle} title="Produção">
+              Evento real: entra nas métricas e alimenta o algoritmo. Envie só
+              vendas que aconteceram.
             </Callout>
           )}
         </div>
@@ -244,6 +257,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
   const d = useDisparo(onResult, onAbrirMarcas);
   const emq = useEmq();
   const cor = CORES_EMQ[emq.nivel];
+  const linkTrocarPixel = useLinkTrocarPixel();
 
   return (
     <>
@@ -257,7 +271,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
       >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">
           <Link
-            href={LINK_TROCAR_PIXEL}
+            href={linkTrocarPixel}
             className={cn(
               'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-caption font-semibold tracking-wide uppercase',
               d.emTeste

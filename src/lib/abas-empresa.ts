@@ -30,7 +30,7 @@ export interface AbaDoTopo {
 export const ABAS_DO_TOPO: ReadonlyArray<AbaDoTopo> = [
   { segmento: '', rotulo: 'Visão geral', icone: '/brand/nav/visao-geral-72.png' },
   { segmento: 'dominio', rotulo: 'Domínio', icone: '/brand/nav/dominio-72.png' },
-  { segmento: 'fontes', rotulo: 'Fontes', icone: '/brand/nav/fontes-72.png' },
+  { segmento: 'fontes', rotulo: 'Instalação', icone: '/brand/nav/fontes-72.png' },
   { segmento: 'pixels', rotulo: 'Pixels', icone: '/brand/nav/pixels-72.png' },
   { segmento: 'eventos', rotulo: 'Eventos', icone: '/brand/nav/eventos-72.png' },
   // PENDENTE: arte própria (`teste-72.png`). Por ora, a mesma de Eventos.

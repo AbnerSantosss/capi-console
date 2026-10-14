@@ -14,6 +14,11 @@
  * depois, pelo PIX, é um evento sem dono — dinheiro de tráfego gasto sem
  * atribuição. Esta tela é o lugar onde isso se liga.
  *
+ * E3 (14/10): a ordem da seção segue o pedido do dono — faixa "Próximo
+ * passo", o site, como instalar (um caminho só: GTM ou site), conferir,
+ * eventos extras e a chave, recolhida. Tudo que recolhe usa `hidden`, nunca
+ * desmonta: o campo do site guarda rascunho.
+ *
  * O gerador de código NÃO é importado aqui: as tags vêm prontas de
  * /api/tag/gerar, para o bundle do navegador não carregar o núcleo do coletor.
  */
@@ -28,9 +33,10 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  CheckCircle2,
   Copy,
   Globe,
-  KeyRound,
+  Lock,
   Plus,
   RefreshCw,
   ShieldAlert,
@@ -39,8 +45,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { EstadoVazio } from '@/components/common/EstadoVazio';
-import { Callout, Field, Panel, ParamChip, StatusDot } from '@/components/common/primitives';
+import { Callout, Field, HelpTip, ParamChip, StatusDot } from '@/components/common/primitives';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { enderecoDaAba } from '@/lib/abas-empresa';
 import { slugDoEndereco } from '@/lib/empresa-do-endereco';
@@ -53,8 +58,13 @@ import {
 } from '@/lib/tag-dominios';
 import { useEnderecosProntos } from '@/components/dominio/AbaDominio';
 import { enderecoProprioDe } from '@/components/dominio/mensagens-dominio';
-import { OndeInstalarTag } from '@/components/instalacao/OndeInstalarTag';
+import {
+  OndeInstalarTag,
+  TituloDoBloco,
+  type CaminhoDeInstalacao,
+} from '@/components/instalacao/OndeInstalarTag';
 import { EventosExtras } from '@/components/instalacao/EventosExtras';
+import { IconeChave, IconeSites } from '@/components/instalacao/icones-animados';
 import type { TagGerada } from '@/components/instalacao/tag-estado';
 import type { RegraRoteamento } from '@/lib/config-store';
 
@@ -130,6 +140,11 @@ export function TagDoSite({
   // de um booleano de "carregando" impede o pior erro desta aba: mostrar a tag
   // do domínio anterior, que o operador copiaria e mandaria ao cliente errado.
   const [marcaCarregada, setMarcaCarregada] = useState('');
+  // E3: o caminho escolhido (GTM ou site) vale para os passos, a faixa
+  // "Próximo passo" e os eventos extras. Só tela: não grava nada.
+  const [caminho, setCaminho] = useState<CaminhoDeInstalacao>('gtm');
+  const [verSites, setVerSites] = useState(false);
+  const [verChave, setVerChave] = useState(false);
   // O tempo relativo só existe depois da hidratação: o servidor e o navegador
   // renderizariam minutos diferentes e o React reclamaria da diferença.
   const montado = useSyncExternalStore(assinarNada, () => true, () => false);
@@ -267,26 +282,231 @@ export function TagDoSite({
   /* Render                                                            */
   /* ---------------------------------------------------------------- */
 
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
-      {/* 1 — por que esta tag existe -------------------------------- */}
-      <p className="max-w-3xl text-body text-fg-body">
-        O webhook da plataforma não manda <ParamChip>PageView</ParamChip>{' '}
-        nenhum, então a Meta não vê visita alguma no site e o algoritmo otimiza
-        sem sinal de topo. A tag do navegador cobre esse buraco e ainda captura,
-        na hora da visita, os cookies <ParamChip>fbc</ParamChip> e{' '}
-        <ParamChip>fbp</ParamChip> e a atribuição que a venda por PIX perde — o
-        comprador paga no aplicativo do banco e nunca mais volta ao navegador.
-      </p>
+  // A faixa "Próximo passo" copia o PageView do caminho escolhido.
+  const pageviewPronto = tagsNoAr.find((t) => t.evento.origem === 'tag.pageview');
+  const enviando = dominios.filter((d) => (d.hits ?? 0) > 0).length;
+  const enderecoDaFila = slug ? `${enderecoDaAba(slug, 'eventos')}?vista=fila` : '';
 
-      {/* 2 — pré-requisito: o site na lista ---------------------------- */}
-      {siteNaLista ? (
-        <StatusDot tone="success" icon={Globe}>
-          {algumRecebendo
-            ? 'Pré-requisito atendido — site permitido e já recebendo eventos.'
-            : 'Pré-requisito atendido — site permitido. Nenhum evento chegou ainda.'}
-        </StatusDot>
-      ) : (
+  return (
+    <div className="flex min-w-0 flex-col gap-8">
+      {/* 0 — próximo passo: uma frase e um botão, conforme o estado ------ */}
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-panel bg-surface-2 p-4">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-caption font-semibold text-fg-muted">Próximo passo</span>
+          {!siteNaLista ? (
+            <span className="text-body font-semibold text-fg-strong">Cadastre o site do cliente.</span>
+          ) : algumRecebendo ? (
+            <StatusDot tone="success" icon={CheckCircle2}>
+              Pronto: o site está enviando.
+            </StatusDot>
+          ) : (
+            <span className="text-body font-semibold text-fg-strong">Copie o código e publique.</span>
+          )}
+        </div>
+        {!siteNaLista ? (
+          <Button onClick={focarCampoDeDominio}>
+            <Plus className="size-4" aria-hidden />
+            Cadastrar site
+          </Button>
+        ) : !algumRecebendo ? (
+          <Button
+            disabled={!pageviewPronto}
+            onClick={() => pageviewPronto && copiar(pageviewPronto[caminho], 'faixa')}
+          >
+            {copiado === 'faixa' ? (
+              <Check className="size-4" aria-hidden />
+            ) : (
+              <Copy className="size-4" aria-hidden />
+            )}
+            Copiar código
+          </Button>
+        ) : null}
+      </div>
+
+      {/* 1 — seu site (sites permitidos) -------------------------------- */}
+      <div className="flex min-w-0 flex-col gap-3">
+        <TituloDoBloco
+          desenho={<IconeSites />}
+          acao={
+            siteNaLista ? (
+              <Button
+                size="sm"
+                variant="outline"
+                aria-expanded={verSites}
+                aria-controls="tag-sites"
+                onClick={() => setVerSites((v) => !v)}
+              >
+                {verSites ? 'Esconder sites' : 'Ver sites'}
+              </Button>
+            ) : null
+          }
+        >
+          Seu site
+        </TituloDoBloco>
+
+        {siteNaLista && (
+          <StatusDot tone={algumRecebendo ? 'success' : 'warning'} icon={Globe}>
+            {algumRecebendo
+              ? 'Site cadastrado e enviando.'
+              : 'Site cadastrado. Nenhum evento chegou ainda.'}
+          </StatusDot>
+        )}
+
+        {/* Recolhido com `hidden`, nunca desmontado: o campo do site guarda
+            rascunho. Sem site, fica sempre aberto. */}
+        <div id="tag-sites" hidden={siteNaLista && !verSites} className="flex min-w-0 flex-col gap-3">
+          <p className="flex items-center gap-2 text-body text-fg-body">
+            <Lock className="size-4 shrink-0 text-tinta" aria-hidden />
+            Só os sites desta lista conseguem enviar.
+          </p>
+
+          {dominios.length === 0 ? (
+            <div className="flex flex-col gap-0.5">
+              <p className="text-label font-semibold text-fg-strong">Nenhum site ainda.</p>
+              <p className="text-body text-fg-body">Cadastre o site do cliente para gerar a tag.</p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {dominios.map((d) => {
+                const relativo =
+                  montado && d.ultimoHit
+                    ? formatDistanceToNow(new Date(d.ultimoHit), {
+                        addSuffix: true,
+                        locale: ptBR,
+                      })
+                    : null;
+                const instalado = Boolean(d.ultimoHit);
+                // V8: com subdomínio, a tag só chama o endereço do cliente depois
+                // de medido (`true`); `false` = ainda no nosso endereço;
+                // `undefined` = a medição não voltou.
+                const proprio = enderecoProprioDe(d);
+                const medida = proprio ? prontoDe(d) : false;
+                return (
+                  <li key={d.id} className="rounded-panel bg-surface-2 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
+                          {d.host}
+                        </p>
+                        {proprio && medida !== true ? (
+                          // V8: subdomínio cadastrado, endereço dele ainda não
+                          // medido como pronto — a tag chama o NOSSO endereço
+                          // (`endpointDoDominio` na rota) e continua coletando.
+                          <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
+                            <span>A tag chama:</span>
+                            {medida === undefined ? (
+                              <span>conferindo se {proprio} já responde…</span>
+                            ) : (
+                              <>
+                                <ParamChip>{hostDaTag({ ...d, subdominio: undefined }, base)}</ParamChip>
+                                <span>
+                                  nosso endereço, até{' '}
+                                  <span className="wrap-token font-mono">{proprio}</span> ficar
+                                  pronto. A tag continua coletando.
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        ) : (
+                          <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
+                            <span>A tag chama:</span>
+                            <ParamChip>{hostDaTag(d, base)}</ParamChip>
+                            <span>
+                              {d.subdominio
+                                ? 'domínio do cliente; o cookie próprio ainda depende do certificado.'
+                                : 'nosso endereço: funciona, ainda como terceiro.'}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+
+                      {removendoId === d.id ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <span className="text-caption text-warning">
+                            A coleta deste site para na hora.
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={salvando}
+                            onClick={() => remover(d)}
+                          >
+                            Confirmar remoção
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRemovendoId(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => setRemovendoId(d.id)}>
+                          <Trash2 className="size-3.5 text-danger" aria-hidden />
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-3">
+                      <StatusDot tone={instalado ? 'success' : 'warning'}>
+                        {instalado
+                          ? `Último evento: ${relativo ?? `em ${dataCurta(d.ultimoHit)}`}`
+                          : 'Ainda não recebeu nada'}
+                      </StatusDot>
+                      <span className="text-label text-fg-body tabular">
+                        {d.hits} evento{d.hits === 1 ? '' : 's'} recebido
+                        {d.hits === 1 ? '' : 's'}
+                      </span>
+                      <span className="text-label text-fg-body">
+                        Cadastrado em {dataCurta(d.criadoEm)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="flex flex-col gap-3 rounded-panel bg-surface-2 p-4 sm:flex-row sm:items-end">
+            <Field
+              id="tag-dominio-novo"
+              label="Site do cliente"
+              helper="Pode colar a URL inteira."
+              error={erroHostFinal ?? undefined}
+              className="min-w-0 flex-1"
+            >
+              <Input
+                id="tag-dominio-novo"
+                value={dominioNovo}
+                placeholder="codigovencedor.com.br"
+                onChange={(e) => setDominioNovo(e.target.value)}
+                onBlur={() => setDominioNovo(normalizarDominio(dominioNovo))}
+                className="wrap-token font-mono"
+              />
+            </Field>
+            <Button onClick={adicionar} disabled={!podeAdicionar} className="sm:mb-6">
+              <Plus className="size-4" aria-hidden />
+              {salvando ? 'Salvando…' : 'Cadastrar site'}
+            </Button>
+          </div>
+
+          {/* V8: o subdomínio, o registro de DNS e a mensagem para o cliente
+              moram na aba Domínio. Aqui, uma linha só, com o caminho. */}
+          <p className="flex flex-wrap items-center gap-x-2 text-body text-fg-body">
+            O domínio próprio fica na aba Domínio.
+            {slug && (
+              <Link
+                href={enderecoDaAba(slug, 'dominio')}
+                className="inline-flex items-center gap-1 font-medium text-fg-strong underline underline-offset-2"
+              >
+                Abrir a aba Domínio
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {/* Pré-requisito: o site vem antes, logo acima ---------------------- */}
+      {!siteNaLista && (
         <Callout
           tone="warning"
           icon={AlertTriangle}
@@ -294,17 +514,17 @@ export function TagDoSite({
           className="rounded-r-lg bg-warning/8 py-3 pr-3"
         >
           Cadastre o domínio do site do cliente em Sites permitidos, logo
-          abaixo — sem isso o coletor recusa os eventos.
+          acima — sem isso o coletor recusa os eventos.
         </Callout>
       )}
 
-      {/* 3 — gerar a tag ---------------------------------------------- */}
-      <div className="flex flex-col gap-3">
+      {/* 2 a 4 — como instalar, passos e código --------------------------- */}
+      <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-6">
         {dominios.length > 1 && (
           <div
             className="flex max-w-full flex-wrap gap-1 overflow-x-auto rounded-control border border-line-control bg-surface-2 p-1"
             role="group"
-            aria-label="Domínio das tags mostradas"
+            aria-label="Site das tags mostradas"
           >
             {dominios.map((d) => {
               const ativo = d.id === alvoId;
@@ -341,298 +561,122 @@ export function TagDoSite({
           temDominio={dominios.length > 0}
           copiar={copiar}
           copiado={copiado}
+          caminho={caminho}
+          aoEscolherCaminho={setCaminho}
+          aoCadastrarSite={focarCampoDeDominio}
         />
       </div>
 
-      {/* 4 — eventos extras (opcional) --------------------------------- */}
+      {/* 5 — conferir --------------------------------------------------- */}
+      {siteNaLista && (
+        <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-6">
+          <TituloDoBloco icone={CheckCircle2}>Conferir</TituloDoBloco>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <StatusDot tone={enviando > 0 ? 'success' : 'warning'} icon={Globe}>
+              {`${enviando} de ${dominios.length} ${dominios.length === 1 ? 'site enviando' : 'sites enviando'}`}
+            </StatusDot>
+            {enderecoDaFila && (
+              <Link
+                href={enderecoDaFila}
+                className="inline-flex items-center gap-1 text-body font-medium text-fg-strong underline underline-offset-2"
+              >
+                Abrir a Fila
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 6 — eventos extras (recolhido) ---------------------------------- */}
       <EventosExtras
         tags={tagsNoAr}
         regras={regras}
         copiar={copiar}
         copiado={copiado}
+        caminho={caminho}
       />
 
-      {/* 5 — domínios ---------------------------------------------- */}
-      <Panel title="Sites permitidos" icon={Globe}>
-        <p className="text-caption text-fg-muted">
-          A lista abaixo é a única tranca do endereço público: o coletor só
-          aceita evento cujo <ParamChip>Origin</ParamChip> esteja aqui. Site
-          fora da lista é recusado, e site nenhum na lista significa nenhuma
-          coleta.
-        </p>
-
-        {dominios.length === 0 ? (
-          <EstadoVazio
-            className="mt-3"
-            icone={Globe}
-            titulo="Nenhum domínio cadastrado"
-            motivo="Com a lista vazia o coletor recusa tudo: nenhum site pode mandar evento. Cadastre o domínio do cliente para o console gerar as tags."
-            acao={
-              <Button variant="outline" onClick={focarCampoDeDominio}>
-                <Plus className="size-4" aria-hidden />
-                Cadastrar domínio
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="mt-3 flex flex-col gap-3">
-            {dominios.map((d) => {
-              const relativo =
-                montado && d.ultimoHit
-                  ? formatDistanceToNow(new Date(d.ultimoHit), {
-                      addSuffix: true,
-                      locale: ptBR,
-                    })
-                  : null;
-              const instalado = Boolean(d.ultimoHit);
-              // V8: com subdomínio, a tag só chama o endereço do cliente depois
-              // de medido (`true`); `false` = ainda no nosso endereço;
-              // `undefined` = a medição não voltou.
-              const proprio = enderecoProprioDe(d);
-              const medida = proprio ? prontoDe(d) : false;
-              return (
-                <li
-                  key={d.id}
-                  // FASE 3a: a lista mora dentro de um `Panel` (`surface-1`).
-                  // Item em `surface-1` dentro dele = degrau zero; `surface-2`
-                  // põe os 0.053 de L que o G3′ exige e dispensa a borda.
-                  className="rounded-panel bg-surface-2 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="wrap-token font-mono text-label font-semibold text-fg-strong">
-                        {d.host}
-                      </p>
-                      {proprio && medida !== true ? (
-                        // V8: subdomínio cadastrado, endereço dele ainda não
-                        // medido como pronto — a tag chama o NOSSO endereço
-                        // (`endpointDoDominio` na rota) e continua coletando.
-                        <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
-                          <span>A tag chama:</span>
-                          {medida === undefined ? (
-                            <span>conferindo se {proprio} já responde…</span>
-                          ) : (
-                            <>
-                              <ParamChip>{hostDaTag({ ...d, subdominio: undefined }, base)}</ParamChip>
-                              <span>
-                                nosso endereço, até o endereço próprio{' '}
-                                <span className="wrap-token font-mono">{proprio}</span> ficar
-                                pronto. A tag continua coletando; o andamento fica na aba
-                                Domínio.
-                              </span>
-                            </>
-                          )}
-                        </p>
-                      ) : (
-                        <p className="mt-1 flex flex-wrap items-center gap-2 text-label text-fg-body">
-                          <span>A tag chama:</span>
-                          <ParamChip>{hostDaTag(d, base)}</ParamChip>
-                          <span>
-                            {d.subdominio
-                              ? 'subdomínio do cliente — a tag é chamada pelo domínio dele. O cookie de primeira parte gravado pelo servidor ainda depende do certificado, que está em preparação.'
-                              : 'nosso endereço — funciona, mas ainda como terceiro.'}
-                          </span>
-                        </p>
-                      )}
-                    </div>
-
-                    {removendoId === d.id ? (
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <span className="text-caption text-warning">
-                          A coleta deste site para na hora.
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={salvando}
-                          onClick={() => remover(d)}
-                        >
-                          Confirmar remoção
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setRemovendoId(null)}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setRemovendoId(d.id)}
-                      >
-                        <Trash2 className="size-3.5 text-danger" aria-hidden />
-                        Remover
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-3">
-                    <StatusDot tone={instalado ? 'success' : 'warning'}>
-                      {instalado
-                        ? `Último hit ${relativo ?? `em ${dataCurta(d.ultimoHit)}`}`
-                        : 'Nunca recebeu nada'}
-                    </StatusDot>
-                    <span className="text-label text-fg-body tabular">
-                      {d.hits} evento{d.hits === 1 ? '' : 's'} recebido
-                      {d.hits === 1 ? '' : 's'}
-                    </span>
-                    <span className="text-label text-fg-body">
-                      Cadastrado em {dataCurta(d.criadoEm)}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* Sem contorno: este bloco é uma SUPERFÍCIE dentro do cartão, e no v4
-            superfície se separa por luz (surface-2 sobre surface-1, ΔL 0,053),
-            não por linha. Borda é vocabulário de controle — do campo, do botão,
-            do que se clica —, e a linha aqui competia com as bordas dos próprios
-            inputs que o bloco contém. */}
-        <div className="mt-4 flex flex-col gap-4 rounded-panel bg-surface-2 p-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="tag-dominio-novo"
-              label="Domínio do site"
-              helper="Pode colar a URL inteira: o console guarda só o host, sem www e sem barra."
-              error={erroHostFinal ?? undefined}
-            >
-              <Input
-                id="tag-dominio-novo"
-                value={dominioNovo}
-                placeholder="codigovencedor.com.br"
-                onChange={(e) => setDominioNovo(e.target.value)}
-                onBlur={() => setDominioNovo(normalizarDominio(dominioNovo))}
-                className="wrap-token font-mono"
-              />
-            </Field>
-          </div>
-
-          <div className="flex justify-end">
-            <Button onClick={adicionar} disabled={!podeAdicionar}>
-              <Plus className="size-4" aria-hidden />
-              {salvando ? 'Salvando…' : 'Cadastrar domínio'}
-            </Button>
-          </div>
-        </div>
-
-        {/* V8: o subdomínio, o registro de DNS e a mensagem para o cliente
-            saíram daqui. No lugar, uma linha só, com o caminho. */}
-        <p className="mt-3 text-caption text-fg-muted">
-          O domínio próprio fica na aba Domínio: lá se escolhe o endereço da
-          tag dentro do site do cliente (como m.loja.com.br) e se copia a
-          mensagem com o registro de DNS.{' '}
-          {slug && (
-            <Link
-              href={enderecoDaAba(slug, 'dominio')}
-              className="inline-flex items-center gap-1 text-label text-tinta-texto underline-offset-4 hover:underline"
-            >
-              Abrir a aba Domínio
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
-          )}
-        </p>
-      </Panel>
-
-      {/* 6 — webhook da plataforma de vendas ------------------------- */}
+      {/* Webhook da plataforma de vendas (slot; a Instalação passa null) -- */}
       {blocoWebhood}
 
-      {/* 7 — chave pública ------------------------------------------ */}
-      <Panel title="Chave pública da tag" icon={KeyRound}>
-        <Callout
-          tone="warning"
-          icon={ShieldAlert}
-          title="Esta chave é pública de propósito"
-        >
-          Ela viaja dentro do HTML do cliente e qualquer visitante consegue lê-la
-          no código-fonte. Ela <strong>não é</strong> o segredo do webhook: o
-          segredo autentica a venda e nunca sai do servidor. Se os dois se
-          encostarem, qualquer pessoa forja um <ParamChip>Purchase</ParamChip> e
-          a Meta passa a aprender com venda que não existiu.
-        </Callout>
-
-        <Field
-          id="tag-chave"
-          label="Chave da tag"
-          helper="Ela só serve para o coletor saber de qual conta é o evento. Não abre nada e não autoriza evento de dinheiro."
-          className="mt-3"
-          action={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => copiar(tag.chave, 'chave')}
-            >
-              {copiado === 'chave' ? (
-                <Check className="size-3.5 text-success" aria-hidden />
-              ) : (
-                <Copy className="size-3.5" aria-hidden />
-              )}
-              Copiar
-            </Button>
-          }
-        >
-          <Input
-            id="tag-chave"
-            readOnly
-            value={tag.chave}
-            className="wrap-token font-mono"
-          />
-        </Field>
-
-        <div className="mt-3">
-          {confirmandoChave ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-caption text-warning">
-                Toda tag já instalada para de enviar até o cliente colar o código
-                novo. Nenhuma venda se perde — o webhook não usa esta chave.
-              </span>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={trocandoChave}
-                onClick={trocarChave}
-              >
-                {trocandoChave ? 'Gerando…' : 'Confirmar nova chave'}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setConfirmandoChave(false)}
-              >
-                Cancelar
-              </Button>
-            </div>
-          ) : (
+      {/* 7 — chave pública (recolhida: uso raro) ------------------------- */}
+      <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-6">
+        <TituloDoBloco
+          desenho={<IconeChave />}
+          acao={
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setConfirmandoChave(true)}
+              aria-expanded={verChave}
+              aria-controls="tag-chave-bloco"
+              onClick={() => setVerChave((v) => !v)}
             >
-              <RefreshCw className="size-3.5" aria-hidden />
-              Gerar nova chave
+              {verChave ? 'Esconder chave' : 'Ver chave'}
             </Button>
-          )}
-        </div>
-      </Panel>
-
-      {/* 8 — aviso de localhost ------------------------------------- */}
-      {ehLocal && (
-        <Callout
-          tone="warning"
-          icon={AlertTriangle}
-          title="As tags geradas apontam para localhost"
+          }
         >
-          Este console está em <code className="font-mono">{base}</code>, que só
-          existe nesta máquina. Uma tag copiada agora e instalada no site do
-          cliente não vai coletar nada. Publique o console num endereço público
-          (ou abra o túnel) e defina{' '}
-          <code className="font-mono">PUBLIC_BASE_URL</code> antes de mandar
-          qualquer código ao cliente.
+          Chave pública da tag
+        </TituloDoBloco>
+
+        <div id="tag-chave-bloco" hidden={!verChave} className="flex min-w-0 flex-col gap-3">
+          <Callout tone="warning" icon={ShieldAlert}>
+            <span className="inline-flex flex-wrap items-center gap-1">
+              Esta chave fica visível no site, e tudo bem.
+              Não é o segredo do webhook: o segredo nunca vai na tag.
+              <HelpTip
+                label="Por que separar a chave do segredo"
+                content="Se o segredo do webhook for parar na tag ou no GTM, qualquer pessoa consegue forjar uma venda."
+              />
+            </span>
+          </Callout>
+
+          <Field
+            id="tag-chave"
+            label="Chave da tag"
+            action={
+              <Button size="sm" variant="ghost" onClick={() => copiar(tag.chave, 'chave')}>
+                {copiado === 'chave' ? (
+                  <Check className="size-3.5 text-success" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
+                Copiar
+              </Button>
+            }
+          >
+            <Input id="tag-chave" readOnly value={tag.chave} className="wrap-token font-mono" />
+          </Field>
+
+          <div>
+            {confirmandoChave ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-caption text-warning">
+                  As tags instaladas param até você colar o código novo. As
+                  vendas continuam (o webhook não usa esta chave).
+                </span>
+                <Button size="sm" variant="destructive" disabled={trocandoChave} onClick={trocarChave}>
+                  {trocandoChave ? 'Gerando…' : 'Confirmar nova chave'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmandoChave(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setConfirmandoChave(true)}>
+                <RefreshCw className="size-3.5" aria-hidden />
+                Gerar nova chave
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 8 — aviso de computador local ----------------------------------- */}
+      {ehLocal && (
+        <Callout tone="warning" icon={AlertTriangle}>
+          Você está no computador local: as tags geradas só funcionam aqui.
+          Para o site real, use o endereço público.
         </Callout>
       )}
     </div>

@@ -6,7 +6,7 @@
  * O que este arquivo prova:
  *
  *   (a) `abas-empresa.ts` exporta as 8 abas na ordem do desenho (Visão geral,
- *       Domínio, Fontes, Pixels, Eventos, Teste, Regras, Configurações), e o `icone`
+ *       Domínio, Instalação, Pixels, Eventos, Teste, Regras, Configurações), e o `icone`
  *       de cada uma é um arquivo que existe em `public/brand/nav/`
  *   (b) `abaAtiva`: `/e/gtech/pixels` → `pixels`, `/e/gtech` → `''`, e `null`
  *       para outra empresa, aba desconhecida e caminho fora de `/e/`
@@ -101,11 +101,11 @@ const { destinoAoTrocar } = await import('../src/lib/empresa-do-endereco.ts');
 
 console.log('\na. As 8 abas, na ordem do desenho');
 
-const ORDEM = ['Visão geral', 'Domínio', 'Fontes', 'Pixels', 'Eventos', 'Teste', 'Regras', 'Configurações'];
+const ORDEM = ['Visão geral', 'Domínio', 'Instalação', 'Pixels', 'Eventos', 'Teste', 'Regras', 'Configurações'];
 ok(ABAS_DO_TOPO.length === 8, 'são 8 abas', `(${ABAS_DO_TOPO.length})`);
 ok(
   JSON.stringify(ABAS_DO_TOPO.map((a) => a.rotulo)) === JSON.stringify(ORDEM),
-  'na ordem Visão geral, Domínio, Fontes, Pixels, Eventos, Teste, Regras, Configurações',
+  'na ordem Visão geral, Domínio, Instalação, Pixels, Eventos, Teste, Regras, Configurações',
   JSON.stringify(ABAS_DO_TOPO.map((a) => a.rotulo))
 );
 ok(

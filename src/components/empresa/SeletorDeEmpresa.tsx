@@ -53,7 +53,7 @@ function iniciaisDe(nome: string): string {
  * (`--surface-0`, quase preta). Continua sem cor nova: sao os dois extremos da
  * paleta que ja existem.
  */
-function letraEscura(cor: string): boolean {
+export function letraEscura(cor: string): boolean {
   const casa = /^#([0-9a-f]{6})$/i.exec(cor.trim());
   if (!casa) return false;
   const n = Number.parseInt(casa[1], 16);

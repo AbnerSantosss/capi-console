@@ -29,7 +29,7 @@ export default async function PixelsDaEmpresa({
     <main className={consoleStyles.page} data-area="pixels">
       <ConsolePageHeader
         title="Pixels"
-        description="Cada Pixel guarda o número, o token da API de Conversões e o código de teste — é ele que separa teste de venda real."
+        description="Onde a Meta recebe os eventos."
         icon={Target}
       />
       <PixelsPanel key={empresaId} />

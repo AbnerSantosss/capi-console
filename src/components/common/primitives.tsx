@@ -427,7 +427,9 @@ export function Panel({
   }[tone];
 
   return (
-    <div className={cn(receitaCartao, filete, className)}>
+    // `data-painel`: gancho para uma tela tingir o painel aninhado sem mexer
+    // nesta receita (a aba Fontes sobe um degrau de superfície, 13/10).
+    <div className={cn(receitaCartao, filete, className)} data-painel="">
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-label font-semibold text-fg-strong">

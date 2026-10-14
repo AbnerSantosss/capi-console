@@ -3,7 +3,6 @@
 import {
   ArrowUpRight,
   History,
-  KeyRound,
   Plus,
   RefreshCw,
   Send,
@@ -15,9 +14,18 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
-import { Field, Section, Callout, StatusDot } from '@/components/common/primitives';
+import { Field, Section, StatusDot } from '@/components/common/primitives';
+import { IconeDoAssunto } from '@/components/cenas';
 import { cn } from '@/lib/utils';
 import type { Destino, Entrega, EventoRelay } from './tipos';
+
+/* O3 (E6a): o ícone de cada título de seção, na cor do assunto "webhook". */
+function IconeDoRepasse() {
+  return <IconeDoAssunto assunto="webhook" icone={ArrowUpRight} />;
+}
+function IconeDoHistorico() {
+  return <IconeDoAssunto assunto="webhook" icone={History} />;
+}
 
 /**
  * O Repasse (aba `retornos` de Regras): os endereços que recebem, depois de
@@ -84,10 +92,10 @@ export function Repasse({
     // continua a vista no cabecalho do Historico.
     <div id={id} className="flex min-w-0 scroll-mt-32 flex-col gap-5">
       <Section
-        icon={ArrowUpRight}
+        icon={IconeDoRepasse}
         variant="card"
         title="Repasse para outros sistemas"
-        description="Depois de cada envio, devolva ao n8n ou ao CRM o que a Meta respondeu."
+        description="Avisa outro sistema depois de cada envio."
         action={
           <Button size="sm" variant="outline" onClick={onNovo}>
             <Plus className="size-4" aria-hidden />
@@ -99,13 +107,7 @@ export function Repasse({
           <EstadoVazio
             icone={ArrowUpRight}
             titulo="Nenhum endereço de repasse"
-            motivo={
-              <>
-                Sem endereço, o resultado do envio fica só no arquivo{' '}
-                <code className="font-mono">logs/disparos.md</code> — o n8n e o
-                CRM nunca ficam sabendo se a Meta aceitou.
-              </>
-            }
+            motivo="Sem endereço, nenhum outro sistema sabe o que a Meta respondeu."
             acao={
               <Button variant="outline" onClick={onNovo}>
                 <Plus className="size-4" aria-hidden />
@@ -163,7 +165,7 @@ export function Repasse({
                     <Field
                       id={`url-${d.id}`}
                       label="URL"
-                      helper="Recebe POST com corpo JSON. O endereço novo nasce sem URL: cole aqui o desta empresa."
+                      helper="Cole o endereço do outro sistema."
                     >
                       <Input
                         id={`url-${d.id}`}
@@ -178,7 +180,7 @@ export function Repasse({
                   </div>
 
                   <p className="text-caption text-fg-muted">
-                    Nome e URL são salvos quando você sai do campo.
+                    Salva ao sair do campo.
                   </p>
 
                   <fieldset>
@@ -209,19 +211,14 @@ export function Repasse({
             ))}
           </ul>
         )}
-
-        <Callout tone="info" icon={KeyRound}>
-          O token da Meta e o segredo de entrada nunca entram no corpo enviado.
-          O retorno contém apenas os dados necessários para o sistema configurado.
-        </Callout>
       </Section>
 
       <Section
         id={ancoraHistorico}
-        icon={History}
+        icon={IconeDoHistorico}
         variant="card"
         title="Histórico do repasse"
-        description="As últimas 50 tentativas de entrega ao n8n ou CRM."
+        description="Últimas 50 tentativas."
         action={
           <div className="flex items-center gap-2">
             <Badge className="font-mono tabular">{entregas.length}</Badge>
@@ -236,7 +233,7 @@ export function Repasse({
           <EstadoVazio
             icone={History}
             titulo="Nenhuma entrega registrada"
-            motivo="O histórico só ganha linhas depois do primeiro envio com um endereço ativo. Se já houve envio, o endereço pode estar desligado."
+            motivo="Aparece aqui depois do primeiro envio."
             acao={
               <Button variant="outline" onClick={onAtualizar} disabled={salvando}>
                 <RefreshCw className="size-4" aria-hidden />
@@ -254,7 +251,7 @@ export function Repasse({
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-line">
-                  {['Quando', 'Endereço', 'Evento', 'HTTP', 'Tempo', 'Tentativas'].map((h) => (
+                  {['Quando', 'Endereço', 'Evento', 'Resposta', 'Tempo', 'Tentativas'].map((h) => (
                     <th
                       key={h}
                       scope="col"

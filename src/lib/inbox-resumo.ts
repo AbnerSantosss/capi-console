@@ -195,6 +195,14 @@ export interface ResumoInbox {
    */
   porDia: DiaDoResumo[];
   /**
+   * Entregas reais do período cujo nome de evento da plataforma contém
+   * "abandon" (`checkout_abandoned`, `pre_checkout_abandoned`,
+   * `checkout.lead.abandoned`...). Elas chegam e ficam como `ignorado` para a
+   * Meta; aqui só são contadas, no mesmo laço de `porEvento`. São eventos,
+   * não pessoas.
+   */
+  abandonos: number;
+  /**
    * A mesma conta na janela imediatamente anterior, do mesmo tamanho — só
    * quando a rota pede `comparar=1`; sem isso fica `undefined` e nada é
    * calculado. `null` quando a amostra lida não alcança a janela anterior
@@ -783,9 +791,11 @@ export function resumirInbox(
       : Math.round((comEmq.reduce((s, i) => s + (i.emq as number), 0) / comEmq.length) * 10) / 10;
 
   const contagem = new Map<string, number>();
+  let abandonos = 0;
   for (const i of reais) {
     const nome = nomeDoEvento(i);
     contagem.set(nome, (contagem.get(nome) ?? 0) + 1);
+    if (/abandon/i.test(nome)) abandonos++;
   }
   const porEvento = [...contagem.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -858,6 +868,7 @@ export function resumirInbox(
     },
     porEventoMeta: contarPorEventoMeta(reais),
     porDia,
+    abandonos,
     ...(opcoes.comparar === true
       ? { anterior: resumirAnterior(itens, periodo, inicio, fim, amostraNoTeto, maisAntigo) }
       : {}),

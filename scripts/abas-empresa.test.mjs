@@ -27,8 +27,9 @@
  *   f  `SeletorDeVista.tsx` tem as 4 vistas na ordem Resumo, Compras, Fila,
  *      Envio manual, e a página de Eventos o monta em todas as vistas.
  *   g  o cartão "Disparo manual" de `ExplicacaoDoDisparo.tsx` não leva mais a
- *      `href: '/'` (a Visão geral): leva a `eventos?vista=manual`, com o slug
- *      que a aba Regras passa.
+ *      `href: '/'` (a Visão geral): leva a `eventos?vista=manual`. Desde a
+ *      E6a a aba Regras não monta mais esse cartão: a `IntegrationsPage` monta
+ *      a `<CenaDuasChaves>` no lugar (g3).
  *
  * 🔴 Nenhuma rede e nenhuma escrita: este teste só LÊ fontes de `src/` e roda
  * o `empresa-abas.test.mjs` num processo filho (que tem o próprio espião). O
@@ -291,11 +292,13 @@ console.log('\n  g. "Disparo manual" leva ao envio manual da empresa');
 
 ok(!/href:\s*['"]\/['"]/.test(explicacao), "🔴 g1: ExplicacaoDoDisparo não tem mais href: '/'");
 ok(/eventos\?vista=manual/.test(explicacao), '🔴 g2: o destino do cartão manual contém eventos?vista=manual');
-const elementosExplicacao = paginaRegras.match(/<ExplicacaoDoDisparo\b[^>]*\/>/g) ?? [];
+// E6a: a aba Regras deixou o cartão "Qual tela faz o quê"; quem diz o que sai
+// sozinho agora é a cena das duas chaves, montada pela IntegrationsPage.
+const elementosExplicacao = paginaRegras.match(/<ExplicacaoDoDisparo\b/g) ?? [];
 ok(
-  elementosExplicacao.length > 0 && elementosExplicacao.every((e) => /\bslug=\{/.test(e)),
-  'g3: a aba Regras passa o slug da empresa ao ExplicacaoDoDisparo',
-  `${elementosExplicacao.length} uso(s)`
+  elementosExplicacao.length === 0 && /<CenaDuasChaves\b/.test(pagina),
+  'g3: a aba Regras não monta mais o ExplicacaoDoDisparo; a IntegrationsPage monta a <CenaDuasChaves>',
+  `${elementosExplicacao.length} uso(s) do ExplicacaoDoDisparo`
 );
 
 /* ---------------- Fim ---------------- */

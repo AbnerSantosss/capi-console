@@ -505,19 +505,21 @@
   min-width: 0;
 }
 
+/* HyperFrames E1: 4 cartoes (sem Cliques). 1 coluna -> 2x2 sem buraco a
+   40rem -> 4 colunas iguais a 60rem; o Faturado nao ocupa mais a linha. */
 @container (min-width: 40rem) {
   .gradeKpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .kpiValor {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 }
 
 @container (min-width: 60rem) {
   .gradeKpis {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.17fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .kpiValor {

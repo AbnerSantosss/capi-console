@@ -32,7 +32,7 @@ export default async function ConfiguracoesDaEmpresa({
     <main className={consoleStyles.page} data-area="painel">
       <ConsolePageHeader
         title="Configurações"
-        description="Os dados desta empresa: nome, logo, plataforma de vendas, apelido da URL e cor."
+        description="Nome, logo e endereço desta empresa."
         icon={Settings}
       />
       <div key={empresaId} className="flex max-w-2xl flex-col gap-6">
