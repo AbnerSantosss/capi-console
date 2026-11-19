@@ -42,6 +42,7 @@ import type { Integracoes } from '@/components/integrations/tipos';
 import { nomeDaPlataforma } from '@/lib/produto';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { IconeExpor } from './icones-animados';
+import { instrucoesParaODev } from './instrucoes-webhook';
 import { TituloDoBloco } from './OndeInstalarTag';
 
 /**
@@ -101,8 +102,6 @@ export interface WebhookInstalacaoPropriedades {
   entrada: Integracoes['entrada'];
   /** URL pública deste console, já sem a barra final. */
   base: string;
-  /** true quando a base é localhost — nenhuma plataforma consegue entregar aqui. */
-  ehLocal: boolean;
   /** Copia um texto e avisa. Vem de cima para o "Copiado" ficar sincronizado. */
   copiar: (texto: string, chave: string) => void | Promise<void>;
   /** Chave do último texto copiado, ou null. */
@@ -111,28 +110,41 @@ export interface WebhookInstalacaoPropriedades {
   onTrocarSegredo: () => void | Promise<void>;
   /** Grava o apelido novo. Devolve false quando o servidor recusou. */
   onSalvarRotulo: (rotulo: string) => Promise<boolean>;
-  /** Manda um recebimento de exemplo para a Fila. */
+  /** Manda um recebimento de exemplo para a Fila (o teste do console; nada vai à Meta). */
   onSimular: () => void | Promise<void>;
+  /** T-R04: true quando o webhook é o passo que falta. O "Copiar a URL" fica amarelo. */
+  principal?: boolean;
 }
 
 export function WebhookInstalacao({
   entrada,
   base,
-  ehLocal,
   copiar,
   copiado,
   onTrocarSegredo,
   onSalvarRotulo,
   onSimular,
+  principal = false,
 }: WebhookInstalacaoPropriedades) {
   const [mostrarUrlSensivel, setMostrarUrlSensivel] = useState(false);
   const [mostrarSegredo, setMostrarSegredo] = useState(false);
   const [salvandoRotulo, setSalvandoRotulo] = useState(false);
   // V7: o dia a dia desta tela é copiar UMA URL. O resto — o segredo, a URL
-  // antiga, a URL do n8n, o apelido, o teste pela linha de comando e o túnel —
-  // é de quem configura uma vez, e fica atrás de "Detalhes técnicos" (E3).
+  // antiga, a URL sem o segredo, o apelido, o teste pela linha de comando e o
+  // túnel — é de quem configura uma vez, e fica atrás de "Detalhes técnicos" (E3).
+  // M-14: as instruções para quem instala e o teste ficam à vista, fora dali.
   const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
   const idDetalhes = useId();
+  // true enquanto o teste está em voo: o botão não aceita um segundo clique.
+  const [mandandoTeste, setMandandoTeste] = useState(false);
+  const mandarTeste = async () => {
+    setMandandoTeste(true);
+    try {
+      await onSimular();
+    } finally {
+      setMandandoTeste(false);
+    }
+  };
 
   // De onde sai o nome da plataforma desta tela. A empresa vem do store e nao
   // de uma propriedade porque `InstalacaoPage` nao a tem: ela recebe do
@@ -202,17 +214,10 @@ export function WebhookInstalacao({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {ehLocal && (
-        <Callout tone="warning" icon={AlertTriangle}>
-          A plataforma só aceita endereço https. Use o endereço público.
-        </Callout>
-      )}
-
       <Field
         id="endpoint-rotulado"
         label={`URL para ${nomePlataforma}`}
         helper="Cole no webhook da plataforma. O final do endereço é o segredo: não mostre a ninguém."
-        className="rounded-panel bg-surface-2 p-4"
         action={
           <div className="flex flex-wrap gap-1">
             <Button
@@ -228,7 +233,11 @@ export function WebhookInstalacao({
               )}
               {mostrarUrlSensivel ? 'Ocultar' : 'Mostrar'}
             </Button>
-            <Button size="sm" onClick={() => copiar(endpointRotulado, 'ep-rotulado')}>
+            <Button
+              size="sm"
+              variant={principal ? 'default' : 'outline'}
+              onClick={() => copiar(endpointRotulado, 'ep-rotulado')}
+            >
               {copiado === 'ep-rotulado' ? (
                 <Check className="size-3.5" aria-hidden />
               ) : (
@@ -282,6 +291,35 @@ export function WebhookInstalacao({
           <p className="text-body text-fg-body">O botão Testar não conta como venda.</p>
         </div>
       )}
+
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => copiar(instrucoesParaODev({ url: endpointRotulado }), 'instrucoes')}
+          >
+            {copiado === 'instrucoes' ? (
+              <Check className="size-3.5 text-success" aria-hidden />
+            ) : (
+              <Copy className="size-3.5" aria-hidden />
+            )}
+            Copiar instruções para o dev
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={mandandoTeste}
+            onClick={() => void mandarTeste()}
+          >
+            <Send className="size-3.5" aria-hidden />
+            {mandandoTeste ? 'Mandando…' : 'Mandar um teste'}
+          </Button>
+        </div>
+        <p className="text-body text-fg-body">
+          O teste entra em Eventos → Fila e não vai para a Meta.
+        </p>
+      </div>
 
       <div>
         <Button
@@ -365,8 +403,8 @@ export function WebhookInstalacao({
 
           <Field
             id="endpoint-header"
-            label="URL para o n8n"
-            helper="Para quem usa o n8n."
+            label="URL sem o segredo"
+            helper="Para quem manda o segredo no cabeçalho X-CAPI-Secret."
             action={
               <Button
                 size="sm"
@@ -448,12 +486,6 @@ export function WebhookInstalacao({
             <pre className="wrap-token max-w-full overflow-x-auto whitespace-pre-wrap rounded-control border border-line-strong bg-surface-1 p-3 font-mono text-caption text-fg-strong">
               {curlVisivel}
             </pre>
-            <div>
-              <Button variant="outline" onClick={() => void onSimular()}>
-                <Send className="size-4" aria-hidden />
-                Simular recebimento
-              </Button>
-            </div>
           </div>
 
           <div className="flex min-w-0 flex-col gap-2">

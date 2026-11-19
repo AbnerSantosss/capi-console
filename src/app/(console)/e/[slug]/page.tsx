@@ -26,7 +26,7 @@ export default async function VisaoGeralDaEmpresa({
 }) {
   const empresa = await empresaDosParams(params);
   const empresaId = empresa.id;
-  const { checklist, estado, envio } = await lerChecklistDaEmpresa(empresa);
+  const { checklist, estado, envio, avisos } = await lerChecklistDaEmpresa(empresa);
 
   return (
     <VisaoGeral
@@ -37,6 +37,7 @@ export default async function VisaoGeralDaEmpresa({
       checklist={checklist}
       estado={estado}
       envio={envio}
+      avisos={avisos}
     />
   );
 }

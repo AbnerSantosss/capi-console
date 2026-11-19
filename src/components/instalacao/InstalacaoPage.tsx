@@ -16,23 +16,40 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Globe, Webhook } from '@/components/ui/icones';
+import { AlertTriangle, Globe, Webhook } from '@/components/ui/icones';
 
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import { Section, StatusDot } from '@/components/common/primitives';
+import { Callout, Section, StatusDot } from '@/components/common/primitives';
+import { Recolhido } from '@/components/common/Recolhido';
 import { TagDoSite } from '@/components/integrations/TagDoSite';
 import type { Integracoes } from '@/components/integrations/tipos';
 import type { DominioTag } from '@/lib/tag-dominios';
 import { WebhookInstalacao } from './WebhookInstalacao';
-import { IconeTag, IconeWebhook } from './icones-animados';
-import { PassoAPasso } from './PassoAPasso';
+import { seloDoWebhook } from './instrucoes-webhook';
+import { AvisoDeCaminhoUnico } from './AvisoDeCaminhoUnico';
+import { CenaDaDuplicidade } from './CenaDaDuplicidade';
 import s from './instalacao.module.css';
 
 /** Âncoras públicas desta tela. O `?aba=` antigo de `/automatico` aponta para cá. */
 const ANCORA_WEBHOOK = 'webhook';
 const ANCORA_TAG = 'tag';
+
+/** O passo que ainda falta: só ele ganha o botão amarelo (seção 3.2 do redesenho). */
+export type PassoQueFalta = 'tag' | 'webhook' | null;
+
+/**
+ * Regra do amarelo da Instalação: a tag falta enquanto nenhum site enviou
+ * evento; depois, o webhook falta enquanto o selo dele não está verde. Com os
+ * dois com sinal, nenhum botão é amarelo.
+ */
+export function passoQueFalta(sitesComSinal: number, tomDoWebhook: string): PassoQueFalta {
+  if (sitesComSinal === 0) return 'tag';
+  if (tomDoWebhook !== 'success') return 'webhook';
+  return null;
+}
 
 /** Campos onde o operador digita (os de só leitura e as caixas de marcar ficam de fora). */
 const TIPOS_DE_TEXTO = new Set(['text', 'search', 'url', 'email', 'tel', 'number']);
@@ -46,6 +63,7 @@ export function InstalacaoPage({
   empresaId,
   inicial,
   publicBaseUrl,
+  recebimento,
 }: {
   /** Empresa cujos dados vieram em `inicial` (a página remonta por ela). Vai no
    *  corpo de cada PUT e no header `X-Empresa-Id` de cada POST (o servidor
@@ -56,6 +74,11 @@ export function InstalacaoPage({
   /** URL publica (tunel). Vem do servidor para a URL copiada ser sempre a certa,
    *  mesmo quando o operador abre o console por localhost dentro da VPS. */
   publicBaseUrl?: string;
+  /** M-14: `ultimaEm` é a hora da última entrega REAL da plataforma (M-02), ou
+   *  null quando não há nenhuma. `lidoEm` é o relógio do servidor na hora da
+   *  leitura: servidor e navegador escrevem o mesmo "há N min" na primeira
+   *  pintura. */
+  recebimento?: { ultimaEm: string | null; lidoEm: string };
 }) {
   const [cfg, setCfg] = useState<Integracoes>(inicial.integracoes);
   const [salvando, setSalvando] = useState(false);
@@ -118,6 +141,29 @@ export function InstalacaoPage({
     if (alvo !== ANCORA_WEBHOOK && alvo !== ANCORA_TAG) return;
     document.getElementById(alvo)?.scrollIntoView({ block: 'start' });
   }, []);
+
+  // M-14: o "há N min" do selo do webhook. O relógio começa na hora que o
+  // servidor leu (mesmo texto no servidor e no navegador) e só anda dentro de
+  // temporizador ou de evento, nunca durante a renderização. Quando a pessoa
+  // volta para esta aba do navegador (foi à plataforma colar o endereço), a
+  // tela pede os dados de novo ao servidor; os campos digitados continuam.
+  const router = useRouter();
+  const [agora, setAgora] = useState<number>(() => Date.parse(recebimento?.lidoEm ?? '') || 0);
+  useEffect(() => {
+    const acertar = () => setAgora(Date.now());
+    const aoVoltar = () => {
+      if (document.visibilityState !== 'visible') return;
+      acertar();
+      router.refresh();
+    };
+    const relogio = window.setInterval(acertar, 60_000);
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      window.clearInterval(relogio);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
+  }, [router]);
+  const selo = seloDoWebhook({ ehLocal, ultimaEm: recebimento?.ultimaEm, agora });
 
   /**
    * C2 (T6), revisão rodada 2 — a leitura diz a empresa da TELA no header,
@@ -296,54 +342,55 @@ export function InstalacaoPage({
         body: JSON.stringify(exemplo),
       });
 
-      toast.success('Webhook simulado recebido', {
-        description: 'Ele aparece em Eventos → Fila.',
+      toast.success('Teste recebido.', {
+        description: 'Ele aparece em Eventos → Fila. Nada foi enviado à Meta.',
       });
       void carregar();
     } catch (e) {
       if (e instanceof SessaoExpirada) return;
-      toast.error('A simulação falhou.', {
-        description: e instanceof Error ? e.message : 'Erro desconhecido.',
+      toast.error('O teste não chegou.', {
+        description: e instanceof Error ? e.message : 'Recarregue a página e mande o teste de novo.',
       });
     }
   };
 
   const dominios = cfg.tag.dominios ?? [];
   const medindo = dominios.filter((d) => (d.hits ?? 0) > 0);
+  const principal = passoQueFalta(medindo.length, selo.tom);
 
   return (
     <div
-      className={`${s.pagina} flex min-w-0 flex-col gap-8`}
+      className={`${s.pagina} flex min-w-0 flex-col gap-6`}
       onFocus={aoFocarCampo}
       onInput={aoDigitar}
       onBlur={() => reavaliarRascunho()}
     >
-      {/* 13/10: o roteiro animado "Passo 1 / Passo 2" abre a aba e leva às
-          duas seções abaixo, na mesma cor de cada uma. */}
-      <PassoAPasso />
+      {/* T-R04 (seção 3.2 do redesenho): duas seções planas, numeradas, cada
+          uma com o selo de estado à direita do título. O código da tag e a URL
+          do webhook vêm primeiro; o resto fica recolhido. A tag vem antes (é o
+          que costuma faltar); as âncoras #tag e #webhook continuam as mesmas. */}
+      {ehLocal && (
+        <Callout tone="warning" icon={AlertTriangle}>
+          Você está no computador local: a tag e o webhook só funcionam no endereço público.
+        </Callout>
+      )}
 
-      {/* V7: dois cartões, um por fonte, cada um com o estado em palavra no
-          cabeçalho — a faixa de resumo com os dois estados e o índice de
-          âncoras saiu, porque cada cartão já diz o seu. A tag vem primeiro (é
-          o que costuma faltar instalar); o webhook depois (já costuma estar
-          pronto). As âncoras `#tag` e `#webhook` continuam as mesmas. */}
       <Section
         id={ANCORA_TAG}
         step={1}
-        icon={IconeTag}
-        variant="card"
-        className={`${s.secao} ${s.secaoTag}`}
-        title="Instalar a tag no site"
+        title="Tag do site"
         action={
           <StatusDot
-            tone={medindo.length > 0 ? 'success' : dominios.length > 0 ? 'warning' : 'neutral'}
+            tone={medindo.length > 0 ? 'success' : dominios.length > 0 ? 'neutral' : 'warning'}
             icon={Globe}
           >
             {dominios.length === 0
-              ? 'Nenhum site permitido ainda'
+              ? 'Sem site'
               : medindo.length === 0
-                ? 'Nenhum site enviou evento ainda'
-                : `${medindo.length} de ${dominios.length} site(s) enviando`}
+                ? 'Sem sinal'
+                : dominios.length > 1
+                  ? `Recebendo de ${medindo.length} de ${dominios.length} sites`
+                  : 'Recebendo'}
           </StatusDot>
         }
       >
@@ -351,44 +398,50 @@ export function InstalacaoPage({
           tag={cfg.tag}
           regras={cfg.regras}
           base={base}
-          ehLocal={ehLocal}
           onSalvarDominios={salvarDominios}
           onTrocarChave={novaChaveDaTag}
           salvando={salvando}
+          empresaId={empresaId}
+          principal={principal === 'tag'}
           blocoWebhood={null}
         />
       </Section>
 
-      {/* O estado do webhook é o que dá para provar: o endereço está sempre no
-          ar; que a plataforma de fato o usa, só uma venda chegando na Fila
-          confirma — não existe histórico de recebimento no modelo de dados.
-          Por isso o tom neutro, nunca o de sucesso. Em localhost, nenhuma
-          plataforma alcança o endereço: aí o estado é de alerta. */}
+      {/* M-14: o selo do webhook mostra o que dá para provar. Com a M-02 existe
+          a hora da última entrega real da plataforma: verde só quando ela é
+          das últimas 24 h; mais velha, ou nenhuma, o tom é neutro. O teste
+          mandado por esta tela não conta. Em localhost, nenhuma plataforma
+          alcança o endereço: aí o estado é de alerta. */}
       <Section
         id={ANCORA_WEBHOOK}
         step={2}
-        icon={IconeWebhook}
-        variant="card"
-        className={`${s.secao} ${s.secaoWebhook}`}
-        title="Instalar o webhook de vendas"
-        description="Cole este endereço na plataforma. A 1ª venda aparece na Fila."
+        title="Webhook de vendas"
+        className="border-t border-line pt-6"
         action={
-          <StatusDot tone={ehLocal ? 'warning' : 'neutral'} icon={Webhook}>
-            {ehLocal ? 'Só neste computador' : 'No ar'}
+          <StatusDot tone={selo.tom} icon={Webhook}>
+            {selo.texto}
           </StatusDot>
         }
       >
         <WebhookInstalacao
           entrada={cfg.entrada}
           base={base}
-          ehLocal={ehLocal}
           copiar={copiar}
           copiado={copiado}
+          principal={principal === 'webhook'}
           onTrocarSegredo={novoSegredo}
           onSalvarRotulo={salvarRotulo}
           onSimular={simular}
         />
       </Section>
+
+      {/* A cena da duplicidade explica, não é trabalho: fica recolhida no fim. */}
+      <Recolhido titulo="Por que um caminho só">
+        <div className="flex min-w-0 flex-col gap-4">
+          <AvisoDeCaminhoUnico />
+          <CenaDaDuplicidade />
+        </div>
+      </Recolhido>
     </div>
   );
 }

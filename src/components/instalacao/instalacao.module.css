@@ -5,7 +5,7 @@
    cartões sem sombra e as seções parecendo uma página só. Três degraus:
 
    1. Cada SEÇÃO (Tag do site, Webhook de vendas) ganha um acento próprio —
-      ciano e menta, as duas cores de apoio do design Abner Tracker — numa
+      as duas cores de apoio da paleta do Polen Track — numa
       faixa de 3px no topo, numa faixa clara no cabeçalho, no contorno e numa
       sombra longa que a descola do fundo.
    2. Cada PAINEL dentro da seção (Gerar a tag, Sites permitidos, Chave…)
@@ -24,84 +24,8 @@
   --acento-violeta: var(--chart-4);
 }
 
-/* --- 1. Seções ---------------------------------------------------------- */
-
-.secao {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  box-shadow:
-    var(--realce-interno),
-    0 0 0 1px color-mix(in srgb, var(--acento) 28%, transparent),
-    0 2px 4px rgb(0 0 0 / 35%),
-    0 28px 56px -28px rgb(0 0 0 / 85%);
-}
-
-.secaoTag {
-  --acento: var(--acento-ciano);
-}
-
-.secaoWebhook {
-  --acento: var(--acento-menta);
-}
-
-/* Faixa de 3px no topo: diz, antes de ler, de que seção é este pedaço. */
-.secao::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  pointer-events: none;
-  background-image: linear-gradient(
-    90deg,
-    var(--acento),
-    color-mix(in srgb, var(--acento) 25%, transparent)
-  );
-}
-
-/* O cabeçalho da seção vira uma faixa tingida de borda a borda. Os -1rem /
-   -1.25rem desfazem o p-4 / sm:p-5 da receita Cartão. */
-.secao > div:first-child {
-  margin: -1rem -1rem 0;
-  padding: 1.125rem 1rem 1rem;
-  background-image: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--acento) 16%, transparent),
-    color-mix(in srgb, var(--acento) 4%, transparent) 70%
-  );
-  border-bottom-color: color-mix(in srgb, var(--acento) 35%, transparent);
-}
-
-@media (min-width: 40rem) {
-  .secao > div:first-child {
-    margin: -1.25rem -1.25rem 0;
-    padding: 1.375rem 1.25rem 1.125rem;
-  }
-}
-
-/* O número do passo (1, 2) na cor da seção. */
-.secao > div:first-child > div > span:first-child {
-  border-color: var(--acento);
-  background-color: color-mix(in srgb, var(--acento) 18%, var(--surface-1));
-  color: var(--fg-strong);
-}
-
-/* --- 2. Painéis dentro da seção ---------------------------------------- */
-
-.secao [data-painel] {
-  background-color: var(--surface-3);
-  background-image: none;
-  box-shadow:
-    var(--realce-interno-forte),
-    0 0 0 1px var(--border-subtle),
-    0 12px 28px -16px rgb(0 0 0 / 80%);
-}
-
-/* --- 3. Poços dentro do painel ---------------------------------------- */
-
-.secao [data-painel] :global(.bg-surface-2) {
-  background-color: var(--surface-1);
-}
+/* T-R07 (18/11/2026): saíram .secao, .secaoTag, .secaoWebhook e os painéis/poços
+   presos a elas (sem uso desde a T-R04). */
 
 /* =========================================================================
    Texto mais forte nesta aba (13/10, pedido do dono: "o texto está muito

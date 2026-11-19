@@ -9,9 +9,12 @@ import { qualPadraoConhecido, type MotivoDeTeste } from './deteccao-de-teste';
 import { limparPayload } from './payload-sensivel';
 import { normalizarMoeda } from './moeda';
 import { ehCompra } from './inbox-resumo';
+import { lerRecebimentos, registrarRecebimento, semearRecebimentos } from './recebimentos';
+import { ehSimulacaoDoConsole, type RecebimentosDaEmpresa } from './recebimentos-calculo';
 import { sinaisDoPayload } from './inbox-sinais';
 import { gravarAtomico, naFila } from './arquivo-atomico';
 import { EMPRESA_DEFAULT_ID } from './config-store';
+import { LIMITE_POR_EMPRESA, manterUltimosPorEmpresa } from './inbox-teto';
 
 /**
  * Caixa de entrada de webhooks.
@@ -34,12 +37,14 @@ const ARQ = path.join(DIR, 'inbox.jsonl');
  */
 const ARQ_EVENTOS = path.join(DIR, 'inbox-resultados.jsonl');
 /**
- * Quantos itens da caixa ficam em memoria.
+ * Quantos itens da caixa ficam em memoria, POR EMPRESA (M-05).
  *
  * 1000 desde o plano do painel: a contagem dos cards e a lista aberta pelo
- * clique vem daqui, e 100 nao cobre 30 dias.
+ * clique vem daqui, e 100 nao cobre 30 dias. Desde a M-05 o teto e de cada
+ * empresa: a que recebe muita visita nao tira da memoria a venda da outra.
+ * O corte em si mora em `inbox-teto.ts`.
  */
-const LIMITE_MEMORIA = 1000;
+const LIMITE_MEMORIA = LIMITE_POR_EMPRESA;
 
 export type StatusEntrada = 'novo' | 'carregado' | 'disparado' | 'ignorado';
 
@@ -65,6 +70,10 @@ export interface ResultadoPorPixel {
   eventsReceived?: number;
   fbtraceId?: string;
   erro?: string;
+  /** Código do erro da Meta (`error.code`), só quando ela recusou. Ausente em registro antigo. */
+  codigoMeta?: number;
+  /** Subcódigo do erro da Meta (`error.error_subcode`). Ausente em registro antigo. */
+  subcodigoMeta?: number;
   modoTeste?: boolean;
   herdados?: string[];
   emq?: number;
@@ -377,8 +386,11 @@ async function lerTudoDoDisco() {
           return null;
         }
       })
-      .filter((x): x is ItemInbox => x !== null)
-      .slice(-LIMITE_MEMORIA);
+      .filter((x): x is ItemInbox => x !== null);
+
+    // Teto POR EMPRESA (M-05): cada empresa fica com os ultimos itens DELA.
+    // O arquivo no disco nao e tocado; o corte e so do que sobe para a memoria.
+    memoria = manterUltimosPorEmpresa(memoria, LIMITE_MEMORIA, EMPRESA_DEFAULT_ID);
 
     // Retrofit dos sinais em item antigo, SO EM MEMORIA.
     //
@@ -431,6 +443,10 @@ async function lerTudoDoDisco() {
     /* ainda nao houve disparo nenhum */
   }
 
+  // M-02: a hora da última entrega e a contagem, por empresa e por origem,
+  // começam do que a memória já tem. `semearRecebimentos` nunca lança.
+  await semearRecebimentos(memoria, EMPRESA_DEFAULT_ID);
+
   // A trava só sobe no FIM, com `memoria` já preenchida. Se a leitura lançar
   // antes daqui, `carregado` continua `false` e a próxima chamada tenta de novo
   // — melhor do que travar o processo inteiro numa caixa de entrada vazia.
@@ -463,14 +479,35 @@ export async function registrarEntrada(
   };
 
   memoria.push(item);
-  if (memoria.length > LIMITE_MEMORIA) memoria = memoria.slice(-LIMITE_MEMORIA);
+  // Teto POR EMPRESA (M-05): so a empresa DESTE item pode ter passado do teto,
+  // e so ela perde o item mais antigo dela. As outras ficam como estavam.
+  const empresaDoItem = item.empresaId ?? EMPRESA_DEFAULT_ID;
+  let quantosDaEmpresa = 0;
+  for (const i of memoria) {
+    if ((i.empresaId ?? EMPRESA_DEFAULT_ID) === empresaDoItem) quantosDaEmpresa++;
+  }
+  if (quantosDaEmpresa > LIMITE_MEMORIA) {
+    memoria = manterUltimosPorEmpresa(memoria, LIMITE_MEMORIA, EMPRESA_DEFAULT_ID);
+  }
 
   await fs.mkdir(DIR, { recursive: true });
   await fs.appendFile(ARQ, JSON.stringify(item) + '\n', 'utf8');
 
+  // M-02: anota a hora e soma a entrega desta empresa (plataforma ou site).
+  // O teste simulado pelo console (pedido `sim_…`) não conta: não veio de fora.
+  if (!ehSimulacaoDoConsole(item.orderId)) {
+    await registrarRecebimento(item.empresaId ?? EMPRESA_DEFAULT_ID, item.origem, item.recebidoEm);
+  }
+
   avisar(item, 'novo');
 
   return paraTela(item);
+}
+
+/** M-02: a última entrega e a contagem desta empresa, por origem (plataforma e site). */
+export async function recebimentosDaEmpresa(empresaId: string): Promise<RecebimentosDaEmpresa> {
+  await carregarDoDisco();
+  return lerRecebimentos(empresaId);
 }
 
 /**
@@ -526,23 +563,26 @@ export async function listarEntradas(limite = 50, empresaId?: string): Promise<I
 }
 
 /**
- * O instante em que a memória da caixa começa, SE ela está no teto (R2 da V4).
+ * O instante em que a memória DESTA empresa começa, SE ela está no teto.
  *
- * A memória guarda os últimos `LIMITE_MEMORIA` itens de TODAS as empresas, e
- * `listarEntradas` filtra por empresa depois: uma empresa quieta ao lado de
- * outra com muito page view recebe uma lista curta, mas os itens antigos dela
- * já saíram. Com a memória no teto, antes deste instante pode faltar item de
- * qualquer empresa — o resumo usa isso para não mostrar "0" num dia que não
- * leu. `null`: a memória não chegou ao teto e tem tudo o que o arquivo tem.
+ * Desde a M-05 cada empresa tem os últimos `LIMITE_MEMORIA` itens dela. Com a
+ * memória da empresa no teto, antes deste instante pode faltar item dela — o
+ * resumo usa isso para não mostrar "0" num dia que não leu. `null`: a empresa
+ * não chegou ao teto e a memória tem tudo o que o arquivo tem dela.
+ *
+ * O `empresaId` é obrigatório de propósito: não existe mais "teto de todas".
  */
-export async function inicioDaMemoriaNoTeto(): Promise<number | null> {
+export async function inicioDaMemoriaNoTeto(empresaId: string): Promise<number | null> {
   await carregarDoDisco();
-  if (memoria.length < LIMITE_MEMORIA) return null;
+  let quantos = 0;
   let inicio = Number.POSITIVE_INFINITY;
   for (const i of memoria) {
+    if ((i.empresaId ?? EMPRESA_DEFAULT_ID) !== empresaId) continue;
+    quantos++;
     const t = Date.parse(i.recebidoEm);
     if (Number.isFinite(t) && t < inicio) inicio = t;
   }
+  if (quantos < LIMITE_MEMORIA) return null;
   return Number.isFinite(inicio) ? inicio : null;
 }
 

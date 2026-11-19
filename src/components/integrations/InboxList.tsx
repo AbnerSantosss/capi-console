@@ -82,7 +82,7 @@ import { motivoLegivel, parMeta, TEXTO_CLASSIFICACAO } from './eventos-legiveis'
 // Fonte UNICA da elegibilidade do lote (regras 1 e 4 do CLAUDE.md). A tela nao
 // reimplementa nada disto: ela pergunta e obedece. Modulo neutro, sem
 // `server-only`, justamente para poder ser importado daqui.
-import { separarParaLote } from '@/lib/inbox-lote';
+import { separarParaLote, separarRecusadas } from '@/lib/inbox-lote';
 // "Enviado só em teste": a MESMA leitura que o resumo usa (C9), importada
 // e não copiada. Módulo neutro, sem `server-only`.
 import { enviadoSoEmTeste } from '@/lib/inbox-resumo';
@@ -99,7 +99,9 @@ import {
 } from './FiltrosInbox';
 import { DialogoPayload } from './DialogoPayload';
 import { formatarDinheiro } from '@/lib/moeda';
+import { SEM_RESPOSTA_DA_META, textoDoErroDaMeta } from '@/lib/erro-meta';
 import { DialogoLote, type MotivoFora } from './DialogoLote';
+import { DialogoReenvio } from './DialogoReenvio';
 
 interface ResultadoDisparo {
   marcaId: string;
@@ -124,6 +126,9 @@ interface ResultadoDisparo {
   eventsReceived?: number;
   fbtraceId?: string;
   erro?: string;
+  /** T-M01: código e subcódigo da recusa da Meta. Ausentes em linha antiga. */
+  codigoMeta?: number;
+  subcodigoMeta?: number;
   modoTeste: boolean;
   herdados: string[];
   emq: number;
@@ -267,6 +272,29 @@ const ROTULO_RESULTADO: Record<ResultadoDisparo['status'], string> = {
   'pixel-de-outra-empresa': 'recusado: Pixel de outra empresa',
   'suspeita-de-teste': 'parece teste, esperando você conferir',
 };
+
+/**
+ * T-M09: o texto que acompanha um envio que não deu certo.
+ *
+ * - `erro` COM resposta da Meta (`httpStatus` presente): a frase em português
+ *   da tabela de `erro-meta.ts`. Linha antiga não tem código e cai na frase geral.
+ * - `erro` SEM resposta (rede fora): a frase fixa de "a Meta nem respondeu".
+ * - Os outros status já trazem frase escrita pela casa em `erro`.
+ */
+function textoDaFalha(r: ResultadoDisparo): string {
+  if (r.status !== 'erro') return r.erro ?? '';
+  if (r.httpStatus === undefined) return SEM_RESPOSTA_DA_META;
+  return textoDoErroDaMeta({
+    ...(r.codigoMeta !== undefined ? { codigo: r.codigoMeta } : {}),
+    ...(r.subcodigoMeta !== undefined ? { subcodigo: r.subcodigoMeta } : {}),
+  });
+}
+
+/** O rótulo do resultado seguido do texto da falha, quando há. */
+function rotuloComFalha(r: ResultadoDisparo): string {
+  const texto = textoDaFalha(r);
+  return `${ROTULO_RESULTADO[r.status] ?? r.status}${texto ? ': ' + texto : ''}`;
+}
 
 const FORMATO_TEXTO: Record<'A' | 'B' | 'plano' | 'outro', string> = {
   A: 'formato da plataforma (A)',
@@ -419,6 +447,8 @@ export function InboxList({
   const [filtros, setFiltros] = useState<FiltrosInboxValor>(filtrosIniciais ?? FILTROS_VAZIOS);
   const [payloadAberto, setPayloadAberto] = useState<ItemInbox | null>(null);
   const [loteAberto, setLoteAberto] = useState(false);
+  // Confirmacao do "mandar de novo as recusadas" (T-M10).
+  const [reenvioAberto, setReenvioAberto] = useState(false);
   // Vazio ate abrir: a escolha nasce a cada abertura, de `pixelsIniciais` (F1).
   const [marcasDoLote, setMarcasDoLote] = useState<string[]>([]);
   const [lote, setLote] = useState<ProgressoLote | null>(null);
@@ -550,6 +580,7 @@ export function InboxList({
     setMarcasEscolhidas([]);
     setMarcasDoLote([]);
     setLoteAberto(false);
+    setReenvioAberto(false);
     setResumoLote(null);
     setAlvo(null);
     setPayloadAberto(null);
@@ -848,9 +879,7 @@ export function InboxList({
         // Nunca o slug cru ("sem-token"): quem opera lê o rótulo em português.
         const primeiro = d.resultados?.[0];
         toast.warning('Nada foi enviado', {
-          description: primeiro
-            ? `${ROTULO_RESULTADO[primeiro.status] ?? primeiro.status}${primeiro.erro ? ': ' + primeiro.erro : ''}`
-            : 'Sem resultado.',
+          description: primeiro ? rotuloComFalha(primeiro) : 'Sem resultado.',
         });
       }
       setAlvo(null);
@@ -968,6 +997,22 @@ export function InboxList({
   }, [visiveis]);
 
   /**
+   * T-M10: o que a Meta recusou neste recorte e pode ir de novo, com os Pixels
+   * de cada item. A regua e de `separarRecusadas` (inbox-lote.ts); a tela so
+   * tira o que nao tem evento da Meta escolhido e os Pixels que nao sao desta
+   * empresa (apagados ou de outra). Item sem Pixel sobrando sai da lista.
+   */
+  const recusadas = useMemo(() => {
+    return separarRecusadas(visiveis)
+      .filter((r) => podeDisparar(r.item))
+      .map((r) => ({
+        item: r.item,
+        marcas: r.marcas.filter((id) => marcas.some((m) => m.id === id)),
+      }))
+      .filter((r) => r.marcas.length > 0);
+  }, [visiveis, marcas]);
+
+  /**
    * O lote, item por item, concorrência 1.
    *
    * 🔴 Nenhum evento é inventado aqui (regra 1 do `CLAUDE.md`, E-7 do plano):
@@ -980,26 +1025,29 @@ export function InboxList({
    * seleção antes de dar tempo de alguém apertar "Parar", e tiraria a ordem
    * cronológica dos eventos que chegam ao Gerenciador.
    */
-  const executarLote = useCallback(async () => {
+  const executarLote = useCallback(async (reenvio?: Array<{ item: ItemInbox; marcas: string[] }>) => {
     // F1: sem Pixel VISIVEL marcado nao ha lote. O botao do dialogo ja trava;
     // isto fecha a porta para quem chegar aqui por outro caminho.
-    if (loteVisiveis.length === 0) return;
+    // T-M10: o reenvio traz os Pixels de cada item e nao usa os marcados.
+    if (!reenvio && loteVisiveis.length === 0) return;
+    if (reenvio && reenvio.length === 0) return;
     setLoteAberto(false);
+    setReenvioAberto(false);
     setResumoLote(null);
     cancelarLote.current = false;
 
-    const fila = elegiveis;
+    const fila = reenvio ?? elegiveis.map((item) => ({ item, marcas: loteVisiveis }));
     let p: ProgressoLote = { total: fila.length, feitos: 0, ok: 0, pulados: 0, erros: [] };
     setLote(p);
 
-    for (const item of fila) {
+    for (const { item, marcas: marcasDoItem } of fila) {
       // Conferido ANTES de cada ida ao servidor: o item em voo termina, o
       // próximo não sai. "Parar" que não para é pior do que não ter botão.
       if (cancelarLote.current) break;
       const nome = item.eventoOrigem ?? item.evento ?? item.id;
 
       try {
-        const d = await dispararUm(item, loteVisiveis);
+        const d = await dispararUm(item, marcasDoItem);
         const r = d.resultados ?? [];
         if (r.some((x) => x.status === 'enviado')) {
           p = { ...p, ok: p.ok + 1 };
@@ -1021,11 +1069,7 @@ export function InboxList({
               {
                 id: item.id,
                 evento: nome,
-                motivo: primeiro
-                  ? `${ROTULO_RESULTADO[primeiro.status] ?? primeiro.status}${
-                      primeiro.erro ? ': ' + primeiro.erro : ''
-                    }`
-                  : 'a rota respondeu sem resultado nenhum',
+                motivo: primeiro ? rotuloComFalha(primeiro) : 'a rota respondeu sem resultado nenhum',
               },
             ],
           };
@@ -1129,9 +1173,24 @@ export function InboxList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
+      {/* T-R05: conexão, contagem e ações numa faixa só, para a primeira
+          venda subir para a primeira dobra. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SeloConexao estado={conexao} ultimoSinalEm={ultimoSinalEm} />
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <SeloConexao estado={conexao} ultimoSinalEm={ultimoSinalEm} />
+          {/* 🔴 B.2.11: esta linha conta a lista, NUNCA `visiveis`. O tamanho
+              da fila é um fato do servidor; filtrar a tela não despacha nada,
+              e um contador que encolhe com o filtro faria o operador achar que
+              itens sumiram da caixa. A janela do Painel é a única exceção, e
+              não é filtro de tela: ela define QUAL lista é esta. */}
+          {noPeriodo.length > 0 && (
+            <p className="text-caption text-fg-muted">
+              {noPeriodo.length} entrega{noPeriodo.length > 1 ? 's' : ''}
+              {aguardando > 0 ? ` · ${aguardando} esperando você` : ''}.
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {(conexao === 'desconectado' || conexao === 'sessao-expirada') && (
             <Button
@@ -1178,20 +1237,6 @@ export function InboxList({
         </div>
       </div>
 
-      {/* 🔴 B.2.11: esta linha conta a lista, NUNCA `visiveis`. O tamanho da
-          fila é um fato do servidor; filtrar a tela não despacha nada, e um
-          contador que encolhe com o filtro faria o operador achar que itens
-          sumiram da caixa.
-          A janela do Painel é a única exceção, e não é filtro de tela: ela
-          define QUAL lista é esta. Contar fora dela daria à lista de "ontem" o
-          tamanho da caixa inteira. */}
-      {noPeriodo.length > 0 && (
-        <p className="text-caption text-fg-muted">
-          {noPeriodo.length} entrega{noPeriodo.length > 1 ? 's' : ''}
-          {aguardando > 0 ? ` · ${aguardando} esperando você` : ''}.
-        </p>
-      )}
-
       {/* E-12: o número da tela não pode parecer mágico. Quando alguém pediu um
           recorte maior que o padrão (o clique num card do Painel pede), a tela
           diz de onde vem a contagem em vez de deixar o operador adivinhar. */}
@@ -1214,6 +1259,8 @@ export function InboxList({
           totalItens={noPeriodo.length}
           totalVisiveis={visiveis.length}
           totalElegiveis={elegiveis.length}
+          totalRecusadas={recusadas.length}
+          onAbrirReenvio={() => setReenvioAberto(true)}
           lote={lote}
           onAbrirLote={() => {
             // A escolha nasce a cada abertura, dos itens que vao de fato (F1).
@@ -1278,8 +1325,8 @@ export function InboxList({
           titulo="Nenhum webhook recebido"
           motivo={
             <>
-              Nenhuma venda chegou ainda. Ligue o webhook na aba Instalação, ou use{' '}
-              <strong>Colar JSON</strong>.
+              Nenhuma venda chegou ainda. Ligue o webhook na aba Instalação. Para mandar uma
+              venda à mão, use <strong>Colar JSON</strong>, no Envio manual da aba Eventos.
             </>
           }
           acao={
@@ -1413,6 +1460,14 @@ export function InboxList({
         marcasEscolhidas={loteVisiveis}
         onMarcas={setMarcasDoLote}
         onConfirmar={() => void executarLote()}
+      />
+
+      <DialogoReenvio
+        aberto={reenvioAberto}
+        onFechar={() => setReenvioAberto(false)}
+        itens={recusadas}
+        descricaoFiltro={descreverFiltros(filtros)}
+        onConfirmar={() => void executarLote(recusadas)}
       />
 
       <AlertDialog
@@ -1578,6 +1633,69 @@ function LinhaEntrada({
       : { rotulo: 'Ver payload', Icone: FileJson, ao: aoVerPayload, principal: false };
   const IconeAcao = acao.Icone;
 
+  /**
+   * T-R05 (seção 1.9 do redesenho): no máximo TRÊS selos na linha, na ordem do
+   * que muda a decisão de quem opera — defeito e falha primeiro, depois teste,
+   * desvio de padrão e o estado. O que passar de três vai para o menu `…`,
+   * com o mesmo selo, para nenhum sinal sumir.
+   */
+  const selos: React.ReactElement[] = [
+    naoLido && (
+      <Badge key="nao-lido" variant="perigo">
+        <FileWarning aria-hidden />
+        não deu para ler
+      </Badge>
+    ),
+    /* A lista de resultados por Pixel foi para o menu. Sem este selo, um
+       envio recusado passaria a não ter nenhum sinal na linha. */
+    falhas.length > 0 && (
+      <Badge key="falhas" variant="perigo">
+        <AlertTriangle aria-hidden />
+        {falhas.length === 1 ? 'falhou em 1 Pixel' : `falhou em ${falhas.length} Pixels`}
+      </Badge>
+    ),
+    teste && (
+      <Badge key="teste" variant="aviso">
+        <FlaskConical aria-hidden />
+        teste
+      </Badge>
+    ),
+    par && !par.padrao && (
+      <Badge key="fora-do-padrao" variant="aviso">
+        <AlertTriangle aria-hidden />
+        fora do padrão da Meta
+      </Badge>
+    ),
+    /* Só texto (V6 passo 5b): quando todo aceite veio de Pixel com código de
+       teste, a venda não contou na campanha — o selo diz isso. */
+    item.status === 'disparado' && (
+      <Badge key="enviado" variant="sucesso">
+        <Check aria-hidden />
+        {enviadoSoEmTeste(item) ? 'enviado só em teste' : 'enviado à Meta'}
+      </Badge>
+    ),
+    ehNovo && (
+      <Badge key="novo" variant="info">
+        <Plus aria-hidden />
+        novo
+      </Badge>
+    ),
+    item.status === 'carregado' && (
+      <Badge key="carregado">
+        <ArrowDownToLine aria-hidden />
+        carregado no formulário
+      </Badge>
+    ),
+    modoMostrado && (
+      <Badge key="modo">
+        {React.createElement(ICONE_MODO[modoMostrado], { 'aria-hidden': true })}
+        {ROTULO_MODO[modoMostrado]}
+      </Badge>
+    ),
+  ].filter((s): s is React.ReactElement => Boolean(s));
+  const selosNaLinha = selos.slice(0, 3);
+  const selosNoMenu = selos.slice(3);
+
   return (
     <div
       className={cn(
@@ -1650,60 +1768,9 @@ function LinhaEntrada({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {ehNovo && (
-            <Badge variant="info">
-              <Plus aria-hidden />
-              novo
-            </Badge>
-          )}
-          {teste && (
-            <Badge variant="aviso">
-              <FlaskConical aria-hidden />
-              teste
-            </Badge>
-          )}
-          {naoLido && (
-            <Badge variant="perigo">
-              <FileWarning aria-hidden />
-              não deu para ler
-            </Badge>
-          )}
-          {par && !par.padrao && (
-            <Badge variant="aviso">
-              <AlertTriangle aria-hidden />
-              fora do padrão da Meta
-            </Badge>
-          )}
-          {item.status === 'carregado' && (
-            <Badge>
-              <ArrowDownToLine aria-hidden />
-              carregado no formulário
-            </Badge>
-          )}
-          {/* Só texto (V6 passo 5b): quando todo aceite veio de Pixel com código
-              de teste, a venda não contou na campanha — o selo diz isso. */}
-          {item.status === 'disparado' && (
-            <Badge variant="sucesso">
-              <Check aria-hidden />
-              {enviadoSoEmTeste(item) ? 'enviado só em teste' : 'enviado à Meta'}
-            </Badge>
-          )}
-          {modoMostrado && (
-            <Badge>
-              {React.createElement(ICONE_MODO[modoMostrado], { 'aria-hidden': true })}
-              {ROTULO_MODO[modoMostrado]}
-            </Badge>
-          )}
-          {/* A lista de resultados por Pixel foi para o menu. Sem este selo,
-              um envio recusado passaria a não ter nenhum sinal na linha. */}
-          {falhas.length > 0 && (
-            <Badge variant="perigo">
-              <AlertTriangle aria-hidden />
-              {falhas.length === 1 ? 'falhou em 1 Pixel' : `falhou em ${falhas.length} Pixels`}
-            </Badge>
-          )}
-        </div>
+        {selosNaLinha.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">{selosNaLinha}</div>
+        )}
 
         {/* O porquê, na linha e não no menu: um evento parado sem motivo
             escrito parece defeito. As três saídas cabem numa frase: enviar
@@ -1755,9 +1822,11 @@ function LinhaEntrada({
           Abaixo de 48rem sobra só o `…`, porque quatro colunas e um botão de
           rótulo longo não cabem em 360px sem voltar ao empilhamento. */}
       <div className="col-start-3 row-start-1 flex items-center justify-end gap-1 justify-self-end md:col-start-4">
+        {/* D-R4: um amarelo por tela. "Enviar agora" de cada linha fica em
+            contorno; o amarelo é o do envio em lote, na barra de filtros. */}
         <Button
           size="sm"
-          variant={acao.principal ? 'default' : 'outline'}
+          variant="outline"
           className="hidden md:inline-flex"
           onClick={acao.ao}
         >
@@ -1780,6 +1849,12 @@ function LinhaEntrada({
           </MenuTrigger>
 
           <MenuContent>
+            {/* Os selos que passaram de três na linha (T-R05). */}
+            {selosNoMenu.length > 0 && (
+              <MenuDetalhe className="flex-row flex-wrap items-center gap-1">
+                {selosNoMenu}
+              </MenuDetalhe>
+            )}
             {/* Tudo o que a linha deixou de mostrar mora aqui, com endereço. */}
             <MenuDetalhe>
               {/* Nome inteiro, e-mail mascarado: foi o pedido literal do dono.
@@ -1899,10 +1974,11 @@ function LinhaEntrada({
                           teste
                         </Badge>
                       )}
-                      {r.herdados.length > 0 && (
+                      {/* `?.`: registro antigo pode vir sem `herdados` e derrubava a Fila inteira. */}
+                      {r.herdados?.length > 0 && (
                         <span>herdou {r.herdados.join(', ')} do pré-checkout</span>
                       )}
-                      {r.erro && <span className="text-danger">{r.erro}</span>}
+                      {textoDaFalha(r) && <span className="text-danger">{textoDaFalha(r)}</span>}
                     </span>
                   ))}
                 </MenuDetalhe>

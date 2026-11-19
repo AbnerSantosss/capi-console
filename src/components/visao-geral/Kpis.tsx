@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Os 4 indicadores da Visão geral (HyperFrames E1), nesta ordem: Páginas
- * vistas · Checkouts · Compras · Faturado. Centrados, mesma altura, número
- * grande em peso 700 com algarismos tabulares, SEM ícone.
+ * Os 4 indicadores da Visão geral (HyperFrames E1; redesenho de 18/11/2026),
+ * nesta ordem: Páginas vistas · Checkouts · Compras · Faturado. Desenhados com
+ * a `FaixaDeKpis`: um painel só, alinhado à esquerda, sem ícone e sem fundo
+ * colorido. O Faturado se destaca pela posição (a última célula), não pela cor.
  *
  * Só dado real:
  *  - Não há cartão de cliques: o console não recebe os cliques do anúncio. Em
@@ -14,12 +15,16 @@
  *    senão nada, nem seta.
  *
  * Os números vêm prontos de `numerosDaVisaoGeral` (a mesma conta do CSV).
+ * Enquanto não vêm (`numeros = null`), a faixa fica com o esqueleto no lugar
+ * do valor e a altura não muda. O `rodape` (a trilha Site → Pixel → CAPI →
+ * Meta) aparece nos dois casos.
  */
 
 import type { ReactNode } from 'react';
-import consoleStyles from '@/components/layout/console.module.css';
+import { FaixaDeKpis, type ItemDaFaixa } from '@/components/common/FaixaDeKpis';
 import { cn } from '@/lib/utils';
 import {
+  SEM_DADO,
   formatarMoeda,
   formatarPercentual,
   formatarPtBr,
@@ -27,121 +32,108 @@ import {
   type NumerosDaVisaoGeral,
 } from '@/lib/visao-geral-calculos';
 
-/** O número grande. Em cartão estreito (celular) desce para `text-data`. */
-const NUMERO =
-  'text-data font-bold tabular-nums tracking-tight text-fg-strong @min-[12.5rem]:text-display';
-
+/** " · +12% contra o período anterior", ou nada. */
 function Variacao({ valor }: { valor: number | null }) {
   if (valor === null) return null;
   const tom = valor > 0 ? 'text-success' : valor < 0 ? 'text-danger' : 'text-fg-muted';
   return (
-    <p className="text-caption tabular-nums">
-      <span className={cn('font-semibold', tom)}>{formatarVariacao(valor)}</span>{' '}
-      <span className="text-fg-muted">contra o período anterior</span>
-    </p>
-  );
-}
-
-function CartaoKpi({
-  rotulo,
-  valor,
-  children,
-  destaque = false,
-  className,
-}: {
-  rotulo: string;
-  valor: ReactNode;
-  children?: ReactNode;
-  /** O cartão "Faturado": com o fundo verde discreto. */
-  destaque?: boolean;
-  className?: string;
-}) {
-  return (
-    <li
-      className={cn(
-        'flex min-w-0 flex-col items-center gap-2 px-3 py-4 text-center @container sm:px-4 sm:py-5',
-        destaque
-          ? 'rounded-panel border border-line bg-surface-success'
-          : consoleStyles.painel,
-        className
-      )}
-    >
-      <h3 className={cn('text-label font-semibold', destaque ? 'text-success' : 'text-fg-body')}>
-        {rotulo}
-      </h3>
-      <div className="flex min-h-14 w-full items-center justify-center">{valor}</div>
-      <div
-        className={cn(
-          'flex flex-col items-center gap-1 text-caption',
-          destaque ? 'text-fg-body' : 'text-fg-muted'
-        )}
-      >
-        {children}
-      </div>
-    </li>
-  );
-}
-
-/** "R$ 61.464": o símbolo menor, o número no tamanho grande. */
-function Dinheiro({ valor, moeda }: { valor: number | null; moeda: string }) {
-  const texto = formatarMoeda(valor, moeda);
-  const inicioDoNumero = texto.search(/\d/);
-  if (valor === null || inicioDoNumero <= 0) return <span className={NUMERO}>{texto}</span>;
-  return (
-    <span className={NUMERO}>
-      <span className="mr-1 align-baseline text-title font-semibold text-fg-body">
-        {texto.slice(0, inicioDoNumero).trim()}
-      </span>
-      {texto.slice(inicioDoNumero)}
+    <span title="Contra o período anterior">
+      {' · '}
+      <span className={cn('font-semibold', tom)}>{formatarVariacao(valor)}</span>
+      <span className="sr-only"> contra o período anterior</span>
     </span>
   );
 }
 
-export function Kpis({ numeros: n }: { numeros: NumerosDaVisaoGeral }) {
+/** "R$ 61.464": o símbolo menor, o número no tamanho dos outros. */
+function Dinheiro({ valor, moeda }: { valor: number | null; moeda: string }) {
+  const texto = formatarMoeda(valor, moeda);
+  const inicioDoNumero = texto.search(/\d/);
+  if (valor === null || inicioDoNumero <= 0) return <>{texto}</>;
+  return (
+    <>
+      <span className="mr-1 text-title font-semibold text-fg-body">{texto.slice(0, inicioDoNumero).trim()}</span>
+      {texto.slice(inicioDoNumero)}
+    </>
+  );
+}
+
+/** Os rótulos, nesta ordem; o esqueleto usa os mesmos. */
+const ROTULOS = ["Páginas vistas", "Checkouts", "Compras", "Faturado"] as const;
+
+function itensDaFaixa(n: NumerosDaVisaoGeral): ItemDaFaixa[] {
   const moedasDiferentes = n.temDado && n.compras !== null && n.compras > 0 && n.valorDasCompras === null;
+  const detalheDoFaturado: ReactNode = moedasDiferentes ? (
+    'compras em moedas diferentes: sem soma'
+  ) : (
+    <>
+      Ticket médio{' '}
+      <span className="font-semibold text-fg-body">{formatarMoeda(n.ticket, n.moedaDasCompras)}</span>
+    </>
+  );
+
+  return [
+    {
+      rotulo: ROTULOS[0],
+      valor: formatarPtBr(n.paginas),
+      // Eventos com fbclid: NÃO são cliques nem pessoas (o console não recebe os cliques).
+      detalhe: (
+        <>
+          {n.temDado ? (
+            <span title="Eventos que chegaram com fbclid; não são cliques nem pessoas">
+              <span className="font-semibold text-fg-body">{formatarPtBr(n.comFbclid)}</span> com clique de anúncio
+            </span>
+          ) : (
+            SEM_DADO
+          )}
+          <Variacao valor={n.variacaoPaginas} />
+        </>
+      ),
+    },
+    {
+      rotulo: ROTULOS[1],
+      valor: formatarPtBr(n.checkouts),
+      detalhe: (
+        <>
+          {formatarPercentual(n.taxaCheckout)} das páginas
+          <Variacao valor={n.variacaoCheckouts} />
+        </>
+      ),
+    },
+    {
+      rotulo: ROTULOS[2],
+      valor: formatarPtBr(n.compras),
+      detalhe: (
+        <>
+          {formatarPercentual(n.taxaCompra)} dos checkouts
+          <Variacao valor={n.variacaoCompras} />
+        </>
+      ),
+    },
+    {
+      rotulo: ROTULOS[3],
+      valor: <Dinheiro valor={n.valorDasCompras} moeda={n.moedaDasCompras} />,
+      detalhe: detalheDoFaturado,
+    },
+  ];
+}
+
+export function Kpis({
+  numeros,
+  rodape,
+}: {
+  /** `null` enquanto os números do período não chegaram. */
+  numeros: NumerosDaVisaoGeral | null;
+  /** A trilha Site → Pixel → CAPI → Meta, embaixo das células. */
+  rodape?: ReactNode;
+}) {
+  const itens: ItemDaFaixa[] = numeros
+    ? itensDaFaixa(numeros)
+    : ROTULOS.map((rotulo) => ({ rotulo, valor: SEM_DADO, detalhe: ' ' }));
 
   return (
-    // A grade (1 → 2×2 → 4 colunas) mora em `.gradeKpis` (V9): ela lê a largura
-    // deste `<section>`, e não a da janela, porque a lateral come 15.5rem.
-    <section aria-label="Indicadores do período" className="@container">
-      <ul role="list" className={consoleStyles.gradeKpis}>
-        <CartaoKpi rotulo="Páginas vistas" valor={<span className={NUMERO}>{formatarPtBr(n.paginas)}</span>}>
-          {/* Eventos com fbclid: NÃO são cliques nem pessoas (o console não recebe os cliques). */}
-          {n.temDado ? (
-            <p className="tabular-nums" title="Eventos que chegaram com fbclid; não são cliques nem pessoas">
-              <span className="font-semibold text-fg-body">{formatarPtBr(n.comFbclid)}</span> com clique de
-              anúncio
-            </p>
-          ) : null}
-          <Variacao valor={n.variacaoPaginas} />
-        </CartaoKpi>
-
-        <CartaoKpi rotulo="Checkouts" valor={<span className={NUMERO}>{formatarPtBr(n.checkouts)}</span>}>
-          <p className="tabular-nums">{formatarPercentual(n.taxaCheckout)} das páginas</p>
-          <Variacao valor={n.variacaoCheckouts} />
-        </CartaoKpi>
-
-        <CartaoKpi rotulo="Compras" valor={<span className={NUMERO}>{formatarPtBr(n.compras)}</span>}>
-          <p className="tabular-nums">{formatarPercentual(n.taxaCompra)} dos checkouts</p>
-          <Variacao valor={n.variacaoCompras} />
-        </CartaoKpi>
-
-        <CartaoKpi
-          rotulo="Faturado"
-          destaque
-          className={consoleStyles.kpiValor}
-          valor={<Dinheiro valor={n.valorDasCompras} moeda={n.moedaDasCompras} />}
-        >
-          {moedasDiferentes ? (
-            <p>compras em moedas diferentes: sem soma</p>
-          ) : (
-            <p className="tabular-nums">
-              Ticket médio{' '}
-              <span className="font-semibold text-fg-strong">{formatarMoeda(n.ticket, n.moedaDasCompras)}</span>
-            </p>
-          )}
-        </CartaoKpi>
-      </ul>
+    <section aria-label="Indicadores do período" className="tabular-nums">
+      <FaixaDeKpis itens={itens} rodape={rodape} carregando={numeros === null} />
     </section>
   );
 }

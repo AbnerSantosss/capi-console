@@ -1,8 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Plus, Target } from '@/components/ui/icones';
 
@@ -21,15 +19,17 @@ import {
   estadoDePixel,
   nomesDasRegrasAuto,
 } from '@/components/pixels/estado-pixel';
-import { IconeDoAssunto } from '@/components/cenas';
-import { enderecoDaAba } from '@/lib/abas-empresa';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
+import { ListaEmLinhas } from '@/components/common/ListaEmLinhas';
+import { Recolhido } from '@/components/common/Recolhido';
 import {
   Esqueleto,
   RegiaoDeEspera,
   Spinner,
   useEscadaDeEspera,
 } from '@/components/common/Esqueleto';
+import { useRecusasDaMeta } from '@/hooks/useRecusasDaMeta';
+import { avisoDoPixel } from '@/lib/erro-meta';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -102,12 +102,6 @@ export function PixelsPanel() {
    */
   const regras = useRegrasDeRoteamento();
 
-  // "Abrir Regras" vai para a aba Regras DA empresa do endereço. Sem slug
-  // (nunca deveria acontecer: a `/pixels` antiga redireciona), o link some
-  // em vez de apontar para rota antiga.
-  const params = useParams<{ slug?: string }>();
-  const abaRegras = params?.slug ? enderecoDaAba(params.slug, 'regras') : null;
-
   /**
    * 🔴 T3 (C6) — a confirmacao de ligar rele as regras ao abrir.
    *
@@ -139,6 +133,8 @@ export function PixelsPanel() {
    * caixa de entrada faz (C4).
    */
   const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
+  // M-01 — recusas da Meta por Pixel, para o aviso de cada cartao. So leitura.
+  const recusasDaMeta = useRecusasDaMeta(empresaAtivaId);
   const empresaDaTela = React.useRef(empresaAtivaId);
   React.useEffect(() => {
     if (empresaDaTela.current === empresaAtivaId) return;
@@ -289,10 +285,10 @@ export function PixelsPanel() {
           </p>
         ) : (
           // C-16: a geometria do que vem, nao um retangulo qualquer — tres
-          // cartoes da mesma altura dos de verdade.
-          <div className="flex flex-col gap-3">
+          // linhas da mesma altura das de verdade.
+          <div className="flex flex-col gap-2">
             {[0, 1, 2].map((i) => (
-              <Esqueleto key={i} className="h-[248px] rounded-panel" />
+              <Esqueleto key={i} className="h-14 rounded-panel" />
             ))}
           </div>
         )}
@@ -322,7 +318,7 @@ export function PixelsPanel() {
     );
   } else {
     conteudo = (
-      <ul className="flex flex-col gap-3">
+      <ListaEmLinhas rotulo="Pixels">
         {marcas.map((marca) => (
           <CardDePixel
             key={marca.id}
@@ -337,9 +333,9 @@ export function PixelsPanel() {
             regrasAuto={regras ? contarRegrasAuto(regras, marca.id) : 0}
             onUsar={() => usar(marca)}
             onEditar={() => abrirEdicao(marca)}
-            hrefRegras={abaRegras}
             onAlternarAuto={(ligado) => pedirAlternarAuto(marca, ligado)}
             salvandoAuto={salvandoAuto === marca.id}
+            recusa={avisoDoPixel(recusasDaMeta.recusas, marca.id, recusasDaMeta.cobreAJanela)}
             // 9.7.2 — com um Pixel so, o cartao admite que este botao equivale
             // ao automatico do sistema inteiro, em vez de fingir granularidade.
             pixelUnico={marcas.length === 1}
@@ -349,7 +345,7 @@ export function PixelsPanel() {
             onApagar={marca.id === 'default' ? undefined : () => setAApagar(marca)}
           />
         ))}
-      </ul>
+      </ListaEmLinhas>
     );
   }
 
@@ -425,9 +421,6 @@ export function PixelsPanel() {
       }).faixa
   );
   const faixaDoTopo = faixaDaCena(faixasDosCartoes);
-  // 14/10 (pendência 2): um "Abrir Regras" só por tela. Quando algum cartão
-  // já mostra o dele (ligado e sem regra), a legenda não repete o link.
-  const cartaoJaLevaARegras = faixasDosCartoes.includes('ligado-sem-regra');
   // Regras ainda não lidas: um Pixel com token e automático ligado pode estar
   // enviando ou parado sem regra, e a cena não chuta. Sem token não depende
   // das regras, então esse aparece de todo jeito.
@@ -439,42 +432,36 @@ export function PixelsPanel() {
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-title font-semibold text-fg-strong">
-          <IconeDoAssunto assunto="pixel" />
-          {carregado && !erro
-            ? marcas.length === 1
-              ? '1 Pixel'
-              : `${marcas.length} Pixels`
-            : 'Pixels'}
-        </h2>
-        {botaoAdicionar}
-      </div>
-      {/* A cena (a única da aba) e a legenda das DUAS travas do envio
-          automático. A cena é ilustração; a legenda diz o mesmo em texto, e
-          a outra metade (a regra) mora na aba Regras. */}
-      {comLista && (
-        <div className="mb-4 flex flex-col gap-2">
-          {faixaMostrada && <CenaDoPixel faixa={faixaMostrada} />}
-          <p className="text-body text-fg-muted">
-            Só sai sozinho quando as duas estão ligadas.
-            <span className="sr-only">
-              {' '}
-              A regra em Automático e o envio automático do Pixel.
-            </span>{' '}
-            {abaRegras && !cartaoJaLevaARegras && (
-              <Link
-                href={abaRegras}
-                className="font-medium text-fg-strong underline underline-offset-4"
-              >
-                Abrir Regras
-              </Link>
-            )}
-          </p>
-        </div>
-      )}
+      {/* A ação de topo: a contagem vai numa frase, e o único amarelo é o
+          "Adicionar Pixel". Sem Pixel, o botão é o do estado vazio. */}
+      <div className="flex min-w-0 flex-col gap-4">
+        {comLista && (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-body text-fg-body">
+              {marcas.length === 1 ? '1 Pixel cadastrado' : `${marcas.length} Pixels cadastrados`}
+            </p>
+            {botaoAdicionar}
+          </div>
+        )}
 
-      {conteudo}
+        {conteudo}
+
+        {/* A cena (a única da aba) e a legenda das DUAS travas do envio
+            automático ficam recolhidas, no fim. A cena é ilustração; a
+            legenda diz o mesmo em texto, e a outra metade (a regra) mora na
+            aba Regras. */}
+        {comLista && (
+          <Recolhido titulo="Como funciona">
+            <div className="flex flex-col gap-2">
+              {faixaMostrada && <CenaDoPixel faixa={faixaMostrada} />}
+              <p className="text-body text-fg-muted">
+                Só sai sozinho quando as duas estão ligadas: a regra em Automático,
+                na aba Regras, e o envio automático do Pixel, aqui nesta aba.
+              </p>
+            </div>
+          </Recolhido>
+        )}
+      </div>
 
       <BrandDialog
         open={dialogoAberto}

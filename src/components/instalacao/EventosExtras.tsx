@@ -24,15 +24,15 @@
  * usa, e abrir tudo de cara devolveria a mesma poluição que a Tarefa 6 existe
  * para tirar.
  *
- * E3 (14/10): herda o caminho escolhido em "Escolha como instalar" (GTM ou
- * site) e mostra só ele; o código fica em "Ver código". Recolhido com
- * `hidden`, montado.
+ * E3 (14/10): herda o caminho escolhido (GTM ou site) e mostra só ele; o
+ * código fica em "Ver código". T-R04: virou um `Recolhido` ("Eventos extras"),
+ * e os itens são linhas com divisória, sem painel dentro de painel.
  */
 
-import React, { useState } from 'react';
-import { Check, ChevronDownIcon, ChevronUpIcon, Copy } from '@/components/ui/icones';
-import { IconeExtras } from './icones-animados';
+import React from 'react';
+import { Check, Copy } from '@/components/ui/icones';
 
+import { Recolhido } from '@/components/common/Recolhido';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ParamChip, StatusDot } from '@/components/common/primitives';
@@ -43,6 +43,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { estadoDaRegra, type TagGerada } from './tag-estado';
+import { VariavelDoPixel } from './VariavelDoPixel';
 import type { CaminhoDeInstalacao } from './OndeInstalarTag';
 import type { RegraRoteamento } from '@/lib/config-store';
 
@@ -80,119 +81,97 @@ export interface EventosExtrasProps {
 }
 
 export function EventosExtras({ tags, regras, copiar, copiado, caminho }: EventosExtrasProps) {
-  const [aberto, setAberto] = useState(false);
-
-  // PageView e ViewContent já aparecem em "Escolha como instalar" — disparam
+  // PageView e ViewContent já aparecem no código do passo 1 — disparam
   // sozinhos e não têm acionador nenhum para configurar. Purchase e Subscribe
   // nem chegam a existir em `tags`: `eventoTagPermitido` os barra antes.
   const extras = tags.filter((t) => !t.evento.padrao);
+  // Sem tags (gerando, ou sem site) não há o que mostrar: o recado de cadastrar
+  // o site já está uma vez no passo 1.
+  if (extras.length === 0) return null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 border-t border-line pt-6">
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        aria-expanded={aberto}
-        aria-controls="eventos-extras-conteudo"
-        className="flex w-full items-center justify-between gap-2 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
-      >
-        <span className="flex items-center gap-2 text-label font-semibold text-fg-strong">
-          <IconeExtras />
-          Eventos extras (opcional)
-        </span>
-        {aberto ? (
-          <ChevronUpIcon className="size-4 shrink-0 text-fg-muted" aria-hidden />
-        ) : (
-          <ChevronDownIcon className="size-4 shrink-0 text-fg-muted" aria-hidden />
-        )}
-      </button>
-
-      <div id="eventos-extras-conteudo" hidden={!aberto} className="flex min-w-0 flex-col gap-3">
+    <Recolhido titulo="Eventos extras">
+      <div className="flex min-w-0 flex-col gap-2">
         <p className="text-body text-fg-body">
           Estes eventos já têm código. Falta decidir quando enviar.
         </p>
 
-        {extras.length === 0 ? (
-          <p className="text-body text-fg-body">Cadastre um site para ver o código aqui.</p>
-        ) : (
-          <Accordion multiple className="flex flex-col gap-3">
-            {extras.map(({ evento, gtm, site }) => {
-              const estado = estadoDaRegra(regras, evento.origem);
-              const codigo = caminho === 'gtm' ? gtm : site;
-              const chaveCopia = `${evento.origem}-${caminho}`;
-              const acionador = acionadorDoComentario(gtm);
-              const chamada = chamadaJsDoComentario(site);
+        <Accordion multiple className="border-y border-line">
+          {extras.map((tag) => {
+            const { evento, gtm, site } = tag;
+            const estado = estadoDaRegra(regras, evento.origem);
+            const codigo = caminho === 'gtm' ? gtm : site;
+            const chaveCopia = `${evento.origem}-${caminho}`;
+            const acionador = acionadorDoComentario(gtm);
+            const chamada = chamadaJsDoComentario(site);
 
-              return (
-                <AccordionItem
-                  key={evento.origem}
-                  value={evento.origem}
-                  className="overflow-hidden rounded-panel border border-line-strong bg-surface-2 last:border-b"
-                >
-                  <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
-                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-3">
-                      <span className="text-label font-semibold text-fg-strong">
-                        {evento.rotuloPt}
-                      </span>
-                      <ParamChip>{evento.evento}</ParamChip>
-                      <StatusDot tone={estado.tom}>{estado.texto}</StatusDot>
+            return (
+              <AccordionItem key={evento.origem} value={evento.origem}>
+                <AccordionTrigger className="min-h-11 py-2 hover:no-underline">
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pr-3">
+                    <span className="text-label font-semibold text-fg-strong">
+                      {evento.rotuloPt}
                     </span>
-                  </AccordionTrigger>
+                    <ParamChip>{evento.evento}</ParamChip>
+                    <StatusDot tone={estado.tom}>{estado.texto}</StatusDot>
+                  </span>
+                </AccordionTrigger>
 
-                  <AccordionContent className="border-t border-line px-4 pt-4 pb-4">
-                    <p className="text-body text-fg-body">{evento.descricao}</p>
+                <AccordionContent className="pb-4">
+                  <p className="text-body text-fg-body">{evento.descricao}</p>
 
-                    {caminho === 'gtm' ? (
-                      <dl className="mt-3">
-                        <dt className="text-label font-semibold text-fg-strong">Acionador no GTM</dt>
-                        <dd className="mt-0.5 text-body text-fg-body">
-                          {acionador || evento.quando}
-                        </dd>
-                      </dl>
-                    ) : (
-                      <dl className="mt-3">
-                        <dt className="text-label font-semibold text-fg-strong">Chamada no site</dt>
-                        <dd className="mt-0.5">
-                          <code className="wrap-token block rounded border border-line-control bg-surface-2 px-1.5 py-1 font-mono text-caption text-fg-body">
-                            {chamada || `window.cvtag.enviar('${evento.origem}')`}
-                          </code>
-                        </dd>
-                      </dl>
-                    )}
+                  {caminho === 'gtm' ? (
+                    <dl className="mt-3">
+                      <dt className="text-label font-semibold text-fg-strong">Acionador no GTM</dt>
+                      <dd className="mt-1 text-body text-fg-body">
+                        {acionador || evento.quando}
+                      </dd>
+                    </dl>
+                  ) : (
+                    <dl className="mt-3">
+                      <dt className="text-label font-semibold text-fg-strong">Chamada no site</dt>
+                      <dd className="mt-1">
+                        <code className="wrap-token block rounded-control bg-surface-2 px-2 py-1 font-mono text-caption text-fg-body">
+                          {chamada || `window.cvtag.enviar('${evento.origem}')`}
+                        </code>
+                      </dd>
+                    </dl>
+                  )}
 
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-caption text-fg-muted">{ROTULO_FORMATO[caminho]}</span>
-                      <Button size="sm" variant="outline" onClick={() => copiar(codigo, chaveCopia)}>
-                        {copiado === chaveCopia ? (
-                          <Check className="size-3.5 text-success" aria-hidden />
-                        ) : (
-                          <Copy className="size-3.5" aria-hidden />
-                        )}
-                        Copiar
-                      </Button>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-caption text-fg-muted">{ROTULO_FORMATO[caminho]}</span>
+                    <Button size="sm" variant="outline" onClick={() => copiar(codigo, chaveCopia)}>
+                      {copiado === chaveCopia ? (
+                        <Check className="size-3.5 text-success" aria-hidden />
+                      ) : (
+                        <Copy className="size-3.5" aria-hidden />
+                      )}
+                      Copiar
+                    </Button>
+                  </div>
+
+                  <Recolhido titulo="Ver código">
+                    <Textarea
+                      readOnly
+                      spellCheck={false}
+                      rows={8}
+                      value={codigo}
+                      aria-label={`Código da tag ${evento.evento} — ${ROTULO_FORMATO[caminho]}`}
+                      className="wrap-token font-mono text-caption"
+                    />
+                  </Recolhido>
+                  {caminho === 'gtm' && (
+                    <div className="mt-3">
+                      <VariavelDoPixel tags={[tag]} copiar={copiar} copiado={copiado} />
                     </div>
-
-                    <details className="mt-2 min-w-0">
-                      <summary className="w-fit cursor-pointer text-caption font-medium text-fg-strong underline underline-offset-2">
-                        Ver código
-                      </summary>
-                      <Textarea
-                        readOnly
-                        spellCheck={false}
-                        rows={8}
-                        value={codigo}
-                        aria-label={`Código da tag ${evento.evento} — ${ROTULO_FORMATO[caminho]}`}
-                        className="wrap-token mt-2 font-mono text-caption"
-                      />
-                    </details>
-                  </AccordionContent>
-                </AccordionItem>
-              );
-            })}
-          </Accordion>
-        )}
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       </div>
-    </div>
+    </Recolhido>
   );
 }
 

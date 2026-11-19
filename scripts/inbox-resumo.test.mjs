@@ -35,6 +35,10 @@
  * 24. anterior só com comparar, e a janela certa de cada período (V4)
  * 25. As rotas: comparar e empresaId no resumo; eventId e nunca emailHash na
  *     lista de /api/inbox (V4) — num diretório temporário, sem rede
+ * 26. porEventoMeta.repetidos e eventosRepetidos: o repetido que foi segurado,
+ *     sem teste, sem Pixel em modo teste e só dentro do período (M-24)
+ * 27. receitaPorCaminho: compra aceita, plataforma x site, cada moeda na sua,
+ *     sem teste e sem a compra que voltou só como repetida (M-25)
  *
  * Uso: npm run test:inbox-resumo
  */
@@ -55,7 +59,7 @@ globalThis.fetch = async (alvo) => {
 delete process.env.ACCESS_TOKEN;
 delete process.env.PIXEL_ID;
 
-const { resumirInbox, periodoValido, enviadoSoEmTeste } = await import(
+const { resumirInbox, periodoValido, enviadoSoEmTeste, eventosRepetidos } = await import(
   new URL('../src/lib/inbox-resumo.ts', import.meta.url).href
 );
 
@@ -1148,6 +1152,128 @@ const ACEITO = [{ marcaId: 'a', status: 'enviado', httpStatus: 200, eventsReceiv
   );
   ok(r.abandonos === 2, 'abandonos: 2 checkout_abandoned + 1 purchase_approved -> 2 (teste da equipe fora)', String(r.abandonos));
   ok(resumirInbox([], AGORA, 30).abandonos === 0, 'abandonos: lista vazia -> 0');
+}
+
+/* ---------------- 26. Repetidos por evento da Meta (M-24) ---------------- */
+{
+  // Dados inventados. Nada aqui fala com a Meta.
+  const aceito = { marcaId: 'a', pixelId: 'P1', status: 'enviado', httpStatus: 200, eventsReceived: 1 };
+  const repetido = { marcaId: 'a', pixelId: 'P1', status: 'duplicado' };
+  const repetidoEmTeste = { marcaId: 'a', pixelId: 'P1', status: 'duplicado', modoTeste: true };
+  const r = resumirInbox(
+    [
+      item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [aceito] }),
+      item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [repetido] }),
+      item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [repetido] }),
+      // Pixel em modo teste: o "duplicado" dele não prova nada.
+      item({ status: 'disparado', evento: 'InitiateCheckout', eventoMeta: 'InitiateCheckout', resultados: [repetidoEmTeste] }),
+      // Dois Pixels: um aceitou agora, o outro já tinha. Conta um repetido.
+      item({ status: 'disparado', evento: 'Lead', eventoMeta: 'Lead', resultados: [aceito, { ...repetido, marcaId: 'b', pixelId: 'P2' }] }),
+      // Teste da equipe: fora da conta, como em todo o resto.
+      item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [repetido], testeInterno: true }),
+      // Fora dos 7 dias.
+      item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [repetido], recebidoEm: diasAtras(20) }),
+      // Sem resultado nenhum.
+      item({ evento: 'PageView', eventoMeta: 'PageView' }),
+    ],
+    AGORA,
+    7
+  );
+  const por = Object.fromEntries(r.porEventoMeta.map((e) => [e.eventoMeta, e]));
+  ok(por.Purchase?.recebidos === 3 && por.Purchase?.repetidos === 2, 'repetidos: Purchase 3 recebidos, 2 repetidos (teste e fora do periodo nao entram)', JSON.stringify(por.Purchase));
+  ok(por.InitiateCheckout?.repetidos === 0, 'repetidos: duplicado de Pixel em modo teste nao conta', JSON.stringify(por.InitiateCheckout));
+  ok(por.Lead?.repetidos === 1, 'repetidos: um Pixel aceitou e o outro ja tinha -> 1 repetido', JSON.stringify(por.Lead));
+  ok(por.PageView?.repetidos === 0, 'repetidos: item sem resultado -> 0 (numero, nao undefined)', JSON.stringify(por.PageView));
+
+  const lista = eventosRepetidos(r.porEventoMeta);
+  ok(
+    lista.map((e) => `${e.eventoMeta}:${e.repetidos}`).join(',') === 'Purchase:2,Lead:1',
+    'eventosRepetidos: so quem repetiu, do maior para o menor',
+    JSON.stringify(lista)
+  );
+  ok(eventosRepetidos(undefined).length === 0, 'eventosRepetidos: lista ausente -> vazia');
+  ok(
+    eventosRepetidos([{ eventoMeta: 'Purchase', recebidos: 3, aceitos: 1 }]).length === 0,
+    'eventosRepetidos: resposta antiga, sem o campo -> vazia'
+  );
+  ok(
+    eventosRepetidos([
+      { eventoMeta: 'Lead', recebidos: 2, aceitos: 2, repetidos: 2 },
+      { eventoMeta: 'AddToCart', recebidos: 2, aceitos: 2, repetidos: 2 },
+    ])
+      .map((e) => e.eventoMeta)
+      .join(',') === 'AddToCart,Lead',
+    'eventosRepetidos: empate pelo nome'
+  );
+}
+
+/* ---------------- 27. Receita por caminho (M-25) ---------------- */
+{
+  // Dados inventados. Nada aqui fala com a Meta.
+  const aceito = { marcaId: 'a', pixelId: 'P1', status: 'enviado', httpStatus: 200, eventsReceived: 1 };
+  const aceitoEmTeste = { ...aceito, modoTeste: true };
+  const repetido = { marcaId: 'a', pixelId: 'P1', status: 'duplicado' };
+  const recusado = { marcaId: 'a', pixelId: 'P1', status: 'erro', httpStatus: 400 };
+  const compra = (extra = {}) => item({ status: 'disparado', eventoMeta: 'Purchase', resultados: [aceito], ...extra });
+
+  const r = resumirInbox(
+    [
+      // Plataforma (webhook): a origem é o texto que a plataforma manda.
+      compra({ origem: 'plataforma-de-vendas/1.0', valor: 100, moeda: 'BRL' }),
+      compra({ origem: 'outro-agente', valor: 50.5, moeda: 'BRL' }),
+      compra({ origem: 'plataforma-de-vendas/1.0', valor: 20, moeda: 'USD' }),
+      // Sem origem (linha antiga): conta como plataforma.
+      compra({ valor: 5, moeda: 'BRL' }),
+      // Site (tag).
+      compra({ origem: 'tag', valor: 30, moeda: 'BRL' }),
+      // Dois Pixels: um recusou, o outro aceitou. Foi aceita.
+      compra({ origem: 'tag', valor: 12, moeda: 'BRL', resultados: [recusado, { ...aceito, marcaId: 'b', pixelId: 'P2' }] }),
+      // A mesma venda de 100 chegou também pela tag e foi segurada: fora.
+      compra({ origem: 'tag', valor: 100, moeda: 'BRL', resultados: [repetido] }),
+      // Aceite só em Pixel com código de teste: fora.
+      compra({ origem: 'tag', valor: 999, moeda: 'BRL', resultados: [aceitoEmTeste] }),
+      // Teste da equipe: fora.
+      compra({ origem: 'outro-agente', valor: 0.01, moeda: 'BRL', testeInterno: true }),
+      // A Meta recusou: fora.
+      compra({ origem: 'outro-agente', valor: 70, moeda: 'BRL', resultados: [recusado] }),
+      // Sem registro de resposta (item antigo): fora, não há prova de aceite.
+      item({ status: 'disparado', eventoMeta: 'Purchase', origem: 'outro-agente', valor: 60, moeda: 'BRL' }),
+      // Aceita, mas sem valor: não há o que somar.
+      compra({ origem: 'outro-agente' }),
+      // Não é compra: fora, mesmo com valor.
+      compra({ origem: 'tag', evento: 'InitiateCheckout', eventoMeta: 'InitiateCheckout', valor: 500, moeda: 'BRL' }),
+      // Fora do período.
+      compra({ origem: 'outro-agente', valor: 40, moeda: 'BRL', recebidoEm: diasAtras(40) }),
+      // Ainda na fila: fora.
+      item({ eventoMeta: 'Purchase', origem: 'tag', valor: 80, moeda: 'BRL' }),
+    ],
+    AGORA,
+    30
+  );
+  const texto = (lista) => (lista ?? []).map((v) => `${v.moeda}:${v.total}:${v.compras}`).join(',');
+  ok(
+    texto(r.receitaPorCaminho?.plataforma) === 'BRL:155.5:3,USD:20:1',
+    'receitaPorCaminho: plataforma soma cada moeda na sua, da maior para a menor',
+    texto(r.receitaPorCaminho?.plataforma)
+  );
+  ok(
+    texto(r.receitaPorCaminho?.site) === 'BRL:42:2',
+    'receitaPorCaminho: site so com compra aceita (repetida, teste e fila ficam fora)',
+    texto(r.receitaPorCaminho?.site)
+  );
+
+  const vazio = resumirInbox([], AGORA, 30).receitaPorCaminho;
+  ok(
+    Array.isArray(vazio?.plataforma) && vazio.plataforma.length === 0 && Array.isArray(vazio?.site) && vazio.site.length === 0,
+    'receitaPorCaminho: lista vazia -> os dois caminhos vazios (lista, nao undefined)'
+  );
+
+  const soSite = resumirInbox([compra({ origem: 'tag', valor: 10, moeda: 'BRL' })], AGORA, 30).receitaPorCaminho;
+  ok(
+    texto(soSite?.site) === 'BRL:10:1' && texto(soSite?.plataforma) === '',
+    'receitaPorCaminho: so pelo site -> plataforma vazia',
+    `${texto(soSite?.site)} | ${texto(soSite?.plataforma)}`
+  );
 }
 
 ok(chamadasDeRede === 0, 'nenhuma chamada de rede durante a suite', String(chamadasDeRede));

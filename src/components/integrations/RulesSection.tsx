@@ -59,8 +59,25 @@ type TomDoEstado = 'success' | 'warning' | 'danger' | 'neutral';
  * `!== false`, a mesma regra do servidor. Sem token nada sai, esteja o Switch
  * como estiver, e a tela diz isso em vez de "Ligado".
  */
-function estadoDoSwitch(m: MarcaPublica | undefined): { tom: TomDoEstado; texto: string } {
-  if (!m) return { tom: 'neutral', texto: 'Pixel não encontrado nesta empresa' };
+/**
+ * Como está a lista de Pixels do store: ainda chegando, falhou ou chegou.
+ * Só com 'pronta' dá para afirmar que um Pixel não existe nesta empresa.
+ */
+type LeituraDosPixels = 'carregando' | 'erro' | 'pronta';
+
+function estadoDoSwitch(
+  m: MarcaPublica | undefined,
+  leitura: LeituraDosPixels
+): { tom: TomDoEstado; texto: string } {
+  if (!m) {
+    if (leitura === 'carregando') {
+      return { tom: 'neutral', texto: 'Carregando o estado do Pixel…' };
+    }
+    if (leitura === 'erro') {
+      return { tom: 'warning', texto: 'Estado não lido. Use "Tentar de novo" no aviso acima.' };
+    }
+    return { tom: 'neutral', texto: 'Pixel não encontrado nesta empresa' };
+  }
   if (!m.temToken) return { tom: 'danger', texto: 'Sem token — nada sai' };
   return m.autoDisparo === true
     ? { tom: 'success', texto: 'Ligado' }
@@ -98,6 +115,13 @@ export function RulesSection({
   // esta secao e a Caixa de entrada liam a mesma coisa em dois lugares, e duas
   // copias da lista de Pixel podem divergir dentro da mesma sessao.
   const marcas = useBrandStore((s) => s.marcas);
+  // A lista de Pixels pode estar chegando ou ter falhado: lista vazia não
+  // quer dizer "esta empresa não tem o Pixel" (T-M12).
+  const marcasCarregadas = useBrandStore((s) => s.carregado);
+  const marcasCarregando = useBrandStore((s) => s.carregando);
+  const erroDasMarcas = useBrandStore((s) => s.erro);
+  const leituraDosPixels: LeituraDosPixels =
+    !marcasCarregadas || marcasCarregando ? 'carregando' : erroDasMarcas ? 'erro' : 'pronta';
   // A empresa que `pedir()` manda no header `X-Empresa-Id` — a mesma que o PUT
   // de /api/integracoes usa para conferir os Pixels da regra.
   const empresaAtivaId = useEmpresaStore((s) => s.empresaAtivaId);
@@ -274,7 +298,7 @@ export function RulesSection({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {semRegraAgora.length > 0 && (
         <Callout
           tone="warning"
@@ -306,50 +330,50 @@ export function RulesSection({
         </Callout>
       )}
 
-      <div className="flex flex-col gap-3 rounded-panel border border-line bg-surface-2 p-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <label className="relative min-w-0 flex-1">
-            <span className="sr-only">Buscar regra</span>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted"
-              aria-hidden
-            />
-            <Input
-              value={busca}
-              onChange={(event) => setBusca(event.target.value)}
-              placeholder={`Buscar por ${exemploDeNome}, Purchase ou compra`}
-              className="w-full pl-9"
-            />
-          </label>
-          {/* No celular, uma linha só que rola de lado: em duas linhas os cinco
-              filtros ocupavam quase 100px antes da lista (13/10, dono). */}
-          <div
-            className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0"
-            role="group"
-            aria-label="Filtrar regras"
-          >
-            {filtros.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                aria-pressed={filtro === item.value}
-                onClick={() => setFiltro(item.value)}
-                className={cn(
-                  'min-h-control-md shrink-0 rounded-control border px-3 text-caption font-medium whitespace-nowrap transition-colors',
-                  filtro === item.value
-                    ? 'border-line border-b-2 border-b-fg-strong bg-surface-3 text-fg-strong'
-                    : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+      {/* Busca, filtros e as duas ações numa linha só, sem caixa em volta. Só um
+          botão amarelo por vez: "Nova regra" até haver regra alterada; depois
+          o amarelo passa para "Salvar regras" (C5, T10). */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <label className="relative min-w-48 flex-1 basis-64">
+          <span className="sr-only">Buscar regra</span>
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted"
+            aria-hidden
+          />
+          <Input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder={`Buscar por ${exemploDeNome}, Purchase ou compra`}
+            className="w-full pl-9"
+          />
+        </label>
+        {/* No celular, uma linha só que rola de lado. */}
+        <div
+          className="-mx-3 flex max-w-full gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] lg:mx-0 lg:overflow-visible lg:px-0"
+          role="group"
+          aria-label="Filtrar regras"
+        >
+          {filtros.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              aria-pressed={filtro === item.value}
+              onClick={() => setFiltro(item.value)}
+              className={cn(
+                'min-h-control-md shrink-0 rounded-control border px-3 text-caption font-medium whitespace-nowrap transition-colors',
+                filtro === item.value
+                  ? 'border-line border-b-2 border-b-fg-strong bg-surface-3 text-fg-strong'
+                  : 'border-line text-fg-muted hover:border-line-control hover:text-fg-body'
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={adicionar}>
+          <Button variant={sujas ? 'outline' : 'default'} onClick={adicionar}>
             <Plus className="size-4" aria-hidden />
-            Adicionar regra
+            Nova regra
           </Button>
           {/* C5 (T10): com regra alterada, o botão vira o destaque da barra e o
               aviso diz que nada foi gravado ainda — os "Salvar" das outras
@@ -358,20 +382,17 @@ export function RulesSection({
             <Save className="size-4" aria-hidden />
             {salvando ? 'Salvando…' : 'Salvar regras'}
           </Button>
-          {sujas && (
-            <>
-              <Button variant="ghost" onClick={onDescartar} disabled={salvando}>
-                <RotateCcw className="size-4" aria-hidden />
-                Descartar alterações
-              </Button>
-              <StatusDot tone="warning">Regras alteradas, não salvas</StatusDot>
-            </>
-          )}
-          <span className="text-caption text-fg-muted">
-            {visiveis.length} de {regras.length} regra{regras.length === 1 ? '' : 's'}
-          </span>
         </div>
       </div>
+      {sujas && (
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusDot tone="warning">Regras alteradas, não salvas</StatusDot>
+          <Button variant="ghost" size="sm" onClick={onDescartar} disabled={salvando}>
+            <RotateCcw className="size-4" aria-hidden />
+            Descartar alterações
+          </Button>
+        </div>
+      )}
 
       {visiveis.length === 0 ? (
         /* C-12: lista vazia e lista filtrada sao perguntas diferentes. Sem a
@@ -412,7 +433,7 @@ export function RulesSection({
         multiple
         value={abertas}
         onValueChange={(value) => setAbertas(value as string[])}
-        className="gap-3"
+        className="overflow-hidden rounded-panel border border-line bg-surface-1"
       >
         {visiveis.map(({ regra: r, indice: i }) => {
           const foraDoCatalogo =
@@ -432,15 +453,17 @@ export function RulesSection({
             const m = marcaPorId.get(id);
             return Boolean(m?.temToken) && m?.autoDisparo === true;
           }).length;
+          // T-M12: Pixel que ainda não está na lista NÃO conta como desligado
+          // enquanto a lista não chegou.
+          const pixelsSemLeitura = pixelsDestaRegra.filter((id) => !marcaPorId.has(id)).length;
 
           return (
             <AccordionItem
               key={r.id}
               value={r.id}
-              className="overflow-hidden rounded-panel border border-line-strong bg-surface-2 last:border-b"
             >
-              <AccordionTrigger className="min-h-14 px-4 py-3 hover:no-underline">
-                <span className="flex min-w-0 flex-1 flex-col gap-1.5 pr-3 text-left">
+              <AccordionTrigger className="min-h-11 items-center rounded-none px-4 py-2 hover:no-underline">
+                <span className="flex min-w-0 flex-1 flex-col gap-1 pr-3 text-left">
                   <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <StatusDot tone={r.ativo ? 'success' : 'neutral'}>
                       {r.ativo ? 'Ativa' : 'Desativada'}
@@ -470,7 +493,11 @@ export function RulesSection({
                       {MODOS.find((m) => m.valor === r.modo)?.rotulo}
                     </Badge>
                     {r.modo === 'auto' && r.ativo &&
-                      (pixelsLigados === pixelsDestaRegra.length ? (
+                      (leituraDosPixels !== 'pronta' && pixelsSemLeitura > 0 ? (
+                        <StatusDot tone="neutral">
+                          {leituraDosPixels === 'carregando' ? 'Conferindo os Pixels…' : 'Pixels não lidos'}
+                        </StatusDot>
+                      ) : pixelsLigados === pixelsDestaRegra.length ? (
                         <StatusDot tone="success">
                           {pixelsDestaRegra.length === 1 ? 'Pixel ligado' : 'Pixels ligados'}: sai sozinho
                         </StatusDot>
@@ -629,7 +656,7 @@ export function RulesSection({
                     Pixels). Quem olha só a regra achava que "Automático"
                     bastava. */}
                 {r.modo === 'auto' && (
-                  <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface-1 p-3">
+                  <div className="flex flex-col gap-2 border-t border-line pt-3">
                     <p className="text-label font-semibold text-fg-strong">
                       Só sai sozinho quando as duas estão ligadas
                     </p>
@@ -642,7 +669,7 @@ export function RulesSection({
                       </li>
                       {pixelsDaRegra(r).map((id) => {
                         const m = marcaPorId.get(id);
-                        const estado = estadoDoSwitch(m);
+                        const estado = estadoDoSwitch(m, leituraDosPixels);
                         return (
                           <li key={id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="text-caption text-fg-body">
@@ -677,6 +704,7 @@ export function RulesSection({
       </datalist>
 
       <p className="text-caption text-fg-muted">
+        {visiveis.length !== regras.length && `${visiveis.length} de `}
         {regras.length} regra{regras.length === 1 ? '' : 's'} ·{' '}
         {regras.filter((r) => r.ativo && r.modo === 'auto').length} automática
         {regras.filter((r) => r.ativo && r.modo === 'auto').length === 1 ? '' : 's'}

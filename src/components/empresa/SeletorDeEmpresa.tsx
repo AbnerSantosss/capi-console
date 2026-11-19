@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, Pencil } from '@/components/ui/icones';
+import { Pencil } from '@/components/ui/icones';
 
 import type { EmpresaPublica } from '@/stores/useEmpresaStore';
 import { destinoAoTrocar, slugDoEndereco } from '@/lib/empresa-do-endereco';
@@ -18,9 +18,10 @@ import { cn } from '@/lib/utils';
  * pecas que as duas usam: a insignia da empresa e a lista.
  *
  * Com varias empresas no mesmo console, errar de empresa custa um evento real
- * disparado para o Pixel errado. Por isso a empresa aberta se le de tres
- * jeitos ao mesmo tempo, e nunca so pela cor: fundo realcado com filete a
- * esquerda, o ✓ ao lado do nome e o `aria-current` para o leitor de tela.
+ * enviado para o Pixel errado. Por isso a empresa aberta se le de mais de um
+ * jeito, e nunca so pela cor: fundo realcado com filete a esquerda, peso do
+ * nome e o `aria-current` para o leitor de tela. O ✓ saiu no redesenho de
+ * 18/11/2026 (secao 1.14), assim como o selo "—" de estado nao medido.
  *
  * O ouvinte de "outra aba trocou a empresa" (C2) morava aqui e mudou para a
  * `LateralDeEmpresas`, que monta uma vez so em toda tela. A lista aparece em
@@ -133,10 +134,8 @@ export const EVENTO_EDITAR_EMPRESA = 'capi:editar-empresa';
  * e `/guia` nenhuma linha fica marcada, e isso é o certo: nenhuma empresa
  * está aberta ali.
  *
- * Cada empresa tem um selo de estado. Até a V5 medir de verdade (tag chegando,
- * Pixel respondendo), ele diz "—" com ponto neutro, e por extenso para o
- * leitor de tela: melhor admitir que não mediu do que pintar um verde que
- * ninguém conferiu.
+ * O ponto de estado só aparece quando há medida; a lista ainda não mede nada,
+ * então não desenha ponto nenhum, e nunca um verde que ninguém conferiu.
  *
  * `aoEscolher` é para a gaveta se fechar quando o operador escolhe.
  */
@@ -179,40 +178,30 @@ export function ListaDeEmpresas({
   return (
     // O tamanho do texto mora na lista, e não em cada linha: somado a uma cor
     // de texto no mesmo `cn`, o tailwind-merge descartaria a cor.
-    <ul className="flex flex-col gap-0.5 text-body">
+    <ul className="flex flex-col gap-0.5 text-label">
       {empresas.map((empresa) => {
         const aberta = empresa.slug === slugAberto;
         return (
-          <li key={empresa.id} className="flex min-w-0 items-center gap-1">
+          <li key={empresa.id} className="group/linha flex min-w-0 items-center gap-1">
             <button
               type="button"
               onClick={() => trocar(empresa)}
               aria-current={aberta ? 'page' : undefined}
               title={empresa.nome}
               className={
-                'flex min-h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-control border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto ' +
+                'flex min-h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto ' +
                 (aberta
-                  ? 'border-tinta-texto bg-tinta/15 font-medium text-fg-strong'
+                  ? 'border-fg-strong bg-surface-3 font-medium text-fg-strong'
                   : 'border-transparent text-fg-body hover:bg-surface-2 hover:text-fg-strong')
               }
             >
-              <Insignia empresa={empresa} className="size-6" />
+              <Insignia empresa={empresa} className="size-5" />
               <span className="min-w-0 flex-1 truncate">{empresa.nome}</span>
-              {/* O ✓ é o que diz qual está aberta — cor sozinha não é rótulo. */}
-              {aberta && (
-                <>
-                  <Check className="size-4 shrink-0 text-tinta-texto" aria-hidden />
-                  <span className="sr-only">(empresa aberta)</span>
-                </>
-              )}
-              <span className="flex shrink-0 items-center gap-1 text-caption text-fg-muted">
-                <span aria-hidden className="size-1.5 rounded-full bg-fg-muted" />
-                <span aria-hidden>—</span>
-                <span className="sr-only">Estado: ainda não medido</span>
-              </span>
+              {aberta && <span className="sr-only">(empresa aberta)</span>}
             </button>
-            {/* Editar só a empresa aberta: é dela que a tela fala. Em V7 a
-                edição muda para a aba Configurações. */}
+            {/* Editar só a empresa aberta: é dela que a tela fala. O lápis
+                aparece no hover e no foco (a aba Configurações já leva ao
+                mesmo lugar); com dedo, fica sempre à vista. */}
             {aberta && (
               <button
                 type="button"
@@ -224,7 +213,7 @@ export function ListaDeEmpresas({
                 }}
                 aria-label={`Editar ${empresa.nome}`}
                 title={`Editar ${empresa.nome}`}
-                className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+                className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-control text-fg-muted opacity-0 transition-[color,background-color,opacity] group-hover/linha:opacity-100 group-focus-within/linha:opacity-100 hover:bg-surface-2 hover:text-fg-strong focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto [@media(pointer:coarse)]:opacity-100"
               >
                 <Pencil className="size-4" aria-hidden />
               </button>

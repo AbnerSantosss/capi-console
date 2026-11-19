@@ -18,7 +18,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
  * Os outros parâmetros da busca (o período: `?dias=`, `?de=`, `?ate=`) passam
  * adiante: trocar de Resumo para Compras mantém a janela escolhida. O
  * `?evento=` não passa: ele é o recorte "quem mandou este evento", que só
- * existe a partir do resumo. O Resumo é o endereço sem `vista`.
+ * existe a partir do resumo. O Resumo é `?vista=resumo` (T-M08): o endereço
+ * sem `vista` é a porta da aba, que abre na Fila quando há venda esperando.
  */
 
 export const VISTAS = [
@@ -44,7 +45,7 @@ export function enderecoDaVista(
     if (NAO_PASSAM.has(chave) || valor === undefined) continue;
     for (const v of Array.isArray(valor) ? valor : [valor]) parametros.append(chave, v);
   }
-  if (vista !== 'resumo') parametros.set('vista', vista);
+  parametros.set('vista', vista);
   const texto = parametros.toString();
   return `/e/${slug}/eventos${texto ? `?${texto}` : ''}`;
 }
@@ -62,18 +63,18 @@ export function SeletorDeVista({
 }) {
   return (
     <Tabs value={ativa} className="gap-0">
-      {/* Tamanho do texto no pai, como em `AbasDaEmpresa`: o tailwind-merge
-          das abas leria `text-body` como cor e jogaria fora a cor da inativa. */}
-      <div className={`${consoleStyles.tabsViewport} text-body`}>
-        <TabsList variant="line" aria-label="Vistas de Eventos" className="gap-1 pb-1">
+      {/* Sub-aba (seção 1.6 do redesenho de 18/11/2026): um nível abaixo das
+          abas da empresa, `tamanho="sm"` (36px), sem ícone, `text-label`. */}
+      <div className={consoleStyles.tabsViewport}>
+        <TabsList variant="line" aria-label="Vistas de Eventos" className="gap-1">
           {VISTAS.map((v) => (
             <TabsTrigger
               key={v.valor}
               value={v.valor}
+              tamanho="sm"
               nativeButton={false}
               render={<Link href={enderecoDaVista(slug, v.valor, busca)} />}
               aria-current={v.valor === ativa ? 'page' : undefined}
-              className="h-10 flex-none px-3"
             >
               {v.rotulo}
             </TabsTrigger>

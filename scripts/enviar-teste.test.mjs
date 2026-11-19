@@ -473,9 +473,40 @@ console.log('\n  Erro da Meta e rede fora');
     JSON.stringify(r.corpo)
   );
   ok(
-    r.corpo?.erro === 'Parâmetro inválido (falso)' && r.corpo?.fbtraceId === 'trace-falso-erro',
-    'a linha recebe a mensagem da Meta e o fbtrace_id',
+    r.corpo?.erro ===
+      'A Meta não aceitou o envio. Tente de novo em alguns minutos. Se continuar, confira o Pixel e o token.' &&
+      r.corpo?.fbtraceId === 'trace-falso-erro',
+    'T-M09: recusa sem código → frase em português (nunca o texto cru da Meta) e o fbtrace_id',
     `${r.corpo?.erro} / ${r.corpo?.fbtraceId}`
+  );
+}
+{
+  // T-M09: resposta FALSA, montada aqui. Nada sai para a Meta de verdade.
+  proximaDaGraph = () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          message: 'Error validating access token (falso)',
+          type: 'OAuthException',
+          code: 190,
+          fbtrace_id: 'trace-falso-190',
+        },
+      }),
+      { status: 400, headers: { 'content-type': 'application/json' } }
+    );
+  const r = await enviarTeste(corpoDe('pixel_a', 'Lead'));
+  ok(
+    r.status === 200 &&
+      r.corpo?.ok === false &&
+      r.corpo?.erro ===
+        'O token deste Pixel venceu ou foi revogado. Gere um token novo no Gerenciador de Eventos da Meta e troque aqui.',
+    'T-M09: código 190 → "o token venceu" com o que fazer',
+    JSON.stringify(r.corpo)
+  );
+  ok(
+    !/Error validating/.test(JSON.stringify(r.corpo)),
+    'T-M09: o texto cru da Meta não vai para a tela',
+    JSON.stringify(r.corpo)
   );
 }
 {

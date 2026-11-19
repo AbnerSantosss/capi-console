@@ -125,7 +125,8 @@ export function Stepper({ className = '' }: { className?: string }) {
     <nav
       aria-label="Etapas do envio"
       className={cn(
-        'rounded-panel border border-line-strong bg-surface-1 p-2',
+        // T-R05: sem moldura; mora dentro de um `Recolhido` no fim da tela.
+        'min-w-0',
         className
       )}
     >

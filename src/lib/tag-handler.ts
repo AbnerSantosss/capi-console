@@ -16,6 +16,7 @@ import { guardarPerfil } from '@/lib/perfil-atribuicao';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { resolverModoPorMarca } from '@/lib/modo-por-marca';
 import { normalizarTelefone } from '@/lib/telefone';
+import { anotarSiteRecusado, hostDaOrigemRecusada, podeInvestigarRecusa } from '@/lib/tag-recusados';
 
 /**
  * Coletor da tag de navegador — o unico endpoint PUBLICO deste console.
@@ -73,9 +74,15 @@ const LIMITE_TAG = 32_000;
 /* ------------------------------------------------------------------ */
 
 /**
- * Tentativas recusadas por Origin fora da lista. So um numero, em memoria, sem
- * nada do payload: trafego hostil nao merece disco. Mesmo espirito de
+ * Tentativas recusadas por Origin fora da lista. Aqui, so um numero, em
+ * memoria, sem nada do payload. Mesmo espirito de
  * `tentativasComSegredoInvalido()` em webhook-handler.ts.
+ *
+ * T-M19: quando a recusa vem com a chave de uma empresa, o HOST do site (so
+ * o host, com hora e contagem) vai para `logs/tag-sites-recusados.json`, com
+ * teto de linhas: ver `tag-recusados.ts`. E o que a aba Instalacao mostra em
+ * "tentou enviar e foi recusado". Recusa com chave que nao e de empresa
+ * nenhuma continua sem tocar o disco.
  */
 let origensRecusadas = 0;
 
@@ -90,6 +97,37 @@ let chavesRecusadas = 0;
 /** Quantas vezes o coletor recebeu chave de tag invalida. */
 export function tentativasComChaveInvalida(): number {
   return chavesRecusadas;
+}
+
+/**
+ * T-M19: o hit veio de um site que NENHUMA empresa cadastrou (passo 1). Para
+ * a tela poder oferecer "Autorizar este site", falta saber de quem e a chave:
+ * so por isso o corpo e lido aqui, com o mesmo teto do passo 2, e dele sai
+ * APENAS a chave. Nada do corpo e guardado. Chave sem dono = nao anota nada.
+ *
+ * Nunca lanca e nunca muda a resposta: quem chama devolve o mesmo 403.
+ * `podeInvestigarRecusa` limita quantas recusas por minuto pagam esta
+ * leitura, porque esta recusa sai antes do freio por IP do passo 5.
+ */
+async function anotarRecusaDoPasso1(request: NextRequest): Promise<void> {
+  try {
+    const origin = request.headers.get('origin');
+    if (!hostDaOrigemRecusada(origin)) return;
+    if (!podeInvestigarRecusa()) return;
+    const anunciado = Number(request.headers.get('content-length') || 0);
+    if (anunciado > LIMITE_TAG) return;
+    const cru = await request.text();
+    if (cru.length > LIMITE_TAG) return;
+    const lido: unknown = JSON.parse(cru);
+    if (!lido || typeof lido !== 'object' || Array.isArray(lido)) return;
+    const achado = await acharEmpresaPorChaveTag(
+      texto(lido as Record<string, unknown>, 'k', 'chave')
+    );
+    if (!achado) return;
+    anotarSiteRecusado(achado.empresaId, origin);
+  } catch {
+    // Corpo torto ou config ilegivel: a recusa continua sendo so o 403.
+  }
 }
 
 /** Base publica do console; e ela que autoriza a origem do nosso proprio dominio. */
@@ -511,7 +549,10 @@ export async function processarTag(
   const origem =
     origemJaResolvida !== undefined ? origemJaResolvida : await resolverOrigemTag(request);
   if (!origem) {
+    // T-M19: anota o site para a tela oferecer "Autorizar este site". Tem de
+    // ser esperado: o corpo so pode ser lido antes de a resposta sair.
     origensRecusadas++;
+    await anotarRecusaDoPasso1(request);
     return NextResponse.json({ erro: 'Origem nao autorizada.' }, { status: 403 });
   }
 
@@ -555,7 +596,11 @@ export async function processarTag(
   // estar na lista DESTA empresa. E isto que impede o site do cliente A de
   // coletar com a chave do cliente B.
   if (!origemPermitida(request.headers.get('origin'), cfg.tag.dominios, baseAtual())) {
+    // T-M19: aqui a empresa ja e conhecida. Funcao comum, sem espera e sem
+    // `after`: o `after` lanca fora de requisicao e este ponto e exercitado
+    // direto pelo teste da tag.
     origensRecusadas++;
+    anotarSiteRecusado(empresaId, request.headers.get('origin'));
     return NextResponse.json({ erro: 'Origem nao autorizada.' }, { status: 403 });
   }
 

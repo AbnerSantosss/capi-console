@@ -10,16 +10,10 @@ import React, {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ErroApi, pedir, SessaoExpirada } from '@/lib/cliente-api';
-import {
-  ArrowUpRight,
-  FlaskConical,
-  GitBranch,
-  Inbox,
-} from '@/components/ui/icones';
 
 import { Badge } from '@/components/ui/badge';
 import { Section } from '@/components/common/primitives';
-import { IconeDoAssunto } from '@/components/cenas';
+import { Recolhido } from '@/components/common/Recolhido';
 import { CenaDuasChaves, fatosDasDuasChaves } from './CenaDuasChaves';
 import { InboxList } from './InboxList';
 import { RulesSection } from './RulesSection';
@@ -41,24 +35,13 @@ import type { ListaDeTeste } from '@/lib/deteccao-de-teste';
  * Recebimento e Tag do site saíram daqui na FASE A do plano multi-empresa e
  * viraram a rota `/instalacao`.
  */
-const ABAS: Array<{ value: IntegrationTab; label: string; icon: typeof Inbox }> = [
-  { value: 'inbox', label: 'Fila', icon: Inbox },
-  { value: 'regras', label: 'Regras', icon: GitBranch },
+const ABAS: Array<{ value: IntegrationTab; label: string }> = [
+  { value: 'inbox', label: 'Fila' },
+  { value: 'regras', label: 'Regras' },
   // Junto de Regras: as duas respondem "o que decide o destino deste evento?".
-  { value: 'testes', label: 'Teste interno', icon: FlaskConical },
-  { value: 'retornos', label: 'Repasse', icon: ArrowUpRight },
+  { value: 'testes', label: 'Teste interno' },
+  { value: 'retornos', label: 'Repasse' },
 ];
-
-/* O3 (E6a): o ícone de cada título de seção, na cor do assunto. */
-function IconeDaFila() {
-  return <IconeDoAssunto assunto="evento" icone={Inbox} />;
-}
-function IconeDasRegras() {
-  return <IconeDoAssunto assunto="regra" icone={GitBranch} />;
-}
-function IconeDoTeste() {
-  return <IconeDoAssunto assunto="teste" icone={FlaskConical} />;
-}
 
 // 'regras' e nao 'inbox': esta tela so existe hoje como a aba Regras da
 // empresa, e a Fila mora em Eventos. O `AbaInicialDeRegras` escreve `?aba=regras`
@@ -613,7 +596,7 @@ export function IntegrationsPage({
           REGRA continua na aba Regras — a chave so mostra a contagem dela, e
           por isso recebe `cfg.regras`: desde a C5 sao as regras GRAVADAS, as
           que valem para o servidor, e nao o rascunho que a aba Regras edita. */}
-      <div className="mb-6 min-w-0">
+      <div className="mb-3 min-w-0">
         <ChaveDoAutomatico
           regras={cfg.regras ?? []}
           onIrParaRegras={() => {
@@ -624,30 +607,20 @@ export function IntegrationsPage({
           }}
         />
       </div>
-      {/* E6a: "As duas chaves" no lugar do trilho de 5 estações. Só LÊ o que
-          a ChaveDoAutomatico lê: as regras GRAVADAS (as que valem no
-          servidor) e os Pixels do store. Antes de os Pixels carregarem, a
-          cena fica apagada — nunca um "ok" sem prova. */}
-      <CenaDuasChaves
-        {...fatosDasDuasChaves(cfg.regras ?? [], marcas, marcaAtivaId, marcasCarregadas)}
-      />
       <Tabs
         value={aba}
         onValueChange={(value) => value && selecionarAba(value as IntegrationTab)}
-        className="mt-6 min-w-0 gap-5"
+        className="min-w-0 gap-3"
       >
-        <div
-          ref={faixaDeAbas}
-          className="max-w-full overflow-x-auto rounded-panel border border-line-strong bg-surface-1 p-1.5"
-        >
-          {/* E6a: as quatro abas numa linha só. Em tela estreita a FAIXA rola
-              na horizontal (nunca a página). */}
+        {/* As quatro sub-abas numa linha só, de 36px, sem cartão em volta. Em
+            tela estreita a FAIXA rola na horizontal (nunca a página). */}
+        <div ref={faixaDeAbas} className="max-w-full overflow-x-auto">
           <TabsList
+            variant="line"
             aria-label="Seções da aba Regras"
-            className="h-auto w-max min-w-full items-center justify-start gap-1 bg-transparent p-0"
+            className="w-max min-w-full justify-start gap-1"
           >
             {ABAS.map((item) => {
-              const Icon = item.icon;
               const count =
                 item.value === 'regras'
                   ? regrasNaTela.length
@@ -663,9 +636,8 @@ export function IntegrationsPage({
                 <TabsTrigger
                   key={item.value}
                   value={item.value}
-                  className="h-11 flex-none gap-2 rounded-control px-4 text-label data-active:border-line-control data-active:bg-surface-3 data-active:text-fg-strong"
+                  tamanho="sm"
                 >
-                  <Icon className="size-[18px]" aria-hidden />
                   {item.label}
                   {count !== undefined && (
                     <Badge className="font-mono tabular">{count}</Badge>
@@ -690,20 +662,14 @@ export function IntegrationsPage({
           {/* E6a: a Fila fica, mas só com os textos do `InboxList` (dono: E5).
               O painel "Modo de recebimento", o aviso de teste e os três botões
               saíram: a cena das duas chaves já diz por que um evento para aqui. */}
-          <Section id="inbox" icon={IconeDaFila} variant="card" title="Fila">
+          <Section id="inbox" title="Fila">
             <InboxList />
           </Section>
         </TabsContent>
 
       {/* ---------------------------------------------------------- */}
         <TabsContent value="regras" className="min-w-0 outline-none">
-      <Section
-        icon={IconeDasRegras}
-        variant="card"
-        title="Regras"
-        description="Cada evento da plataforma vira um evento na Meta."
-      >
-        {/* C5 (T10): a aba edita o rascunho e só "Salvar regras" grava.
+        {/* A seção "Regras" que repetia o título da sub-aba saiu. C5 (T10): a aba edita o rascunho e só "Salvar regras" grava.
             Voltar ao que está gravado apaga o rascunho, para o aviso de "não
             salvas" não ficar aceso sem diferença nenhuma. */}
         <RulesSection
@@ -725,14 +691,11 @@ export function IntegrationsPage({
           sujas={regrasSujas}
           salvando={salvando}
         />
-      </Section>
         </TabsContent>
 
       {/* ---------------------------------------------------------- */}
         <TabsContent value="testes" className="min-w-0 outline-none">
       <Section
-        icon={IconeDoTeste}
-        variant="card"
         title="Teste interno"
         description="Gente da equipe que testa o checkout. Nunca vai para a Meta."
       >
@@ -774,6 +737,16 @@ export function IntegrationsPage({
         </TabsContent>
 
       </Tabs>
+
+      {/* E6a: "As duas chaves", agora recolhida no fim da tela. Só LÊ o que a
+          ChaveDoAutomatico lê: as regras GRAVADAS (as que valem no servidor) e
+          os Pixels do store. Antes de os Pixels carregarem, a cena fica
+          apagada — nunca um "ok" sem prova. */}
+      <Recolhido titulo="Como o envio automático decide" className="mt-6">
+        <CenaDuasChaves
+          {...fatosDasDuasChaves(cfg.regras ?? [], marcas, marcaAtivaId, marcasCarregadas)}
+        />
+      </Recolhido>
     </div>
   );
 }

@@ -4,9 +4,8 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, Check, Lock, Save, Trash2 } from '@/components/ui/icones';
+import { AlertTriangle, Lock, Save, Trash2 } from '@/components/ui/icones';
 
-import { IconeDoAssunto } from '@/components/cenas';
 import { letraEscura } from '@/components/empresa/SeletorDeEmpresa';
 import { useEmpresaStore, type EmpresaPublica } from '@/stores/useEmpresaStore';
 import { destinoAoTrocar } from '@/lib/empresa-do-endereco';
@@ -122,11 +121,6 @@ function AvatarDaEmpresa({ nome, cor, imagem }: { nome: string; cor: string; ima
       )}
     </span>
   );
-}
-
-/** Ícone do título da seção (O3): a peça de cenas no lugar do glifo pequeno. */
-function IconeDaSecao() {
-  return <IconeDoAssunto assunto="configuracoes" icone={Save} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -351,7 +345,6 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
   const marcarRascunho = useEmpresaStore((s) => s.marcarRascunho);
   const router = useRouter();
   const pathname = usePathname();
-  const corDoTema = useCorDoTema();
 
   // Semeado uma vez: a página monta este formulário com `key={empresaId}`,
   // então trocar de empresa monta outro, já com os dados da nova.
@@ -408,39 +401,8 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
   };
 
   return (
-    <Section
-      id="dados-da-empresa"
-      title="Dados da empresa"
-      icon={IconeDaSecao}
-      variant="card"
-      action={
-        sujo ? (
-          <StatusDot tone="warning">Não salvo</StatusDot>
-        ) : (
-          <StatusDot tone="success" icon={Check}>
-            Salvo
-          </StatusDot>
-        )
-      }
-    >
-      {/* Prévia estática: o que o operador vê na lista de empresas, lido do
-          estado local do formulário. Não anima. */}
-      <div className="flex items-center gap-3 rounded-control bg-surface-2 p-3">
-        <AvatarDaEmpresa
-          nome={valores.nome}
-          cor={valores.cor || corDoTema}
-          imagem={valores.logoDataUrl || empresa.logoUrl || ''}
-        />
-        <div className="min-w-0">
-          <p className="truncate text-body font-semibold text-fg-strong">
-            {valores.nome.trim() || 'Sem nome'}
-          </p>
-          <p className="truncate font-mono text-caption text-fg-muted">
-            /e/{slugNovo || empresa.slug}
-          </p>
-        </div>
-      </div>
-
+    <Section id="dados-da-empresa" title="Dados da empresa">
+      {/* Uma só prévia do avatar: a do campo "Foto ou logo". */}
       {erro && (
         <Callout tone="danger" icon={AlertTriangle} title="Não foi possível salvar">
           {erro}
@@ -463,30 +425,33 @@ export function FormularioDeEmpresa({ empresa }: { empresa: EmpresaPublica }) {
         </Callout>
       )}
 
-      {/* Barra de salvar: só existe quando há mudança, e fica colada no rodapé
-          da tela enquanto o formulário estiver à vista. */}
-      {sujo && (
-        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-line-strong bg-surface-1 px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5">
-          <Button onClick={() => void salvar()} disabled={salvando}>
-            <Save className="size-4" aria-hidden />
-            {salvando ? 'Salvando…' : 'Salvar alterações'}
+      {/* "Salvar alterações" é o único amarelo da tela e o "Não salvo" aparece
+          uma vez só, ao lado dele. Com mudança, a barra fica colada no rodapé
+          enquanto o formulário estiver à vista. */}
+      <div
+        className={
+          sujo
+            ? 'sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t border-line bg-surface-0 py-3'
+            : 'flex flex-wrap items-center gap-3'
+        }
+      >
+        <Button onClick={() => void salvar()} disabled={!sujo || salvando}>
+          <Save className="size-4" aria-hidden />
+          {salvando ? 'Salvando…' : 'Salvar alterações'}
+        </Button>
+        {sujo && !salvando && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setValores(valoresDe(empresa));
+              setErro('');
+            }}
+          >
+            Descartar alterações
           </Button>
-          {!salvando && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setValores(valoresDe(empresa));
-                setErro('');
-              }}
-            >
-              Descartar alterações
-            </Button>
-          )}
-          <StatusDot tone="warning" className="ml-auto">
-            Não salvo
-          </StatusDot>
-        </div>
-      )}
+        )}
+        {sujo && <StatusDot tone="warning">Não salvo</StatusDot>}
+      </div>
     </Section>
   );
 }
@@ -510,8 +475,6 @@ export function ExcluirEmpresa({ empresa }: { empresa: Pick<EmpresaPublica, 'id'
       <Section
         id="excluir-empresa"
         title="Excluir empresa"
-        icon={Trash2}
-        variant="card"
         action={
           <StatusDot tone="neutral" icon={Lock}>
             Não pode ser excluída

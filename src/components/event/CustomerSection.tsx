@@ -28,7 +28,7 @@ export function CustomerSection() {
       id="secao-cliente"
       step={3}
       icon={IconeDoCliente}
-      variant="card"
+      variant="plain"
       title="Quem é o cliente"
       description="Quanto mais dados, mais fácil a Meta reconhecer a pessoa."
     >

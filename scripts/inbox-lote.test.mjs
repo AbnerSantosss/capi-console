@@ -15,11 +15,12 @@
  *  5. Precedência quando mais de um motivo casa
  *  6. Campos que NÃO excluem (carregado, fila, sem fbc, desconhecido)
  *  7. separarParaLote: lista mista, lista vazia, ordem e identidade preservadas
+ *  8. Reenvio das recusadas: so entra o Pixel que recusou, nunca o que ja aceitou
  *
  * Uso: npm run test:inbox-lote
  */
 
-const { motivoInelegivel, elegivelParaLote, separarParaLote } = await import(
+const { motivoInelegivel, elegivelParaLote, separarParaLote, pixelsRecusados, separarRecusadas } = await import(
   new URL('../src/lib/inbox-lote.ts', import.meta.url).href
 );
 
@@ -124,6 +125,121 @@ ok(
 const comPayload = { id: 'g', status: 'novo', payload: { event: 'purchase_approved' }, emailMascarado: 'ma****@x.com' };
 const sep = separarParaLote([comPayload]);
 ok(sep.elegiveis[0] === comPayload, 'separarParaLote devolve o objeto original, com payload e todos os campos');
+
+/* ---------------- 8. Reenvio das recusadas (T-M10) ---------------- */
+console.log('\n  Reenvio das recusadas\n');
+
+// Dados inventados. Nenhum destes resultados foi a Meta: sao so objetos.
+const recusa = (marcaId, pixelId, extra = {}) => ({ marcaId, pixelId, status: 'erro', httpStatus: 400, ...extra });
+const aceite = (marcaId, pixelId, extra = {}) => ({
+  marcaId,
+  pixelId,
+  status: 'enviado',
+  httpStatus: 200,
+  eventsReceived: 1,
+  ...extra,
+});
+const igual = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+
+ok(igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1')] })), ['a']), 'so recusa: entra com o Pixel que recusou');
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1', { httpStatus: 190 })] })), ['a']),
+  'qualquer httpStatus numerico sem aceite e recusa'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1', { httpStatus: 200, eventsReceived: 0 })] })), ['a']),
+  'resposta 200 com zero eventos recebidos e recusa'
+);
+ok(
+  igual(pixelsRecusados(normal({ status: 'disparado', resultados: [aceite('a', 'px1'), recusa('b', 'px2')] })), ['b']),
+  'A aceitou e B recusou: vai so para o B'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1'), aceite('a', 'px1')] })), []),
+  'enviado no MESMO Pixel: fica de fora'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [aceite('a', 'px1'), recusa('a', 'px1')] })), []),
+  'enviado no mesmo Pixel, em qualquer ordem: fica de fora'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1'), { marcaId: 'a', pixelId: 'px1', status: 'duplicado' }] })), []),
+  'duplicado no MESMO Pixel: fica de fora'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [aceite('a', 'px1'), recusa('b', 'px1')] })), []),
+  'o mesmo pixelId ja aceito em outro cadastro: fica de fora'
+);
+ok(
+  igual(
+    pixelsRecusados(
+      normal({ resultados: [recusa('a', 'px1'), { marcaId: 'a', pixelId: 'px1', status: 'erro', httpStatus: 200, eventsReceived: 1 }] })
+    ),
+    []
+  ),
+  'aceite so pelos numeros (200 com 1 recebido) tambem trava'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [aceite('a', 'px1', { modoTeste: true }), recusa('a', 'px1')] })), []),
+  'aceite em modo de teste tambem trava (na duvida, nao manda)'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('a', 'px1', { modoTeste: true })] })), ['a']),
+  'recusa em modo de teste entra (reenviar a Pixel em teste nao conta nas campanhas)'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [{ marcaId: 'a', pixelId: 'px1', status: 'erro', erro: 'fetch failed' }] })), []),
+  'erro SEM httpStatus (a Meta nao respondeu) nao e recusa'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [{ marcaId: 'a', status: 'sem-token' }] })), []),
+  'sem-token nao e recusa'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [{ marcaId: 'a', status: 'invalido' }, { marcaId: 'b', status: 'pixel-desligado' }] })), []),
+  'invalido e pixel-desligado nao sao recusa'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [{ pixelId: 'px1', status: 'erro', httpStatus: 400 }] })), []),
+  'resultado sem marcaId fica de fora (nao ha para onde mandar)'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [recusa('b', 'px2'), recusa('a', 'px1'), recusa('b', 'px2')] })), ['b', 'a']),
+  'sem repeticao e na ordem dos resultados'
+);
+ok(
+  igual(pixelsRecusados(normal({ resultados: [null, 'texto', 7, [], recusa('a', 'px1')] })), ['a']),
+  'lixo no meio dos resultados nao quebra'
+);
+ok(igual(pixelsRecusados(normal()), []), 'item sem resultados fica de fora');
+ok(igual(pixelsRecusados(normal({ resultados: [] })), []), 'resultados vazio fica de fora');
+ok(igual(pixelsRecusados(normal({ resultados: 'nao e lista' })), []), 'resultados que nao e lista fica de fora');
+ok(igual(pixelsRecusados(null), []) && igual(pixelsRecusados(undefined), []), 'null e undefined nao quebram');
+
+// Ignorado e teste nunca entram, mesmo com recusa gravada (regras 1 e 4 do CLAUDE.md).
+ok(igual(pixelsRecusados(normal({ status: 'ignorado', resultados: [recusa('a', 'px1')] })), []), 'ignorado (status) fica de fora');
+ok(igual(pixelsRecusados(normal({ modo: 'ignorar', resultados: [recusa('a', 'px1')] })), []), 'ignorado (modo) fica de fora');
+ok(
+  igual(pixelsRecusados(normal({ motivoIgnorar: 'pedido estornado', resultados: [recusa('a', 'px1')] })), []),
+  'ignorado (motivoIgnorar) fica de fora'
+);
+ok(igual(pixelsRecusados(normal({ testeInterno: true, resultados: [recusa('a', 'px1')] })), []), 'teste interno fica de fora');
+ok(igual(pixelsRecusados(normal({ testePlataforma: true, resultados: [recusa('a', 'px1')] })), []), 'ping da plataforma fica de fora');
+
+// separarRecusadas: ordem, identidade e entrada torta.
+const r1 = normal({ id: 'r1', resultados: [recusa('a', 'px1')] });
+const r2 = normal({ id: 'r2' });
+const r3 = normal({ id: 'r3', status: 'disparado', resultados: [aceite('a', 'px1'), recusa('b', 'px2')] });
+const r4 = normal({ id: 'r4', status: 'disparado', resultados: [aceite('a', 'px1')] });
+const sepRec = separarRecusadas([r1, r2, r3, r4]);
+ok(sepRec.length === 2, 'separarRecusadas: so os 2 itens com Pixel a reenviar', String(sepRec.length));
+ok(sepRec[0]?.item === r1 && sepRec[1]?.item === r3, 'separarRecusadas: ordem original e os MESMOS objetos');
+ok(igual(sepRec[0]?.marcas, ['a']) && igual(sepRec[1]?.marcas, ['b']), 'separarRecusadas: cada item com os seus Pixels');
+ok(igual(separarRecusadas([]), []) && igual(separarRecusadas(null), []), 'separarRecusadas: lista vazia e nao-lista devolvem vazio');
+
+// O lote normal NAO afrouxou: item com recusa gravada segue fora do "Enviar filtrados".
+ok(motivoInelegivel(r1) === 'ja-enviado', 'lote normal continua barrando item que ja tem resultado');
+ok(separarParaLote([r1]).elegiveis.length === 0, 'separarParaLote nao passa a aceitar item recusado');
 
 console.log(
   falhas === 0 ? '\n  Elegibilidade de lote com 100% de cobertura e funcionando.\n' : `\n  ${falhas} falha(s).\n`

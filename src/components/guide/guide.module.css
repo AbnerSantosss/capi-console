@@ -8,22 +8,22 @@
    ========================================================================= */
 
 .hueManual {
-  --hue: #0064e0;
+  --hue: #FCEE21;
 }
 .hueAuto {
-  --hue: #a78bfa;
+  --hue: #C4B5FD;
 }
 .hueConferencia {
-  --hue: #f97362;
+  --hue: #FF8A8A;
 }
 .hueDados {
-  --hue: #22d3ee;
+  --hue: #D4D4D4;
 }
 .hueQualidade {
-  --hue: #34d399;
+  --hue: #4ADE80;
 }
 .hueRegras {
-  --hue: #fbbf24;
+  --hue: #FF9F43;
 }
 
 /* ---------------------------------------------------------------- hero -- */
@@ -87,8 +87,6 @@
   color: var(--fg-muted);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .tasks {
@@ -104,8 +102,8 @@
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+  /* T-R07: sem a faixa lateral de 3px (borda grossa de um lado só). */
   border: 1px solid color-mix(in srgb, var(--hue) 38%, transparent);
-  border-left: 3px solid var(--hue);
   border-radius: 12px;
   /* Era um gradiente de 120deg sobre rgb 14 18 25 a 94% — o navy do v3
      escrito a mao. Virou uma chapa so: a tinta do assunto a 8% sobre a
@@ -193,8 +191,6 @@
   color: var(--fg-muted);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 /* ---------------------------------------------------------- path card -- */
@@ -250,9 +246,7 @@
   color: var(--fg-muted);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
-  letter-spacing: 0.1em;
   line-height: 18px;
-  text-transform: uppercase;
 }
 
 .pathDesc {
@@ -446,9 +440,7 @@
   color: var(--fg-body);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
-  letter-spacing: 0.1em;
   line-height: 18px;
-  text-transform: uppercase;
 }
 
 .purposeDesc {
@@ -631,8 +623,6 @@
   color: var(--fg-muted);
   font-size: max(11px, 0.6875rem);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .emqTable td {

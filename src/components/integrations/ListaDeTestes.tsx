@@ -33,29 +33,17 @@
  */
 
 import { useState, type ComponentProps } from 'react';
-import { FlaskConical, Mail, Plus, Repeat2, Trash2, User } from '@/components/ui/icones';
+import { FlaskConical, Plus, Repeat2, Trash2 } from '@/components/ui/icones';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Callout, Field, Panel, useFieldA11y } from '@/components/common/primitives';
+import { Callout, Field, Section, useFieldA11y } from '@/components/common/primitives';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
-import { IconeDoAssunto } from '@/components/cenas';
 import {
   COMPRAS_PARA_SUSPEITAR,
   limiteDeCompras,
   type ListaDeTeste,
 } from '@/lib/deteccao-de-teste';
-
-/* O3 (E6a): o ícone de cada título de painel, na cor do assunto "teste". */
-function IconeDoEmail() {
-  return <IconeDoAssunto assunto="teste" icone={Mail} />;
-}
-function IconeDoNome() {
-  return <IconeDoAssunto assunto="teste" icone={User} />;
-}
-function IconeDaRepeticao() {
-  return <IconeDoAssunto assunto="teste" icone={Repeat2} />;
-}
 
 /** Espelha `NOME_MIN` de `api/integracoes/route.ts`. Ver o bloco vermelho de lá. */
 const NOME_MIN = 3;
@@ -109,18 +97,15 @@ function CampoDoField(props: ComponentProps<typeof Input>) {
  */
 function Item({
   valor,
-  icone: Icone,
   aoRemover,
   rotuloRemover,
 }: {
   valor: string;
-  icone: React.ElementType;
   aoRemover: () => void;
   rotuloRemover: string;
 }) {
   return (
-    <li className="flex min-w-0 items-center gap-2 rounded-control border border-line bg-surface-2 py-1.5 pr-1.5 pl-2.5">
-      <Icone className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
+    <li className="flex min-h-11 min-w-0 items-center gap-2 py-1 pr-2 pl-4">
       <span className="wrap-token min-w-0 flex-1 font-mono text-caption text-fg-body">{valor}</span>
       <Button size="icon-sm" variant="ghost" aria-label={rotuloRemover} onClick={aoRemover}>
         <Trash2 className="size-3.5 text-danger" aria-hidden />
@@ -211,17 +196,17 @@ export function ListaDeTestes({
   return (
     // `id="testes-internos"` (V7): a âncora que outras telas usam para trazer
     // o operador direto a esta lista.
-    <div id="testes-internos" className="flex min-w-0 scroll-mt-32 flex-col gap-5">
+    <div id="testes-internos" className="flex min-w-0 scroll-mt-32 flex-col gap-6">
       <Callout tone="danger" icon={FlaskConical} title="O que cai nesta lista não chega à Meta">
         Quem está aqui é teste: fica na Fila e <strong>nunca vai para a Meta</strong>. Cadastre só a
         equipe.
       </Callout>
 
       {/* ---------------- e-mails ---------------- */}
-      <Panel title="E-mails de teste" icon={IconeDoEmail}>
+      <Section title="E-mails de teste">
         <p className="text-caption text-fg-muted">Escreva o e-mail inteiro.</p>
 
-        <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Field
             id="novo-email-teste"
             label="E-mail"
@@ -256,28 +241,27 @@ export function ListaDeTestes({
         </div>
 
         {emails.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1.5">
+          <ul className="divide-y divide-line overflow-hidden rounded-panel border border-line bg-surface-1">
             {emails.map((e) => (
               <Item
                 key={e}
                 valor={e}
-                icone={Mail}
                 rotuloRemover={`Remover o e-mail ${e} da lista de testes`}
                 aoRemover={() => gravar({ emails: emails.filter((x) => x !== e) })}
               />
             ))}
           </ul>
         )}
-      </Panel>
+      </Section>
 
       {/* ---------------- nomes ---------------- */}
-      <Panel title="Nomes de teste" icon={IconeDoNome}>
+      <Section title="Nomes de teste">
         <p className="text-caption text-fg-muted">
           Vale parte do nome: &ldquo;Jairo&rdquo; pega &ldquo;Jairo Silva&rdquo;. Mínimo de {NOME_MIN}{' '}
           letras.
         </p>
 
-        <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Field
             id="novo-nome-teste"
             label="Nome"
@@ -307,19 +291,18 @@ export function ListaDeTestes({
         </div>
 
         {nomes.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1.5">
+          <ul className="divide-y divide-line overflow-hidden rounded-panel border border-line bg-surface-1">
             {nomes.map((n) => (
               <Item
                 key={n}
                 valor={n}
-                icone={User}
                 rotuloRemover={`Remover o nome ${n} da lista de testes`}
                 aoRemover={() => gravar({ nomes: nomes.filter((x) => x !== n) })}
               />
             ))}
           </ul>
         )}
-      </Panel>
+      </Section>
 
       {vazia && (
         <EstadoVazio
@@ -339,7 +322,7 @@ export function ListaDeTestes({
       )}
 
       {/* ---------------- e-mail repetido ---------------- */}
-      <Panel title="E-mail repetido em várias compras" icon={IconeDaRepeticao}>
+      <Section title="E-mail repetido em várias compras">
         <p className="text-caption text-fg-muted">
           Mesmo e-mail em várias compras pequenas: o automático para e espera você.
         </p>
@@ -348,11 +331,11 @@ export function ListaDeTestes({
             cima alguém DECIDIU que é teste e o evento é descartado; aqui o
             console só REPAROU num padrão, e descartar sozinho uma venda que ele
             apenas acha que é teste é o erro caro do outro lado. */}
-        <Callout tone="warning" icon={Repeat2} className="mt-3">
+        <Callout tone="warning" icon={Repeat2}>
           <strong>Não descarta nada</strong>; você ainda pode enviar.
         </Callout>
 
-        <div className="mt-3 max-w-64">
+        <div className="max-w-64">
           <Field
             id="compras-para-suspeitar"
             label="A partir de"
@@ -382,10 +365,10 @@ export function ListaDeTestes({
             />
           </Field>
         </div>
-        <p className="mt-2 text-caption text-fg-muted">
+        <p className="text-caption text-fg-muted">
           Salvo quando você sai do campo.
         </p>
-      </Panel>
+      </Section>
     </div>
   );
 }

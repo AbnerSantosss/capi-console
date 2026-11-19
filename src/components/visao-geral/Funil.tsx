@@ -83,7 +83,7 @@ export function Funil({
   return (
     <section
       aria-labelledby={idTitulo}
-      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4 sm:p-5', className)}
+      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4', className)}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -99,7 +99,7 @@ export function Funil({
         </div>
         <p className="flex flex-col items-end text-right" title="Compras dividido por páginas vistas, não por pessoas">
           <span className="text-caption text-fg-muted">Página → compra</span>
-          <span className="text-heading font-bold tabular-nums text-fg-strong">
+          <span className="text-data font-semibold tabular-nums text-fg-strong">
             {taxa === null ? SEM_DADO : formatarPercentual(taxa)}
           </span>
         </p>

@@ -1,6 +1,7 @@
 import { EmpresaDoEndereco } from '@/components/empresa/EmpresaDoEndereco';
 import { AbasDaEmpresa } from '@/components/layout/AbasDaEmpresa';
 import { AvisoConfigIndisponivel } from '@/components/layout/AvisoConfigIndisponivel';
+import { FaixaDeRecusaDaMeta } from '@/components/layout/FaixaDeRecusaDaMeta';
 import consoleStyles from '@/components/layout/console.module.css';
 import { ErroConfiguracaoIndisponivel } from '@/lib/config-store';
 
@@ -60,6 +61,7 @@ export default async function LayoutDaEmpresa({
       <div className={consoleStyles.abasDaEmpresa}>
         <AbasDaEmpresa slug={slug} />
       </div>
+      <FaixaDeRecusaDaMeta key={`recusa-${slug}`} slug={slug} empresaId={empresa.id} />
       <EmpresaDoEndereco key={slug} slug={slug} empresaId={empresa.id} nome={empresa.nome}>
         {children}
       </EmpresaDoEndereco>

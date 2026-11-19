@@ -11,8 +11,8 @@ import s from "./button.module.css"
  * design do dono) e 8px no login, que continua como no P0 — o valor muda pelo
  * bloco de tokens do login em `globals.css`, não aqui.
  *
- * O primário é chapado, na cor `--papel`: no console, o azul de ação com
- * texto branco; no login, o papel claro do P0 com texto quase preto. Nada de
+ * O primário é chapado, na cor `--papel`: no console, o amarelo do
+ * produto com texto preto; no login, o papel claro do P0 com texto quase preto. Nada de
  * rampa vertical e nada de brilho varrendo.
  *
  * O que o CSS utilitário não escreve (as listras do estado ocupado, o disco
@@ -39,11 +39,14 @@ const buttonVariants = cva(
         link: "text-tinta-texto underline-offset-4 hover:underline",
       },
       size: {
-        sm: "h-[30px] gap-1.5 px-2.5 text-caption",
+        // sm e icon-sm: com dedo (pointer: coarse) ganham uma área invisível
+        // de 8px para cada lado (30 + 16 = 46px de toque). O tamanho visível
+        // não muda. O primário corta essa área (overflow-hidden) e fica como está.
+        sm: "h-[30px] gap-1.5 px-2.5 text-caption [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-y-2 [@media(pointer:coarse)]:after:inset-x-0 [@media(pointer:coarse)]:after:content-['']",
         default: "h-control-sm gap-2 px-3.5 text-label",
         lg: "h-[42px] gap-2 px-5 text-body",
         icon: "size-control-sm",
-        "icon-sm": "size-[30px]",
+        "icon-sm": "size-[30px] [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-2 [@media(pointer:coarse)]:after:content-['']",
         "icon-lg": "size-[42px]",
       },
     },

@@ -166,7 +166,7 @@ export default async function Empresas() {
                 <th
                   key={h}
                   scope="col"
-                  className="py-3 pr-4 text-caption font-semibold tracking-wide text-fg-muted uppercase"
+                  className="py-3 pr-4 text-caption font-semibold text-fg-muted"
                 >
                   {h}
                 </th>

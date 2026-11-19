@@ -18,6 +18,10 @@
  * token", "sem regra automática", "desligado", "sem sinal"); a frase longa e a
  * data vão para o `title` e para o leitor de tela. Sem animação: a única cena
  * da aba é o funil.
+ *
+ * Redesenho de 18/11/2026: a trilha é o rodapé da faixa de KPIs, numa linha
+ * só. Cada etapa é ponto + nome + estado; a 390 px o estado fica só para o
+ * leitor de tela e a linha cabe sem quebrar.
  */
 
 import { StatusDot } from '@/components/common/primitives';
@@ -116,13 +120,16 @@ export function FluxoDoEvento({
   return (
     <ol
       aria-label="Caminho do evento: site, Pixel, CAPI e Meta"
-      className={cn('flex flex-wrap items-center gap-x-2 gap-y-1.5 text-caption', className)}
+      className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-caption', className)}
     >
       {etapas.map((e, i) => (
-        <li key={e.nome} className="flex items-center gap-2">
-          <span className="font-semibold text-fg-body">{e.nome}</span>
+        <li key={e.nome} className="flex items-center gap-1.5">
           <span title={e.detalhe}>
-            <StatusDot tone={e.tom}>{e.estado}</StatusDot>
+            <StatusDot tone={e.tom}>
+              <span className="font-semibold text-fg-body">{e.nome}</span>{' '}
+              {/* No celular fica só o ponto e o nome; o estado segue no leitor de tela. */}
+              <span className="max-sm:sr-only">{e.estado}</span>
+            </StatusDot>
             <span className="sr-only">: {e.detalhe}</span>
           </span>
           {i < etapas.length - 1 ? (

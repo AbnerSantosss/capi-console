@@ -27,7 +27,8 @@ import { AlertTriangle, ArrowRight, Globe, Plus } from '@/components/ui/icones';
 import { Button } from '@/components/ui/button';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { Callout } from '@/components/common/primitives';
-import { IconeDoAssunto } from '@/components/cenas';
+import { ListaEmLinhas } from '@/components/common/ListaEmLinhas';
+import { Recolhido } from '@/components/common/Recolhido';
 import { pedir, SessaoExpirada } from '@/lib/cliente-api';
 import { enderecoDaAba } from '@/lib/abas-empresa';
 import { BASE_FALLBACK } from '@/lib/endereco-da-tag';
@@ -35,7 +36,11 @@ import type { DominioTag } from '@/lib/tag-dominios';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
 import { CartaoDeDominio } from './CartaoDeDominio';
 import { CenaDoDominio, estadoDaCena } from './CenaDoDominio';
-import { enderecoProprioDe } from './mensagens-dominio';
+import {
+  avisoDaConferencia,
+  enderecoProprioDe,
+  type ResultadoDaConferencia,
+} from './mensagens-dominio';
 import {
   ModalAdicionarDominio,
   type ModoDoModal,
@@ -59,6 +64,27 @@ type Modal = null | { tipo: 'novo' } | { tipo: 'trocar'; id: string };
 /** A chave da medição: muda quando o subdomínio muda, e a medição antiga não vale mais. */
 const chaveDaMedicao = (d: DominioTag) => `${d.id}|${enderecoProprioDe(d)}`;
 
+/** O que "Conferir de novo" devolve; 'ignorado' = sem subdomínio ou sessão expirada. */
+export type RespostaDaConferencia = ResultadoDaConferencia | 'ignorado';
+
+/**
+ * Pergunta à rota se o endereço próprio de UM site já responde. A leitura ao
+ * abrir a aba e o botão "Conferir de novo" passam por aqui. `conferirAgora`
+ * acrescenta `&conferir=1`: a rota mede de novo em vez de devolver o que
+ * guardou há até 60 s.
+ */
+async function medirEndereco(
+  id: string,
+  empresaId: string | undefined,
+  conferirAgora: boolean
+): Promise<boolean> {
+  const d = await pedir<{ enderecoProprioPronto?: boolean }>(
+    `/api/tag/gerar?dominio=${encodeURIComponent(id)}${conferirAgora ? '&conferir=1' : ''}`,
+    { cache: 'no-store', headers: empresaId ? { 'X-Empresa-Id': empresaId } : undefined }
+  );
+  return d.enderecoProprioPronto === true;
+}
+
 /**
  * O endereço próprio de cada site já responde por este console? MEDIDO pela
  * rota `GET /api/tag/gerar?dominio=<id>` (campo `enderecoProprioPronto`), que
@@ -80,7 +106,26 @@ export function useEnderecosProntos(
   dominios: DominioTag[],
   empresaId?: string
 ): (d: DominioTag) => boolean | undefined {
+  return useConferenciaDosEnderecos(dominios, empresaId).prontoDe;
+}
+
+/**
+ * A medição de cada site e o botão "Conferir de novo".
+ *
+ * `prontoDe` é o mesmo de `useEnderecosProntos`. `conferir(d)` mede UM site de
+ * novo, sem recarregar a página, e devolve o que deu. `conferindo(d)` é `true`
+ * enquanto a resposta não volta.
+ */
+export function useConferenciaDosEnderecos(
+  dominios: DominioTag[],
+  empresaId?: string
+): {
+  prontoDe: (d: DominioTag) => boolean | undefined;
+  conferir: (d: DominioTag) => Promise<RespostaDaConferencia>;
+  conferindo: (d: DominioTag) => boolean;
+} {
   const [prontos, setProntos] = useState<Record<string, boolean>>({});
+  const [emConferencia, setEmConferencia] = useState<Record<string, boolean>>({});
 
   // Uma string, e não a lista: o efeito só roda de novo quando um subdomínio
   // entra, sai ou muda — não a cada gravação que devolve um objeto novo.
@@ -94,12 +139,9 @@ export function useEnderecosProntos(
     let ativo = true;
     for (const chave of aMedir.split(',')) {
       const id = chave.slice(0, chave.indexOf('|'));
-      pedir<{ enderecoProprioPronto?: boolean }>(
-        `/api/tag/gerar?dominio=${encodeURIComponent(id)}`,
-        { cache: 'no-store', headers: empresaId ? { 'X-Empresa-Id': empresaId } : undefined }
-      )
-        .then((d) => {
-          if (ativo) setProntos((p) => ({ ...p, [chave]: d.enderecoProprioPronto === true }));
+      medirEndereco(id, empresaId, false)
+        .then((pronto) => {
+          if (ativo) setProntos((p) => ({ ...p, [chave]: pronto }));
         })
         .catch((e: unknown) => {
           // Sessão expirada já redireciona dentro de `pedir`. Qualquer outro
@@ -113,7 +155,28 @@ export function useEnderecosProntos(
     };
   }, [aMedir, empresaId]);
 
-  return (d) => (enderecoProprioDe(d) ? prontos[chaveDaMedicao(d)] : false);
+  const conferir = async (d: DominioTag): Promise<RespostaDaConferencia> => {
+    if (!enderecoProprioDe(d)) return 'ignorado';
+    const chave = chaveDaMedicao(d);
+    setEmConferencia((c) => ({ ...c, [chave]: true }));
+    try {
+      const pronto = await medirEndereco(d.id, empresaId, true);
+      setProntos((p) => ({ ...p, [chave]: pronto }));
+      return pronto ? 'pronto' : 'aguardando';
+    } catch (e) {
+      // Falhou a conferência: o cartão fica como estava. Quem chama avisa.
+      if (e instanceof SessaoExpirada) return 'ignorado';
+      return 'falhou';
+    } finally {
+      setEmConferencia((c) => ({ ...c, [chave]: false }));
+    }
+  };
+
+  return {
+    prontoDe: (d) => (enderecoProprioDe(d) ? prontos[chaveDaMedicao(d)] : false),
+    conferir,
+    conferindo: (d) => emConferencia[chaveDaMedicao(d)] === true,
+  };
 }
 
 export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl }: AbaDominioProps) {
@@ -123,8 +186,6 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
   const [copiado, setCopiado] = useState<string | null>(null);
   // Cada abertura do modal ganha uma `key` nova: o estado dele nasce das props.
   const [aberturas, setAberturas] = useState(0);
-  // O `<details>` "Como funciona" (só no pronto): a cena só monta aberta.
-  const [comoAberto, setComoAberto] = useState(false);
 
   const base =
     publicBaseUrl?.replace(/\/+$/, '') ||
@@ -135,7 +196,18 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
   /* Medição do endereço próprio                                       */
   /* ---------------------------------------------------------------- */
 
-  const prontoDe = useEnderecosProntos(dominios, empresaId);
+  const { prontoDe, conferir, conferindo } = useConferenciaDosEnderecos(dominios, empresaId);
+
+  /** O botão "Conferir de novo" do cartão: mede de novo e diz o que deu. */
+  const conferirSite = async (d: DominioTag) => {
+    const resultado = await conferir(d);
+    if (resultado === 'ignorado') return;
+    const aviso = avisoDaConferencia(resultado, enderecoProprioDe(d));
+    const opcoes = { description: aviso.proximoPasso };
+    if (resultado === 'pronto') toast.success(aviso.titulo, opcoes);
+    else if (resultado === 'aguardando') toast.info(aviso.titulo, opcoes);
+    else toast.error(aviso.titulo, opcoes);
+  };
 
   /* ---------------------------------------------------------------- */
   /* Rascunho (C2): com o modal aberto, outra aba não troca esta tela   */
@@ -239,38 +311,23 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
   const cena = <CenaDoDominio estado={estadoCena} host={hostDaCena} />;
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <div className="grid min-w-0 items-center gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        {/* Pronto em todos: a cena recolhe e só monta quando é aberta. */}
-        {estadoCena === 'ok' ? (
-          <details
-            className="min-w-0"
-            onToggle={(e) => setComoAberto((e.currentTarget as HTMLDetailsElement).open)}
-          >
-            <summary className="inline-flex cursor-pointer items-center gap-2 text-label font-semibold text-fg-strong">
-              <IconeDoAssunto assunto="dominio" icone={Globe} />
-              Como funciona
-            </summary>
-            {comoAberto && <div className="mt-3">{cena}</div>}
-          </details>
-        ) : (
-          <div className="min-w-0">{cena}</div>
-        )}
-
-        <div className="flex min-w-0 flex-col items-start gap-3">
-          <Button onClick={() => abrir({ tipo: 'novo' })} disabled={salvando}>
-            <Plus className="size-4" aria-hidden />
-            Adicionar domínio
-          </Button>
+    <div className="flex min-w-0 flex-col gap-4">
+      {/* A ação de topo: a única em amarelo da tela. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-body text-fg-body">Opcional: sem endereço próprio a tag usa o nosso.</p>
           <Link
             href={enderecoDaAba(slug, 'fontes')}
             className="inline-flex items-center gap-1.5 text-label text-fg-strong underline underline-offset-4"
           >
             Tag e sites permitidos: Instalação
-            <ArrowRight className="size-3.5" aria-hidden />
+            <ArrowRight className="size-4" aria-hidden />
           </Link>
         </div>
+        <Button onClick={() => abrir({ tipo: 'novo' })} disabled={salvando}>
+          <Plus className="size-4" aria-hidden />
+          Adicionar domínio
+        </Button>
       </div>
 
       {dominios.length === 0 ? (
@@ -286,7 +343,7 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
           }
         />
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ListaEmLinhas rotulo="Sites do cliente">
           {dominios.map((d) => (
             <CartaoDeDominio
               key={d.id}
@@ -294,6 +351,8 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
               base={base}
               slug={slug}
               pronto={prontoDe(d)}
+              conferindo={conferindo(d)}
+              onConferir={() => void conferirSite(d)}
               salvando={salvando}
               copiar={copiar}
               copiado={copiado}
@@ -308,7 +367,7 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
               }
             />
           ))}
-        </ul>
+        </ListaEmLinhas>
       )}
 
       {ehLocal && (
@@ -320,6 +379,9 @@ export function AbaDominio({ empresaId, slug, dominios: iniciais, publicBaseUrl 
           />
         </div>
       )}
+
+      {/* A cena ilustrada sai de cima do trabalho: fica recolhida, no fim. */}
+      <Recolhido titulo="Como funciona">{cena}</Recolhido>
 
       {modoDoModal && (
         <ModalAdicionarDominio

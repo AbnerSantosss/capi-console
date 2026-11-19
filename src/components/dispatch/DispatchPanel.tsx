@@ -273,7 +273,7 @@ export function DispatchBar({ onResult, onAbrirMarcas }: Props) {
           <Link
             href={linkTrocarPixel}
             className={cn(
-              'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-caption font-semibold tracking-wide uppercase',
+              'flex h-control-lg shrink-0 items-center gap-2 rounded-control border px-3 text-label font-semibold',
               d.emTeste
                 ? 'border-tinta-texto/40 bg-tinta/10 text-tinta-texto'
                 : 'border-warning/50 bg-warning/10 text-warning'

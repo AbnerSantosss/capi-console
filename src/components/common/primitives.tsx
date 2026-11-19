@@ -50,12 +50,12 @@ import s from './superficies.module.css';
 /* ------------------------------------------------------------------ */
 
 /**
- * Cartao — o objeto que o operador manipula. Raio 10, SEM borda: `s.cartao`
- * poe `--surface-1` (0.061 de L acima do fundo), a rampa curta do topo e a
- * aresta de luz de `--realce-interno`. O cartao sobe do fundo; nao e recortado
- * nele.
+ * Cartao — o painel do sistema (secao 1.3 do redesenho de 18/11/2026): raio
+ * 10, linha fina `border-line`, `--surface-1` e 16px de respiro em qualquer
+ * largura. `s.cartao` poe a superficie e a aresta de luz de `--realce-interno`.
+ * Nao se poe painel dentro de painel: dentro dele a separacao e divisoria.
  */
-export const receitaCartao = cn('min-w-0 rounded-panel p-4 sm:p-5', s.cartao);
+export const receitaCartao = cn('min-w-0 rounded-panel border border-line p-4', s.cartao);
 
 /**
  * Bloco — grupo aninhado DENTRO de um cartao. Raio 8, superficie chapada e
@@ -66,8 +66,12 @@ export const receitaCartao = cn('min-w-0 rounded-panel p-4 sm:p-5', s.cartao);
  */
 export const receitaBloco = 'min-w-0 rounded-lg bg-surface-2 p-3';
 
-/** Destaque — no maximo um por tela: cartao + linha de tinta + halo da area. */
-export const receitaDestaque = cn(receitaCartao, s.destaque, 'p-5 sm:p-6');
+/**
+ * Destaque — no maximo um por tela. Desde 18/11/2026 e o mesmo painel do
+ * Cartao: a linha de tinta e o halo sairam (o amarelo fica so na aba ativa e
+ * no botao primario). O nome continua para nao mexer nos pontos de chamada.
+ */
+export const receitaDestaque = cn(receitaCartao, s.destaque);
 
 export function Cartao({
   children,
@@ -313,13 +317,15 @@ export function Section({
       id={id}
       aria-labelledby={headingId}
       className={cn(
-        'flex min-w-0 flex-col gap-4 scroll-mt-32',
+        'flex min-w-0 flex-col gap-3 scroll-mt-32',
         variant === 'card' && (tinta ? receitaDestaque : receitaCartao),
         className
       )}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-line-strong pb-3">
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Secao 1.13 do redesenho: titulo, descricao opcional e conteudo, sem
+          linha embaixo do cabecalho. A `plain` nao tem moldura nenhuma. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 items-center gap-2">
           {step !== undefined && (
             <span
               aria-hidden
@@ -328,14 +334,12 @@ export function Section({
               {step}
             </span>
           )}
-          {/* O icone do titulo e GLIFO, nao selo: a tinta da area entra no
-              traco e em mais nada. O quadradinho de 32px que morava aqui
-              repetia a mesma forma em 18 secoes — e forma repetida vira
-              textura, nao sinal. */}
+          {/* Glifo de 20px na cor do texto (secao 1.4): o amarelo fica so na
+              aba ativa e no botao primario. */}
           {Icon && (
             <Icon
               aria-hidden
-              className="size-5 shrink-0 text-tinta"
+              className="size-5 shrink-0 text-fg-muted"
             />
           )}
           <div className="min-w-0">
@@ -346,7 +350,7 @@ export function Section({
               {title}
             </h2>
             {description && (
-              <p className="mt-0.5 text-caption text-fg-muted">{description}</p>
+              <p className="mt-0.5 text-label text-fg-muted">{description}</p>
             )}
           </div>
         </div>
@@ -449,41 +453,40 @@ export function Panel({
 /* ------------------------------------------------------------------ */
 
 /**
- * FASE 3a: o Callout deixou de ser caixa e virou NOTA.
+ * Aviso compacto (secao 1.7 do redesenho de 18/11/2026).
  *
- * Sao 40 usos. Com fundo, borda em volta e o texto inteiro na cor do tom, as
- * 40 gritavam juntas — e quarenta avisos com o mesmo volume e o mesmo que
- * nenhum. Agora a forma e um filete de 2px a esquerda na cor do tom, e SO o
- * icone e o filete carregam cor. O texto fica em `--fg-body`, onde ele se le.
+ * Uma caixa baixa de controle (`rounded-control`, linha fina, `px-3 py-2`):
+ * icone de 16px na cor do tom, titulo em `text-label` semibold, corpo em
+ * `text-caption` mudo e, se houver, a acao a direita (`acao`, normalmente um
+ * `<Button variant="outline" size="sm">`). Sem barra lateral colorida: a cor
+ * do tom fica so no icone. `danger` e o unico tom com fundo e linha tingidos
+ * (`border-danger/40 bg-danger/10`, as mesmas classes do botao destrutivo),
+ * porque "isto para uma venda" precisa de peso.
  *
- * `danger` e a unica excecao, e ela e deliberada: mantem fundo (`bg-danger/8`),
- * porque "isto para uma venda" precisa de peso. A excecao NAO se estende a
- * `warning` — se tudo que avisa tiver fundo, voltamos as 40 caixas.
+ * Um recado, um aviso: dois avisos sobre a mesma causa viram um.
  *
- * A assinatura nao mudou: nenhum dos 40 pontos de chamada foi tocado.
+ * A assinatura antiga continua valendo (`tone`, `icon`, `title`, filhos);
+ * `acao` e opcional, e nenhum ponto de chamada precisa mudar.
  */
 export function Callout({
   tone = 'warning',
-  icon: Icon,
+  icon,
   title,
   children,
+  acao,
   className = '',
   id,
 }: {
   tone?: 'warning' | 'danger' | 'success' | 'info';
+  /** Sobrepoe o icone do tom. Sempre 16px, sempre decorativo. */
   icon?: React.ElementType;
   title?: string;
   children?: React.ReactNode;
+  /** A acao que resolve, a direita. Contorno, nunca o botao amarelo. */
+  acao?: React.ReactNode;
   className?: string;
   id?: string;
 }) {
-  const filete = {
-    warning: 'border-l-warning',
-    danger: 'border-l-danger',
-    success: 'border-l-success',
-    info: 'border-l-tinta',
-  }[tone];
-
   const corDoIcone = {
     warning: 'text-warning',
     danger: 'text-danger',
@@ -491,34 +494,32 @@ export function Callout({
     info: 'text-tinta-texto',
   }[tone];
 
+  const Icone =
+    icon ?? (tone === 'warning' || tone === 'danger' ? TriangleAlert : Info);
+
   return (
     <div
       id={id}
       className={cn(
-        'flex min-w-0 items-start gap-2.5 border-l-2 pl-3',
-        filete,
-        // O fundo e privilegio do `danger`, e o raio so existe por causa dele:
-        // sem fundo nao ha canto para arredondar.
-        tone === 'danger' ? 'rounded-r-lg bg-danger/8 py-3 pr-3' : 'py-1',
+        'flex min-w-0 flex-wrap items-start gap-x-2 gap-y-2 rounded-control border px-3 py-2',
+        tone === 'danger' ? 'border-danger/40 bg-danger/10' : 'border-line bg-surface-1',
         className
       )}
     >
-      {Icon && (
-        <Icon className={cn('mt-0.5 size-4 shrink-0', corDoIcone)} aria-hidden />
-      )}
-      <div className="min-w-0 flex-1 text-fg-body">
-        {/* A hierarquia do titulo sai do PESO e do corpo, nao da cor: colorir
-            a frase inteira e o que fazia 40 notas competirem com o dado da
-            tela. Titulo e texto ficam os dois em `--fg-body` — 13px semibold
-            contra 12px regular ja separa, e e a mesma regra que a FASE 2
-            aplicou no resto do console. */}
-        {title && <p className="text-label font-semibold">{title}</p>}
-        {children && (
-          <div className={cn('text-caption text-fg-body', title && 'mt-1')}>
-            {children}
-          </div>
-        )}
+      <div className="flex min-w-0 flex-1 basis-60 items-start gap-2">
+        <Icone className={cn('mt-0.5 size-4 shrink-0', corDoIcone)} aria-hidden />
+        <div className="min-w-0 flex-1">
+          {title && (
+            <p className="text-label font-semibold text-fg-strong">{title}</p>
+          )}
+          {children && (
+            <div className={cn('text-caption text-fg-muted', title && 'mt-0.5')}>
+              {children}
+            </div>
+          )}
+        </div>
       </div>
+      {acao && <div className="flex shrink-0 items-center gap-2">{acao}</div>}
     </div>
   );
 }

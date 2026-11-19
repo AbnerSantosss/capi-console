@@ -48,7 +48,7 @@ export function GuideHero() {
   return (
     <section className={styles.hero} aria-labelledby="guia-titulo">
       <div className={styles.heroInner}>
-        <p className="flex items-center gap-2 text-caption font-bold tracking-[0.14em] text-tinta-texto uppercase">
+        <p className="flex items-center gap-2 text-caption font-bold text-tinta-texto">
           <BookOpenIcon size={15} weight="duotone" aria-hidden />
           Referência operacional
         </p>

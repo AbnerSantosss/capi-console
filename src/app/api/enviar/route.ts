@@ -8,6 +8,11 @@ import { transmitir } from '@/lib/relay';
 import { jaEnviado, marcarEnviado } from '@/lib/dedup';
 import { exigirSessao } from '@/lib/sessao';
 import { normalizarTelefone } from '@/lib/telefone';
+import { erroDeRota, respostaErro } from '@/lib/erro-api';
+import { SEM_RESPOSTA_DA_META, lerErroDaMeta, textoDoErroDaMeta } from '@/lib/erro-meta';
+
+/** T-M09: o que a pessoa lê quando o console tropeça por dentro. Nunca a mensagem técnica. */
+const ERRO_AO_ENVIAR = 'Não foi possível enviar o evento. Recarregue a página e tente de novo.';
 
 /**
  * Com a caixa "DDI automatico" ligada (o padrao), o telefone sai em E.164 com
@@ -134,13 +139,20 @@ export async function POST(request: NextRequest) {
     const testEventCode = marca.testCode?.trim() || undefined;
     const modoTeste = Boolean(testEventCode);
 
-    const r = await enviarParaMeta({
-      pixelId,
-      accessToken,
-      testEventCode,
-      apiVersion: process.env.API_VERSION,
-      evento,
-    });
+    // T-M09: rede fora ou tempo esgotado. Sem este `try`, a falha caía no
+    // `catch` do fim e a tela mostrava a mensagem técnica do Node.
+    let r: Awaited<ReturnType<typeof enviarParaMeta>>;
+    try {
+      r = await enviarParaMeta({
+        pixelId,
+        accessToken,
+        testEventCode,
+        apiVersion: process.env.API_VERSION,
+        evento,
+      });
+    } catch {
+      return respostaErro(SEM_RESPOSTA_DA_META, 502, [SEM_RESPOSTA_DA_META]);
+    }
 
     console.log(
       `[${new Date().toISOString()}] ${evento.event_name} event_id=${evento.event_id || '-'} -> HTTP ${r.httpStatus}`
@@ -240,10 +252,16 @@ export async function POST(request: NextRequest) {
       atribuicao,
     }, empresaId).catch(() => {});
 
-    return NextResponse.json({ ...r, eventoMontado: evento, atribuicao });
+    return NextResponse.json({
+      ...r,
+      // T-M09: quando a Meta recusa, a tela mostra esta frase em português
+      // (tabela de `erro-meta.ts`) no lugar do `error.message` em inglês.
+      ...(ok ? {} : { erroDaMeta: textoDoErroDaMeta(lerErroDaMeta(r.resposta)) }),
+      eventoMontado: evento,
+      atribuicao,
+    });
   } catch (e) {
-    if (e instanceof Response) return e;
-    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
-    return NextResponse.json({ erros: ['Erro interno: ' + msg] }, { status: 500 });
+    // `erros` continua na resposta para quem já lia essa chave.
+    return erroDeRota(e, ERRO_AO_ENVIAR, 500, [ERRO_AO_ENVIAR]);
   }
 }

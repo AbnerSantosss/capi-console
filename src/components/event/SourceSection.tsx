@@ -53,7 +53,7 @@ export function SourceSection() {
       id="secao-origem"
       step={1}
       icon={IconeDaOrigem}
-      variant="card"
+      variant="plain"
       title="De onde vem o evento"
       description="Escolha uma venda da Fila, cole o JSON ou preencha à mão."
     >
@@ -190,7 +190,8 @@ function JsonPaste() {
         <p className="text-caption text-fg-muted">
           Extrair só preenche os campos. Nada é enviado à Meta agora.
         </p>
-        <Button onClick={extrair}>
+        {/* T-R05: só preenche o formulário; o amarelo é o "Enviar evento". */}
+        <Button variant="outline" onClick={extrair}>
           <Zap className="size-4" aria-hidden />
           Extrair dados
         </Button>

@@ -29,7 +29,7 @@ import { useId, useState } from 'react';
 import { IconeDoAssunto } from '@/components/cenas';
 import consoleStyles from '@/components/layout/console.module.css';
 import { ReceiptText } from '@/components/ui/icones';
-import type { ResumoInbox } from '@/lib/inbox-resumo';
+import type { ResumoInbox, ValorPorMoeda } from '@/lib/inbox-resumo';
 import { cn } from '@/lib/utils';
 import {
   SEM_DADO,
@@ -52,6 +52,12 @@ const COMPACTO = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFr
 
 function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
+}
+
+/** Os valores de um caminho, cada moeda na sua. Caminho sem compra aceita: "nada". */
+function valoresDoCaminho(valores: ReadonlyArray<ValorPorMoeda>): string {
+  if (valores.length === 0) return 'nada';
+  return valores.map((v) => formatarMoeda(v.total, v.moeda)).join(' + ');
 }
 
 export function Receita({ resumo, className }: { resumo: ResumoInbox; className?: string }) {
@@ -89,10 +95,16 @@ export function Receita({ resumo, className }: { resumo: ResumoInbox; className?
 
   const desenha = temDado && porDia.length > 1;
 
+  // M-25: só compra aceita pela Meta, separada pelo caminho de chegada.
+  // Resposta antiga não tem o campo: a linha não aparece.
+  const daPlataforma = resumo.receitaPorCaminho?.plataforma ?? [];
+  const doSite = resumo.receitaPorCaminho?.site ?? [];
+  const mostraCaminhos = temDado && (daPlataforma.length > 0 || doSite.length > 0);
+
   return (
     <section
       aria-labelledby={idTitulo}
-      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4 sm:p-5', className)}
+      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4', className)}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -109,7 +121,7 @@ export function Receita({ resumo, className }: { resumo: ResumoInbox; className?
         </div>
         <div className="flex flex-col items-end text-right">
           <span className="text-caption text-fg-muted">Total do período</span>
-          <span className="text-heading font-bold tabular-nums text-fg-strong">
+          <span className="text-data font-semibold tabular-nums text-fg-strong">
             {temDado ? formatarMoeda(total, codigo) : SEM_DADO}
           </span>
           {variacaoDaReceita !== null ? (
@@ -294,6 +306,18 @@ export function Receita({ resumo, className }: { resumo: ResumoInbox; className?
       ) : null}
       {temDado && moedasDiferentes && !desenha ? (
         <p className="text-caption text-fg-muted">Sem total: moedas diferentes no período.</p>
+      ) : null}
+      {mostraCaminhos ? (
+        <p
+          className="text-caption text-fg-muted"
+          title="Só compras que a Meta aceitou, sem teste. O total do período soma todo evento enviado com valor."
+        >
+          {'Compras aceitas pela Meta: '}
+          <span className="font-semibold tabular-nums text-fg-strong">{valoresDoCaminho(daPlataforma)}</span>
+          {' pela plataforma · '}
+          <span className="font-semibold tabular-nums text-fg-strong">{valoresDoCaminho(doSite)}</span>
+          {' pelo site'}
+        </p>
       ) : null}
     </section>
   );

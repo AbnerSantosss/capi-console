@@ -160,7 +160,7 @@ export function LoginForm({
             `surface-1` a 88 % dá 5.08 ao texto mudo e 3.26 à borda dos campos.
             A 85 % a borda cai para 3.00, no limite — por isso 88, e não menos. */}
         <div className="w-full max-w-[390px] lg:max-w-[440px] xl:max-w-[480px] my-auto flex flex-col items-center lg:rounded-dialog lg:border lg:border-line lg:bg-surface-1/88 lg:p-8 lg:shadow-cartao lg:backdrop-blur-md">
-          {/* Logo oficial da mira (AppMark) e Título */}
+          {/* Símbolo do produto (AppMark) e título */}
           <div className="flex flex-col items-center text-center">
             <AppMark size={48} decorative={false} className="text-fg-strong drop-shadow-md" />
             {/* Mesmo degrau do título de página do console: `text-pagina`
@@ -169,7 +169,7 @@ export function LoginForm({
               Entre na sua conta
             </h1>
             <p className="mt-1.5 text-body text-fg-muted">
-              Bem-vindo de volta ao Abner Traker
+              Bem-vindo de volta ao Polen Track
             </p>
           </div>
 
@@ -331,7 +331,7 @@ export function LoginForm({
         </div>
         {/* Rodapé da coluna (desktop) */}
         <p className="hidden lg:block text-center text-caption text-fg-muted">
-          Abner Traker · Meta Conversions API &amp; Server-Side Tracking
+          Polen Track · Meta Conversions API &amp; Server-Side Tracking
         </p>
       </div>
     </main>

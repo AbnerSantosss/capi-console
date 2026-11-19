@@ -57,6 +57,38 @@ export const FRASE_AGUARDANDO =
  */
 export const FRASE_PRONTO = 'Copie a tag de novo em Instalação.';
 
+/** O botão do cartão aguardando, que refaz a medição sem recarregar a página. */
+export const ROTULO_CONFERIR = 'Conferir de novo';
+
+/** O mesmo botão, enquanto a resposta não volta. */
+export const ROTULO_CONFERINDO = 'Conferindo…';
+
+/** O que a medição pedida pelo botão devolveu. */
+export type ResultadoDaConferencia = 'pronto' | 'aguardando' | 'falhou';
+
+/**
+ * O aviso depois de "Conferir de novo": o título e o próximo passo.
+ * `endereco` é o endereço próprio (`m.exemplo.com.br`).
+ */
+export function avisoDaConferencia(
+  resultado: ResultadoDaConferencia,
+  endereco: string
+): { titulo: string; proximoPasso: string } {
+  if (resultado === 'pronto') {
+    return { titulo: `${endereco} já responde.`, proximoPasso: FRASE_PRONTO };
+  }
+  if (resultado === 'aguardando') {
+    return {
+      titulo: `${endereco} ainda não responde.`,
+      proximoPasso: 'Confira o registro com o cliente e tente de novo em alguns minutos.',
+    };
+  }
+  return {
+    titulo: 'Não deu para conferir agora.',
+    proximoPasso: 'Tente de novo em instantes.',
+  };
+}
+
 /** Subdomínio limpo, ou '' quando não há. */
 function subDe(d: DominioDoCartao): string {
   return String(d?.subdominio ?? '')

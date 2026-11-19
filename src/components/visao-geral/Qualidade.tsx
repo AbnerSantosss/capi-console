@@ -15,7 +15,7 @@
  *    evento; sem os dois ids, a impressão e-mail + valor + dia vale só até o
  *    console reiniciar. Na tela (HyperFrames E1) fica só a dica "?" com a
  *    frase curta; a condição inteira mora neste comentário.
- *  - O número da aceitação é `text-heading`: o que mais importa na aba são
+ *  - O número da aceitação é `text-data`: o que mais importa na aba são
  *    Compras e Faturado.
  */
 
@@ -53,7 +53,7 @@ export function Qualidade({
   return (
     <section
       aria-labelledby="qualidade-titulo"
-      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4 sm:p-5', className)}
+      className={cn(consoleStyles.painel, 'flex min-w-0 flex-col gap-4 p-4', className)}
     >
       <div className="min-w-0">
         <h2 id="qualidade-titulo" className="flex items-center gap-2 text-title font-semibold text-fg-strong">
@@ -64,7 +64,7 @@ export function Qualidade({
 
       <div className="flex flex-col gap-2">
         <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-heading font-bold tabular-nums tracking-tight text-fg-strong">
+          <span className="text-data font-semibold tabular-nums tracking-tight text-fg-strong">
             {formatarPercentual(p)}
           </span>
           <span className="text-label text-fg-body tabular-nums">

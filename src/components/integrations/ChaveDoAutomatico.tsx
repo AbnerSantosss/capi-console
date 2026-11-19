@@ -29,9 +29,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { GitBranch, Zap, ZapOff } from '@/components/ui/icones';
+import { GitBranch } from '@/components/ui/icones';
 
-import { cn } from '@/lib/utils';
 import { useBrandStore, type MarcaPublica } from '@/stores/useBrandStore';
 import {
   contarRegrasAuto,
@@ -219,51 +218,27 @@ export function ChaveDoAutomatico({
   /* ---------------------------------------------------------------- */
 
   /**
-   * A moldura muda de COR com o estado — pedido literal de quem opera: a chave
-   * é o primeiro elemento de /automatico e o estado dela tem de ser legível do
-   * outro lado da sala, antes de qualquer leitura.
+   * Uma linha de ~56px: título, estado em palavras e a chave (redesenho de
+   * 18/11/2026). Sem moldura colorida: o estado já está dito em texto pela
+   * própria chavinha ("Ligado" / "Desligado") e pela frase abaixo do título.
+   * Cor nunca é a única portadora do estado (SC 1.4.1).
    *
-   * 🔴 Cor é REFORÇO, nunca o portador do estado (SC 1.4.1): a palavra da
-   * chavinha ("Ligado" / "Desligado"), a frase de estado e o ícone que troca
-   * de glifo continuam dizendo tudo sem depender de enxergar a cor.
-   *
-   * Vermelho no desligado é uma divergência DELIBERADA do selo
-   * `pixel-desligado` da caixa de entrada, que é neutro de propósito. Lá o
-   * desligado é escolha de rota de um evento; aqui é o produto inteiro parado —
-   * venda PIX real entrando na fila e não chegando à Meta. Isso é vermelho.
-   *
-   * 🔴 A cor segue `ligadoNoServidor`, e não o `ligado` otimista da chavinha:
-   * o quadro colorido não pode dizer verde enquanto o título ao lado ainda diz
-   * "desligado". Quem dá o retorno imediato do clique é a própria Switch, que
-   * já tem estado de `salvando`.
+   * 🔴 O que muda só aqui é a apresentação. As duas travas, a confirmação de
+   * ligar e a gravação seguem como estavam.
    */
-  const MOLDURA_BASE =
-    'relative overflow-hidden rounded-panel border bg-surface-1 p-5 shadow-realce sm:p-6 ' +
-    'before:absolute before:inset-x-0 before:top-0 before:h-1';
+  const PAINEL = 'rounded-panel border border-line bg-surface-1 px-4 py-1.5';
 
-  const moldura = cn(
-    MOLDURA_BASE,
-    ligadoNoServidor ? 'border-success/50 before:bg-success' : 'border-danger/50 before:bg-danger'
-  );
-
-  const IconeDoEstado = ligadoNoServidor ? Zap : ZapOff;
-
-  // A tinta desta área fica no próprio cartão: assim ele nasce violeta mesmo
-  // se o <main> da rota ainda não declarar `data-area`.
-  //
-  // Enquanto carrega a moldura é NEUTRA: pintar de vermelho antes de ler o
-  // servidor seria anunciar "desligado" sem saber — e essa é a resposta mais
-  // cara desta tela para se errar.
+  // Enquanto carrega a linha é neutra: pintar "desligado" antes de ler o
+  // servidor seria anunciar o que não se sabe.
   if (!carregado) {
     return (
-      <section
-        data-area="automatico"
-        className={cn(MOLDURA_BASE, 'border-line-strong before:bg-tinta/70')}
-      >
+      <section data-area="automatico" className={PAINEL}>
         <RegiaoDeEspera rotulo="Lendo o estado do envio automático">
-          <div className="flex flex-col gap-3">
-            <Esqueleto className="h-5 w-56" />
-            <Esqueleto className="h-4 w-full max-w-md" />
+          <div className="flex min-h-11 items-center justify-between gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Esqueleto className="h-4 w-40" />
+              <Esqueleto className="h-3 w-56" />
+            </div>
             <Esqueleto className="h-6 w-28" />
           </div>
         </RegiaoDeEspera>
@@ -271,40 +246,33 @@ export function ChaveDoAutomatico({
     );
   }
 
+  const testeLigado = ligadoNoServidor ? ligadas.filter((m) => m.testCode?.trim()) : [];
+  const temExtras =
+    Boolean(erro) ||
+    (!erro && marcas.length === 0) ||
+    Boolean(alvo && !podeLigar && !ligado) ||
+    testeLigado.length > 0 ||
+    semRegraAutomatica;
+
   return (
-    <section data-area="automatico" className={moldura}>
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-control',
-            ligadoNoServidor ? 'bg-success/12 text-success' : 'bg-danger/12 text-danger'
-          )}
-          aria-hidden
-        >
-          <IconeDoEstado className="size-4" />
-        </span>
+    <section data-area="automatico" className={PAINEL}>
+      <Switch
+        checked={ligado}
+        disabled={!alvo || (!ligado && !podeLigar)}
+        salvando={salvando}
+        onCheckedChange={(v) => pedirAlternar(v)}
+        rotulo="Envio automático"
+        descricao={estadoEmTexto}
+        rodape={
+          <>
+            {/* A troca de estado é anunciada para o leitor de tela; quem vê
+                lê a frase logo abaixo do título. */}
+            <p role="status" aria-live="polite" className="sr-only">
+              {estadoEmTexto}
+            </p>
 
-        <div className="min-w-0 flex-1">
-          {/* 14/10 (pendência 2): saiu o selo "Ligado"/"Desligado" que ficava
-              aqui — a chavinha logo abaixo já escreve a mesma palavra, e a
-              tela dizia "Ligado" duas vezes. A leitura de um segundo continua
-              na moldura e no ícone coloridos, e a palavra, na chavinha. */}
-          <Switch
-            checked={ligado}
-            disabled={!alvo || (!ligado && !podeLigar)}
-            salvando={salvando}
-            onCheckedChange={(v) => pedirAlternar(v)}
-            rotulo="Envio automático"
-            descricao="Manda as regras Automáticas para a Meta sem você conferir."
-            rodape={
-              <div className="flex flex-col gap-2">
-                {/* O estado vai em TEXTO, e a troca é anunciada. Quem não
-                    distingue as cores e quem usa leitor de tela leem o mesmo
-                    que todo mundo. */}
-                <p role="status" aria-live="polite" className="text-label text-fg-strong">
-                  {estadoEmTexto}
-                </p>
-
+            {temExtras && (
+              <div className="flex flex-col gap-2 pb-1">
                 {erro && (
                   <p className="text-caption text-danger">
                     Não foi possível ler os Pixels: {erro}
@@ -331,18 +299,16 @@ export function ChaveDoAutomatico({
 
                 {/* Pixel ligado e com Código de teste: o que sai não conta na
                     campanha. Sem este aviso, "ligado" parece "funcionando". */}
-                {ligadoNoServidor &&
-                  ligadas.filter((m) => m.testCode?.trim()).map((m) => (
-                    <p key={m.id} className="text-caption text-warning">
-                      {m.nome} está em modo teste: o que sai não conta como venda.
-                    </p>
-                  ))}
+                {testeLigado.map((m) => (
+                  <p key={m.id} className="text-caption text-warning">
+                    {m.nome} está em modo teste: o que sai não conta como venda.
+                  </p>
+                ))}
 
                 {/* O terceiro estado, dito onde a chave está: ligado e sem
-                    nenhuma regra em automático não é "funcionando". A cena
-                    abaixo mostra a porta que falta. */}
+                    nenhuma regra em automático não é "funcionando". */}
                 {semRegraAutomatica && (
-                  <div className="flex flex-wrap items-center gap-2 rounded-control border border-warning/40 bg-warning/8 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="text-caption text-warning">Falta a regra em Automático.</p>
                     <Button size="sm" variant="outline" onClick={onIrParaRegras}>
                       <GitBranch className="size-4" aria-hidden />
@@ -351,10 +317,10 @@ export function ChaveDoAutomatico({
                   </div>
                 )}
               </div>
-            }
-          />
-        </div>
-      </div>
+            )}
+          </>
+        }
+      />
 
       {/* ---- Ligar é ação de consequência real: ela é confirmada ---- */}
       <AlertDialog

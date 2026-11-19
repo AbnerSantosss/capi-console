@@ -19,6 +19,7 @@ import { ErrorSummary } from '@/components/common/ErrorSummary';
 import { Stepper } from '@/components/common/Stepper';
 import { Section } from '@/components/common/primitives';
 import { ExplicacaoDoDisparo } from '@/components/common/ExplicacaoDoDisparo';
+import { Recolhido } from '@/components/common/Recolhido';
 import { IconeDoAssunto } from '@/components/cenas';
 import { useEventStore, agoraLocal } from '@/stores/useEventStore';
 import { EntraESai, Entrada } from '@/components/common/motion';
@@ -89,10 +90,8 @@ export function EnvioManual({ slug }: { slug: string }) {
           }
         />
 
-        <ExplicacaoDoDisparo atual="manual" slug={slug} className="mb-6" />
-
-        <Stepper className="mb-8" />
-
+        {/* T-R05: o formulário vem primeiro. A explicação dos dois caminhos
+            e as etapas ficam fechadas no fim da tela, em `Recolhido`. */}
         <div className={consoleStyles.mainGrid}>
           {/* ---- Coluna de trabalho ---- */}
           <div className={consoleStyles.workColumn}>
@@ -118,7 +117,7 @@ export function EnvioManual({ slug }: { slug: string }) {
               id="secao-disparo"
               step={4}
               icon={IconeDeConferir}
-              variant="card"
+              variant="plain"
               title="Conferir e enviar"
               description="Para onde vai e o que a Meta vai receber."
             >
@@ -137,6 +136,15 @@ export function EnvioManual({ slug }: { slug: string }) {
               </div>
             </Section>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <Recolhido titulo="As etapas do envio">
+            <Stepper />
+          </Recolhido>
+          <Recolhido titulo="Como funciona o envio manual">
+            <ExplicacaoDoDisparo atual="manual" slug={slug} />
+          </Recolhido>
         </div>
       </main>
 

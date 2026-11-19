@@ -194,22 +194,25 @@ export function SeletorDePeriodo({
     });
   }
 
+  // Redesenho de 18/11/2026: segmentos de 30px em `text-label`, e o ativo em
+  // superfície neutra mais clara (o amarelo fica só na aba ativa e no botão
+  // primário).
   const classeDoSegmento = (ativo: boolean) =>
     cn(
-      'inline-flex h-control-md min-w-0 items-center justify-center gap-1.5 rounded-control px-2 text-label font-medium whitespace-nowrap transition-colors sm:h-full sm:px-3',
+      'inline-flex h-7.5 shrink-0 items-center justify-center gap-1.5 rounded-control px-2.5 text-label font-medium whitespace-nowrap transition-colors',
       'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-tinta-texto',
-      ativo ? 'bg-tinta/15 text-tinta-texto' : 'text-fg-muted hover:bg-surface-2 hover:text-fg-body'
+      ativo ? 'bg-surface-3 text-fg-strong' : 'text-fg-muted hover:bg-surface-2 hover:text-fg-body'
     );
 
   return (
     <div ref={caixa} className={cn('relative min-w-0', className)}>
       {/* Um controle só, segmentado: seis pedaços dentro da mesma moldura, em
           vez de cinco botões soltos mais dois campos de data sempre abertos.
-          No celular vira 3 × 2: seis numa linha só deixavam os rótulos colados. */}
+          No celular fica numa linha só que rola de lado, sem quebrar em grade. */}
       <div
         role="group"
         aria-label={rotuloDoGrupo}
-        className="grid min-w-0 grid-cols-3 gap-0.5 rounded-control border border-line bg-surface-1 p-0.5 sm:inline-flex sm:h-control-md"
+        className="flex max-w-full min-w-0 gap-0.5 overflow-x-auto rounded-control border border-line bg-surface-1 p-0.5 [scrollbar-width:none] sm:inline-flex"
       >
         {FIXOS.map((f) => {
           const ativo = valor.dias === f.valor;

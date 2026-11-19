@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* =========================================================================
-   TOKENS — Meta CAPI Console v2
+   TOKENS — Polen Track
    Todos os contrastes foram calculados (WCAG 2.2). Não altere um valor sem
    rodar `node scripts/contrast-check.mjs`.
    ========================================================================= */
@@ -50,16 +50,16 @@
      separar da que a contém SEM desenhar borda em volta (era isso que fazia
      todo painel deste console virar uma caixa).
 
-     v7 (decisão D5 do dono, 23/09): o console passa a usar o design que o
-     dono trouxe ("Abner Tracker"): azul-marinho H ~250 com o azul #0665EF
-     como ação. A doutrina da escada continua: os degraus são medidos em L
-     do OKLab, 0.178 → 0.241 → 0.285 → 0.331 (0.062 / 0.044 / 0.046, todos
-     acima do piso de 0.04 do G3′). A paleta do P0 (grafite quente) continua
-     valendo no LOGIN, pelo bloco `:root:not(:has([data-console]))` logo
-     abaixo deste :root.                                                      */
-  --surface-0: #07121E; /* fundo do app                       L 0.178      */
-  --surface-1: #102130; /* painel / card                      L 0.241      */
-  --surface-2: #172C3E; /* input, cabeçalho de accordion      L 0.285      */
+     v8 (18/11/2026): a paleta é a do Polen Track, preto neutro com o amarelo
+     da marca como ação, igual no console e no login. A doutrina da escada
+     continua: os degraus são medidos em L do OKLab e ficam acima do piso de
+     0.04 do G3′ (quem mede é `npm run check:contrast`). Os números de L e os
+     nomes de cor anotados ao lado dos valores, daqui para baixo, são da
+     paleta anterior (v7) e não foram refeitos. O LOGIN repete estes valores
+     no bloco `:root:not(:has([data-console]))` logo abaixo deste :root.                                                      */
+  --surface-0: #070707; /* fundo do app                       L 0.178      */
+  --surface-1: #141414; /* painel / card                      L 0.241      */
+  --surface-2: #1F1F1F; /* input, cabeçalho de accordion      L 0.285      */
 
   /* Superfície ÚNICA de tudo que flutua por cima da página: dialog, popover,
      select, tooltip, paleta de comandos, toast. Continua sendo a mais clara,
@@ -68,7 +68,7 @@
      camada nova. `--border-control` segue dando 3.33 contra ela para quem
      precisa do limite explícito de componente (SC 1.4.11). Por isso NÃO
      existe e não deve voltar a existir paleta local de modal.                */
-  --surface-3: #21384B; /* popover / dialog / tooltip / paleta  L 0.331    */
+  --surface-3: #2B2B2B; /* popover / dialog / tooltip / paleta  L 0.331    */
 
   /* --- Duas superfícies novas do v7 --------------------------------------
      --surface-success  o fundo do cartão "Valor das compras" da Visão geral
@@ -86,7 +86,7 @@
                         mede o texto no PIOR caso, a composição sobre branco
                         puro (#233341: fg-muted 5.27, fg-body 7.82, fg-strong
                         11.87). Se reprovar, sobe a opacidade, nunca o piso. */
-  --surface-success: #12373F;
+  --surface-success: #1A2C21;
   --surface-painel: color-mix(in srgb, var(--surface-1) 92%, transparent);
 
   /* --- Bordas (DS-3.1 — o nome diz o USO, não a ênfase) ------------------
@@ -118,10 +118,10 @@
                        secundário, checkbox, o que flutua). Piso: 3:1 contra
                        as quatro superfícies, sem exceção — é SC 1.4.11 e não
                        se negocia.                                            */
-  --border-subtle: #29465F; /* divisória interna  1.92 s0 · 1.67 s1 — fio  */
-  --border-default: #3B5872; /* contorno de superfície
+  --border-subtle: #3A3A3A; /* divisória interna  1.92 s0 · 1.67 s1 — fio  */
+  --border-default: #4F4F4F; /* contorno de superfície
                                 2.54 s0 · 2.20 s1 (quem separa é o degrau) */
-  --border-control: #6B8AA6; /* limite de componente
+  --border-control: #7C7C7C; /* limite de componente
                                 5.22 s0 · 4.53 s1 · 3.96 s2 · 3.36 s3 ✅    */
 
   /* Anel de foco NEUTRO, para a casca que fica fora de qualquer `data-area`
@@ -129,14 +129,14 @@
      a regra `[data-area] :focus-visible` lá embaixo. Este token continua em
      hex literal aqui porque o gate lê o valor dele para medir o anel; não o
      troque por um `var()`.                                                   */
-  --border-focus: #13BFF4; /* anel de foco (ciano)  7.63 s1 · 5.65 s3 ✅  */
+  --border-focus: #FCEE21; /* anel de foco (ciano)  7.63 s1 · 5.65 s3 ✅  */
 
   /* --- Texto (razões medidas sobre painel s1 e sobre a camada flutuante s3) */
-  --fg-strong: #F1F5FF; /* títulos, valores      15.01 s1 · 11.11 s3      */
-  --fg-body: #B2CCE6; /* corpo, rótulos         9.88 s1 ·  7.32 s3      */
-  --fg-muted: #8FA8C1; /* helper, legendas, placeholder
+  --fg-strong: #FAFAFA; /* títulos, valores      15.01 s1 · 11.11 s3      */
+  --fg-body: #D4D4D4; /* corpo, rótulos         9.88 s1 ·  7.32 s3      */
+  --fg-muted: #A3A3A3; /* helper, legendas, placeholder
                                6.66 s1 ·  4.93 s3 ✅                      */
-  --fg-disabled: #6B839B; /* SÓ desabilitado/ornamento
+  --fg-disabled: #767676; /* SÓ desabilitado/ornamento
                               4.80 s0 · 4.17 s1 · 3.65 s2 · 3.09 s3
                               — v7: sobre o fundo do app ele chega a 4.80,
                               então a trava deixou de ser só a razão e é de
@@ -169,16 +169,16 @@
      pixel nenhum). O azul é só PREENCHIMENTO: como texto ele daria 3.69
      sobre o fundo e reprovaria o G1, então texto azul usa --tinta-texto
      (#66B3FF). Sobre ele se escreve branco puro: #F1F5FF daria 4.6, frágil. */
-  --papel: #0665EF; /* fundo da ação primária — papel-texto =  5.10 ✅ */
-  --papel-hover: #0559D6; /*                                       6.16 ✅ */
-  --papel-active: #0450C2; /*                                      7.16 ✅ */
-  --papel-texto: #FFFFFF; /* o que se escreve em cima da ação            */
+  --papel: #FCEE21; /* fundo da ação primária — papel-texto =  5.10 ✅ */
+  --papel-hover: #FFF566; /*                                       6.16 ✅ */
+  --papel-active: #E3D61E; /*                                      7.16 ✅ */
+  --papel-texto: #000000; /* o que se escreve em cima da ação            */
 
   /* --- Status (sempre acompanhados de ícone + texto) --------------------
      Razões sobre o modal (s3); sobre o painel são maiores.                 */
-  --success: #21D8B0; /*  6.65 — a menta do design */
-  --warning: #F1BE67; /*  7.10 — PRODUÇÃO / evento real */
-  --danger: #FF899B; /*  5.37 — dentro da caixa de erro do modal dá 4.60 */
+  --success: #4ADE80; /*  6.65 — a menta do design */
+  --warning: #FF9F43; /*  7.10 — PRODUÇÃO / evento real */
+  --danger: #FF8A8A; /*  5.37 — dentro da caixa de erro do modal dá 4.60 */
 
   /* =======================================================================
      Ponte para os nomes que os primitivos shadcn/Base UI já usam.
@@ -209,11 +209,11 @@
      v7: a série ainda é a do P0 (teal primeiro). A tarefa V1 trocou só a
      paleta de superfície, texto, borda, ação e status; os gráficos novos da
      Visão geral (V5) decidem a série junto com o desenho deles. */
-  --chart-1: #3dd7cf;
-  --chart-2: #22c55e;
-  --chart-3: #f59e0b;
-  --chart-4: #c3afff;
-  --chart-5: #fb7f93;
+  --chart-1: #FCEE21;
+  --chart-2: #FAFAFA;
+  --chart-3: #FF9F43;
+  --chart-4: #C4B5FD;
+  --chart-5: #FF8A8A;
 
   --sidebar: var(--surface-1);
   --sidebar-foreground: var(--fg-body);
@@ -260,11 +260,11 @@
      uma área poder voltar a ter matiz próprio é decisão do dono, não de
      código. Os valores do P0 estão no bloco do login, logo abaixo.
      ======================================================================= */
-  --tinta-painel: #0665EF; /* azul do design — fundo, filete, régua   */
-  --tinta-instalacao: #0665EF;
-  --tinta-pixels: #0665EF;
-  --tinta-manual: #0665EF;
-  --tinta-automatico: #0665EF;
+  --tinta-painel: #FCEE21; /* azul do design — fundo, filete, régua   */
+  --tinta-instalacao: #FCEE21;
+  --tinta-pixels: #FCEE21;
+  --tinta-manual: #FCEE21;
+  --tinta-automatico: #FCEE21;
   --tinta: var(--tinta-painel); /* padrão; cada <main data-area> troca */
 
   /* O degrau de texto. `--tinta-manual` ficou em H 340 (rosa-magenta), e não
@@ -275,11 +275,11 @@
      depois que verde/âmbar/rosa viraram status, e a separação passou a ser
      MEDIDA — tinta-texto-pixels está 0.107 de L acima do aviso, o fundo de
      área nunca passa de 16%, e aviso sempre traz ícone + palavra (SC 1.4.1). */
-  --tinta-texto-painel: #66B3FF;
-  --tinta-texto-instalacao: #66B3FF;
-  --tinta-texto-pixels: #66B3FF;
-  --tinta-texto-manual: #66B3FF;
-  --tinta-texto-automatico: #66B3FF;
+  --tinta-texto-painel: #FCEE21;
+  --tinta-texto-instalacao: #FCEE21;
+  --tinta-texto-pixels: #FCEE21;
+  --tinta-texto-manual: #FCEE21;
+  --tinta-texto-automatico: #FCEE21;
   --tinta-texto: var(--tinta-texto-painel);
 
   /* --- Relevo de superfície (DS-2.4′) ------------------------------------
@@ -310,7 +310,7 @@
   );
 
   /* --- Medidas de casca (em rem: acompanham o zoom de texto do usuário) -- */
-  --altura-cabecalho: 3.5rem;
+  --altura-cabecalho: 3rem;
   --container-pagina: 82rem;
   /* A barra de cima é mais larga que a página de propósito.
      Medido: marca 9,0rem + seletor de empresa 10,5rem + menu de cinco seções
@@ -323,23 +323,26 @@
      curta de linha, não a barra de controles. */
   --container-cabecalho: 96rem;
 
-  /* --- Tipografia fluida (o único clamp do produto) ----------------------
-     --text-pagina  título de página   28 → 40 px (v7; o login fica em
-                    24 → 30 px pelo bloco do P0 logo abaixo)
+  /* --- Título de página -------------------------------------------------
+     --text-pagina  20 px fixos (redesenho de 18/11/2026, T-R01). Antes era
+                    fluido, 28 → 40 px; numa tela de trabalho o título só diz
+                    onde você está, e o número da página não pode ficar menor
+                    que ele. O login continua com o próprio valor no bloco do
+                    P0 logo abaixo.
 
      Havia um segundo degrau aqui, `--text-norte` (36 → 52 px), só para o
      algarismo gigante do Painel. O cartão virou frase e o degrau morreu
-     junto: nenhum número deste console precisa de corpo maior que o título
-     da própria página. */
-  --text-pagina: clamp(1.75rem, 1rem + 1.8vw, 2.5rem);
+     junto. */
+  --text-pagina: 1.25rem;
 }
 
 /* =========================================================================
-   A PALETA DO LOGIN — a do P0, intacta (v7, tarefa V1; decisão D5 do dono)
+   A PALETA DO LOGIN — desde o v8 (18/11/2026), igual à do console
 
-   Desde o v7 o primeiro :root acima é a paleta do console (o design do dono,
-   "Abner Tracker"). O login fica como no P0, e é este bloco que garante
-   isso: ele vale em toda página que NÃO monta a casca do console, porque só
+   O primeiro :root acima é a paleta do console (Polen Track). Este bloco
+   repete os mesmos valores para o login, e continua separado porque os
+   testes conferem os dois. Ele vale em toda página que NÃO monta a casca
+   do console, porque só
    a casca tem `data-console` (no div.shell de ConsoleShell.tsx).
 
    Por que funciona:
@@ -367,42 +370,42 @@
    título de página, e sem estas quatro linhas o login mudaria junto.
    ========================================================================= */
 :root:not(:has([data-console])) {
-  --surface-0: #0d0b08;
-  --surface-1: #1b1815;
-  --surface-2: #262320;
-  --surface-3: #33302c;
+  --surface-0: #070707;
+  --surface-1: #141414;
+  --surface-2: #1F1F1F;
+  --surface-3: #2B2B2B;
 
-  --border-subtle: #3e3b38;
-  --border-default: #565350;
-  --border-control: #7e7a76;
-  --border-focus: #c8c3bd;
+  --border-subtle: #3A3A3A;
+  --border-default: #4F4F4F;
+  --border-control: #7C7C7C;
+  --border-focus: #FCEE21;
 
-  --fg-strong: #f2f0ed;
-  --fg-body: #ceccc8;
-  --fg-muted: #a09c97;
-  --fg-disabled: #74716d;
+  --fg-strong: #FAFAFA;
+  --fg-body: #D4D4D4;
+  --fg-muted: #A3A3A3;
+  --fg-disabled: #767676;
 
-  --papel: #f0ece7;
-  --papel-hover: #fbfaf7;
-  --papel-active: #ddd8d2;
-  --papel-texto: #16130f;
+  --papel: #FCEE21;
+  --papel-hover: #FFF566;
+  --papel-active: #E3D61E;
+  --papel-texto: #000000;
 
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #fb7f93;
+  --success: #4ADE80;
+  --warning: #FF9F43;
+  --danger: #FF8A8A;
 
-  --tinta-painel: #3dd7cf;
-  --tinta-instalacao: #b1ca70;
-  --tinta-pixels: #f0b13f;
-  --tinta-manual: #f79ad9;
-  --tinta-automatico: #c3afff;
+  --tinta-painel: #FCEE21;
+  --tinta-instalacao: #FCEE21;
+  --tinta-pixels: #FCEE21;
+  --tinta-manual: #FCEE21;
+  --tinta-automatico: #FCEE21;
   --tinta: var(--tinta-painel);
 
-  --tinta-texto-painel: #7dece5;
-  --tinta-texto-instalacao: #cbe197;
-  --tinta-texto-pixels: #ffcd7d;
-  --tinta-texto-manual: #ffbfe9;
-  --tinta-texto-automatico: #d8ceff;
+  --tinta-texto-painel: #FCEE21;
+  --tinta-texto-instalacao: #FCEE21;
+  --tinta-texto-pixels: #FCEE21;
+  --tinta-texto-manual: #FCEE21;
+  --tinta-texto-automatico: #FCEE21;
   --tinta-texto: var(--tinta-texto-painel);
 
   --realce-interno: inset 0 1px 0 rgb(255 255 255 / 7%);

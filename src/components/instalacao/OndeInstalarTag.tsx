@@ -1,36 +1,34 @@
 'use client';
 
 /**
- * "Escolha como instalar": a pergunta do GTM, o aviso dos dois caminhos, os
- * passos do caminho escolhido e o código pronto dele.
+ * O código da tag do caminho escolhido, com o "Copiar" à vista, e o resto
+ * recolhido: "Onde colar" (os passos) e "Variável do Pixel" (só no GTM).
  *
- * O erro mais caro aqui não é colar no lugar errado: é colar nos DOIS, e a
- * Meta passar a contar cada visita duas vezes, sem erro visível. Por isso o
- * aviso fica ENTRE a pergunta e os cartões, com a `CenaDaDuplicidade` ao
- * lado (§12, O1).
+ * T-R04 (seção 3.2 do redesenho): o trabalho do dia a dia é copiar o código, e
+ * ele vem primeiro. A escolha GTM ou site virou uma linha compacta em cima do
+ * código. O aviso dos dois caminhos e a `CenaDaDuplicidade` saíram daqui: vão
+ * no "Por que um caminho só", no fim da página.
  *
  * E3 (14/10): um caminho só na tela. A escolha é estado de `TagDoSite`
- * (desce por prop, porque "Eventos extras" e a faixa "Próximo passo" usam o
- * mesmo caminho), não grava nada e não detecta GTM. O outro caminho fica com
- * `hidden`, montado. O passo já está inteiro na linha, então o clique no
- * passo deixou de abrir o modal.
+ * (desce por prop, porque "Eventos extras" usa o mesmo caminho), não grava
+ * nada e não detecta GTM. O outro caminho fica com `hidden`, montado.
  *
  * O gerador de código continua NÃO importado aqui: as tags chegam prontas por
  * prop, vindas de `/api/tag/gerar` via `TagDoSite`.
  */
 
 import React from 'react';
-import { AlertTriangle, Check, Code2, Container, Copy, Repeat } from '@/components/ui/icones';
+import { Check, Copy } from '@/components/ui/icones';
 
 import { IconeDoAssunto, SeloDePasso, type Assunto } from '@/components/cenas';
-import { Callout, StatusDot } from '@/components/common/primitives';
+import { StatusDot } from '@/components/common/primitives';
+import { Recolhido } from '@/components/common/Recolhido';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 import type { RegraRoteamento } from '@/lib/config-store';
-import { CenaDaDuplicidade } from './CenaDaDuplicidade';
 import { CenaDoGtm } from './CenaDoGtm';
 import { estadoDaRegra, type TagGerada } from './tag-estado';
+import { VariavelDoPixel } from './VariavelDoPixel';
 
 /** O id do caminho é literalmente o nome do formato de tag. */
 export type CaminhoDeInstalacao = 'gtm' | 'site';
@@ -69,20 +67,14 @@ export function TituloDoBloco({
 
 interface Caminho {
   id: CaminhoDeInstalacao;
-  titulo: string;
   escolha: string;
-  quando: string;
-  icone: typeof Code2;
   passos: React.ReactNode[];
 }
 
 const CAMINHOS: Caminho[] = [
   {
     id: 'gtm',
-    titulo: 'Google Tag Manager',
     escolha: 'Sim, usar GTM',
-    quando: 'O site já tem GTM? Use este.',
-    icone: Container,
     passos: [
       <>
         Abra o GTM: <strong>Tags → Nova</strong>.
@@ -91,11 +83,11 @@ const CAMINHOS: Caminho[] = [
         Tipo: <strong>HTML personalizado</strong>.
       </>,
       <>
-        Cole o código (aba <strong>Para o GTM</strong>). Não marque{' '}
-        <em>document.write</em>.
+        Cole o código. Não marque <em>document.write</em>.
       </>,
       <>
-        Acionamento: <strong>All Pages</strong>.
+        Acionamento: <strong>Initialization - All Pages</strong> no PageView e{' '}
+        <strong>All Pages</strong> no ViewContent.
       </>,
       <>
         Clique em <strong>Visualizar</strong>. A tag deve aparecer como{' '}
@@ -108,14 +100,8 @@ const CAMINHOS: Caminho[] = [
   },
   {
     id: 'site',
-    titulo: 'Direto no código do site',
     escolha: 'Não, colar no site',
-    quando: 'Sem GTM? Cole no site.',
-    icone: Code2,
     passos: [
-      <>
-        Copie o código (aba <strong>Para colar no site</strong>).
-      </>,
       <>
         Cole antes de <code className="font-mono">&lt;/head&gt;</code>, em todas as
         páginas, inclusive a de obrigado.
@@ -132,21 +118,22 @@ const CAMINHOS: Caminho[] = [
 ];
 
 export interface OndeInstalarTagProps {
-  /** Tags já geradas pelo servidor para o site escolhido (vazio antes de cadastrar). */
+  /** Tags já geradas pelo servidor para o site escolhido (vazio enquanto gera). */
   tags: TagGerada[];
   /** Regras de roteamento: o StatusDot ao lado do código diz o destino real do evento. */
   regras: RegraRoteamento[];
-  /** true com pelo menos um site cadastrado: aí, sem tags, a geração está em voo ou falhou. */
-  temDominio: boolean;
   copiar: (texto: string, chave: string) => void | Promise<void>;
   copiado: string | null;
   caminho: CaminhoDeInstalacao;
   aoEscolherCaminho: (caminho: CaminhoDeInstalacao) => void;
-  /** Rola até o campo de cadastro do site. */
-  aoCadastrarSite: () => void;
+  /** true quando a tag é o passo que falta: o "Copiar" do PageView fica amarelo. */
+  principal: boolean;
 }
 
-/** Um código pronto: rótulo, destino real, copiar e "Ver código" recolhido. */
+/**
+ * Um código pronto: rótulo, destino real e copiar. O código fica à vista
+ * (`aberto`, o PageView) ou recolhido em "Ver código" (o ViewContent).
+ */
 function CodigoPronto({
   id,
   rotulo,
@@ -154,6 +141,7 @@ function CodigoPronto({
   origem,
   regras,
   principal,
+  aberto,
   chave,
   copiar,
   copiado,
@@ -164,11 +152,23 @@ function CodigoPronto({
   origem: string;
   regras: RegraRoteamento[];
   principal: boolean;
+  aberto: boolean;
   chave: string;
   copiar: OndeInstalarTagProps['copiar'];
   copiado: string | null;
 }) {
   const estado = estadoDaRegra(regras, origem);
+  const campo = (
+    <Textarea
+      id={id}
+      readOnly
+      spellCheck={false}
+      rows={aberto ? 4 : 8}
+      value={codigo}
+      aria-label={`Código do ${rotulo}`}
+      className="wrap-token font-mono text-caption"
+    />
+  );
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -188,23 +188,10 @@ function CodigoPronto({
           ) : (
             <Copy className="size-3.5" aria-hidden />
           )}
-          {principal ? 'Copiar código' : 'Copiar'}
+          Copiar
         </Button>
       </div>
-      <details className="group min-w-0">
-        <summary className="w-fit cursor-pointer text-caption font-medium text-fg-strong underline underline-offset-2">
-          Ver código
-        </summary>
-        <Textarea
-          id={id}
-          readOnly
-          spellCheck={false}
-          rows={8}
-          value={codigo}
-          aria-label={`Código do ${rotulo}`}
-          className="wrap-token mt-2 font-mono text-caption"
-        />
-      </details>
+      {aberto ? campo : <Recolhido titulo="Ver código">{campo}</Recolhido>}
     </div>
   );
 }
@@ -212,139 +199,107 @@ function CodigoPronto({
 export function OndeInstalarTag({
   tags,
   regras,
-  temDominio,
   copiar,
   copiado,
   caminho,
   aoEscolherCaminho,
-  aoCadastrarSite,
+  principal,
 }: OndeInstalarTagProps) {
   const pageview = tags.find((t) => t.evento.origem === 'tag.pageview');
   const viewcontent = tags.find((t) => t.evento.origem === 'tag.viewcontent');
-  const outro: CaminhoDeInstalacao = caminho === 'gtm' ? 'site' : 'gtm';
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <TituloDoBloco icone={Container}>Escolha como instalar</TituloDoBloco>
-
-      <p className="text-body font-semibold text-fg-strong">O site do cliente já usa GTM?</p>
-
-      <div className="flex min-w-0 flex-col gap-3">
-        <Callout tone="danger" icon={AlertTriangle} title="Use um caminho por evento.">
-          Nos dois, o evento conta em dobro na Meta, sem aviso.
-          <details className="mt-1">
-            <summary className="w-fit cursor-pointer font-medium text-fg-strong underline underline-offset-2">
-              Como conferir se já está instalado
-            </summary>
-            <p className="mt-1">Procure o endereço do coletor no código-fonte do site.</p>
-          </details>
-        </Callout>
-        <CenaDaDuplicidade />
-      </div>
-
-      <div className="grid min-w-0 gap-3 sm:grid-cols-2" role="group" aria-label="Como instalar a tag">
-        {CAMINHOS.map((c) => {
-          const Icone = c.icone;
-          const ativo = caminho === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              aria-pressed={ativo}
-              onClick={() => aoEscolherCaminho(c.id)}
-              className={cn(
-                'flex min-w-0 flex-col items-start gap-1.5 rounded-panel border bg-surface-2 p-4 text-left transition-colors hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto',
-                ativo ? 'border-tinta' : 'border-line'
-              )}
-            >
-              <span className="flex w-full flex-wrap items-center gap-2">
-                <Icone aria-hidden className="size-5 shrink-0 text-tinta" />
-                <span className="text-body font-semibold text-fg-strong">{c.escolha}</span>
-                {c.id === 'gtm' && (
-                  <span className="rounded-full border border-tinta px-2 text-caption font-semibold text-fg-strong">
-                    Recomendado
-                  </span>
-                )}
-                {ativo && <Check aria-hidden className="ml-auto size-4 shrink-0 text-tinta" />}
-              </span>
-              <span className="text-caption text-fg-muted">{c.quando}</span>
-            </button>
-          );
-        })}
+      {/* A escolha do caminho numa linha só, em cima do código. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="text-body text-fg-body">O site do cliente já usa GTM?</p>
+        <div
+          className="flex max-w-full flex-wrap gap-1 rounded-control border border-line-control bg-surface-2 p-1"
+          role="group"
+          aria-label="Como instalar a tag"
+        >
+          {CAMINHOS.map((c) => {
+            const ativo = caminho === c.id;
+            return (
+              <Button
+                key={c.id}
+                size="sm"
+                variant={ativo ? 'secondary' : 'ghost'}
+                aria-pressed={ativo}
+                onClick={() => aoEscolherCaminho(c.id)}
+              >
+                {ativo && <Check className="size-3.5" aria-hidden />}
+                {c.escolha}
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
       {CAMINHOS.map((c) => (
         <section
           key={c.id}
           hidden={caminho !== c.id}
-          aria-labelledby={`instalar-${c.id}`}
+          aria-label={c.escolha}
           className="flex min-w-0 flex-col gap-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 id={`instalar-${c.id}`} className="text-label font-semibold text-fg-strong">
-              Passos: {c.titulo}
-            </h4>
-            <Button size="sm" variant="ghost" onClick={() => aoEscolherCaminho(outro)}>
-              <Repeat className="size-3.5" aria-hidden />
-              Trocar caminho
-            </Button>
-          </div>
+          {tags.length === 0 ? (
+            <p className="text-body text-fg-body">O código aparece aqui assim que a tag for gerada.</p>
+          ) : (
+            <>
+              {pageview && (
+                <CodigoPronto
+                  id={`codigo-pageview-${c.id}`}
+                  rotulo="PageView"
+                  codigo={pageview[c.id]}
+                  origem={pageview.evento.origem}
+                  regras={regras}
+                  principal={principal}
+                  aberto
+                  chave={`pv-${c.id}`}
+                  copiar={copiar}
+                  copiado={copiado}
+                />
+              )}
+              {viewcontent && (
+                <CodigoPronto
+                  id={`codigo-viewcontent-${c.id}`}
+                  rotulo="ViewContent"
+                  codigo={viewcontent[c.id]}
+                  origem={viewcontent.evento.origem}
+                  regras={regras}
+                  principal={false}
+                  aberto={false}
+                  chave={`vc-${c.id}`}
+                  copiar={copiar}
+                  copiado={copiado}
+                />
+              )}
+            </>
+          )}
 
-          {c.id === 'gtm' && caminho === 'gtm' && <CenaDoGtm />}
+          <Recolhido titulo="Onde colar">
+            <div className="flex min-w-0 flex-col gap-4">
+              {c.id === 'gtm' && caminho === 'gtm' && <CenaDoGtm />}
+              <ol className="flex flex-col gap-2">
+                {c.passos.map((passo, indice) => (
+                  // Índice como chave: a lista é estática e a ordem é a identidade.
+                  <li key={indice} className="flex min-w-0 items-center gap-3 text-body text-fg-body">
+                    <SeloDePasso numero={indice + 1} assunto="tag" estado="proximo" />
+                    <span className="min-w-0">{passo}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </Recolhido>
 
-          <ol className="flex flex-col gap-2.5">
-            {c.passos.map((passo, indice) => (
-              // Índice como chave: a lista é estática e a ordem é a identidade.
-              <li key={indice} className="flex min-w-0 items-center gap-3 text-body text-fg-body">
-                <SeloDePasso numero={indice + 1} assunto="tag" estado="proximo" />
-                <span className="min-w-0">{passo}</span>
-              </li>
-            ))}
-          </ol>
-
-          <div className="flex min-w-0 flex-col gap-4 border-t border-line pt-4">
-            {tags.length === 0 ? (
-              temDominio ? (
-                <p className="text-body text-fg-body">O código aparece aqui assim que a tag for gerada.</p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-body text-fg-body">Cadastre um site para ver o código aqui.</p>
-                  <Button size="sm" onClick={aoCadastrarSite}>
-                    Cadastrar site
-                  </Button>
-                </div>
-              )
-            ) : (
-              <>
-                {pageview && (
-                  <CodigoPronto
-                    id={`codigo-pageview-${c.id}`}
-                    rotulo="PageView"
-                    codigo={pageview[c.id]}
-                    origem={pageview.evento.origem}
-                    regras={regras}
-                    principal
-                    chave={`pv-${c.id}`}
-                    copiar={copiar}
-                    copiado={copiado}
-                  />
-                )}
-                {viewcontent && (
-                  <CodigoPronto
-                    id={`codigo-viewcontent-${c.id}`}
-                    rotulo="ViewContent"
-                    codigo={viewcontent[c.id]}
-                    origem={viewcontent.evento.origem}
-                    regras={regras}
-                    principal={false}
-                    chave={`vc-${c.id}`}
-                    copiar={copiar}
-                    copiado={copiado}
-                  />
-                )}
-              </>
-            )}
-          </div>
+          {c.id === 'gtm' && (
+            <VariavelDoPixel
+              tags={[pageview, viewcontent]}
+              copiar={copiar}
+              copiado={copiado}
+            />
+          )}
         </section>
       ))}
     </div>

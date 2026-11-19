@@ -3,10 +3,10 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import { Balao, Fio, IconeDoAssunto, No, Palco, Trilha } from '@/components/cenas';
+import { Balao, Fio, No, Palco, Trilha } from '@/components/cenas';
 import { Spinner } from '@/components/common/Esqueleto';
-import { Callout, Field, Section, StatusDot, receitaBloco } from '@/components/common/primitives';
-import consoleStyles from '@/components/layout/console.module.css';
+import { Callout, Field, Section, StatusDot } from '@/components/common/primitives';
+import { Recolhido } from '@/components/common/Recolhido';
 import { SeletorDePixel } from '@/components/pixels/SeletorDePixel';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,8 +19,6 @@ import {
   FlaskConical,
   Send,
   Square,
-  Target,
-  User,
   Wand2,
   XCircle,
 } from '@/components/ui/icones';
@@ -35,7 +33,6 @@ import {
   type DadosDeTeste,
   type EventoDeTeste,
 } from '@/lib/dados-de-teste';
-import { cn } from '@/lib/utils';
 import { useBrandStore } from '@/stores/useBrandStore';
 
 /** O que `/api/enviar-teste` devolve quando a Meta respondeu. */
@@ -71,17 +68,6 @@ async function esperar(ms: number, parar: () => boolean): Promise<void> {
   while (Date.now() < fim && !parar()) {
     await new Promise((r) => window.setTimeout(r, 100));
   }
-}
-
-/** O3: os ícones dos títulos de seção, com a cor e a entrada curta do assunto. */
-function IconeDoDestino() {
-  return <IconeDoAssunto assunto="teste" icone={Target} />;
-}
-function IconeDoComprador() {
-  return <IconeDoAssunto assunto="teste" icone={User} />;
-}
-function IconeDosEventos() {
-  return <IconeDoAssunto assunto="teste" icone={Send} />;
 }
 
 /**
@@ -340,14 +326,11 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      {/* A garantia fica em TEXTO, fora da cena: se a cena sumir (tela
-          estreita, leitor de tela), "Não conta como venda." continua. */}
-      <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
-        <Callout tone="info" icon={FlaskConical} title="Só para teste">
-          Não conta como venda.
-        </Callout>
-        <CenaDoTeste estado={estadoDaCena} />
-      </div>
+      {/* A garantia fica em TEXTO, numa linha só, acima do trabalho. A cena
+          ilustrada mora num Recolhido no fim da tela. */}
+      <Callout tone="info" icon={FlaskConical}>
+        <span className="font-semibold text-fg-strong">Só para teste.</span> Não conta como venda.
+      </Callout>
 
       {bloqueio === 'sessao' && (
         <Callout tone="danger" icon={AlertTriangle} title="Sua sessão venceu">
@@ -370,16 +353,10 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
         </Callout>
       )}
 
-      <div className={consoleStyles.mainGrid}>
-        <div className={consoleStyles.workColumn}>
+      <div className="grid min-w-0 items-start gap-8 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-8">
           {/* ---- 1. Para onde vai ---- */}
-          <Section
-            id="teste-destino"
-            step={1}
-            icon={IconeDoDestino}
-            variant="card"
-            title="Para onde vai"
-          >
+          <Section id="teste-destino" step={1} title="Para onde vai">
             <SeletorDePixel
               modo="unico"
               id="teste-pixel"
@@ -430,8 +407,6 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
           <Section
             id="teste-dados"
             step={2}
-            icon={IconeDoComprador}
-            variant="card"
             title="Comprador de teste"
             description="Dados de mentira. Pode editar."
             action={
@@ -505,11 +480,8 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                     />
                   </Field>
                 </div>
-                <details className={receitaBloco}>
-                  <summary className="cursor-pointer text-label font-medium text-fg-body">
-                    Sinais do navegador (gerados)
-                  </summary>
-                  <dl className="mt-3 grid gap-2 text-caption">
+                <Recolhido titulo="Sinais do navegador (gerados)">
+                  <dl className="grid gap-2 rounded-control border border-line bg-surface-2 p-3 text-caption">
                     {(
                       [
                         ['external_id', dados.externalId],
@@ -526,7 +498,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                       </div>
                     ))}
                   </dl>
-                </details>
+                </Recolhido>
               </>
             ) : (
               <p className="flex items-center gap-2 text-caption text-fg-muted">
@@ -538,22 +510,20 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
         </div>
 
         {/* ---- 3. Eventos e o botão ---- */}
-        <div className={consoleStyles.reviewColumn}>
+        <div className="flex min-w-0 flex-col gap-8">
           <Section
             id="teste-eventos"
             step={3}
-            icon={IconeDosEventos}
-            variant="card"
             title="Eventos"
             description="Desmarque o que não quiser testar."
           >
-            <ul className="flex flex-col gap-1.5">
+            <ul className="min-w-0 divide-y divide-line overflow-hidden rounded-panel border border-line bg-surface-1">
               {EVENTOS_DE_TESTE.map((evento) => {
                 const linha = linhas[evento];
                 return (
-                  <li key={evento} className="flex min-w-0 flex-col gap-1 rounded-control bg-surface-2 p-2.5">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                  <li key={evento} className="flex min-h-11 min-w-0 flex-col justify-center gap-1 px-4 py-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
                         <Checkbox
                           checked={marcados.has(evento)}
                           disabled={rodando}
@@ -619,7 +589,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
             </p>
 
             {terminou && (
-              <div className={cn(receitaBloco, 'flex flex-col gap-2')}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="text-title font-semibold text-fg-strong tabular">
                   {aceitos} de {total} aceitos
                 </p>
@@ -632,7 +602,7 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
                   >
                     Abrir Testar eventos
-                    <ExternalLink className="size-3.5" aria-hidden />
+                    <ExternalLink className="size-4" aria-hidden />
                   </a>
                 )}
               </div>
@@ -640,6 +610,10 @@ export function EventosDeTeste({ empresaId, dominio }: { empresaId: string; domi
           </Section>
         </div>
       </div>
+
+      <Recolhido titulo="Para onde vai o teste">
+        <CenaDoTeste estado={estadoDaCena} />
+      </Recolhido>
     </div>
   );
 }

@@ -195,7 +195,7 @@ function TabelaEmq() {
               <td className="text-label text-fg-body tabular">
                 {p.peso.toFixed(1)}
                 {p.critico && (
-                  <span className="mt-0.5 block text-caption font-semibold text-warning uppercase">
+                  <span className="mt-0.5 block text-caption font-semibold text-warning">
                     crítico
                   </span>
                 )}

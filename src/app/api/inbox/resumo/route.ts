@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
     const periodo = periodoValido(busca.get('dias'), busca.get('de'), busca.get('ate'));
     const comparar = busca.get('comparar') === '1';
     const itens = await listarEntradas(AMOSTRA, empresaId);
-    // A memória é de TODAS as empresas: no teto, a lista desta pode ser curta
-    // e ainda assim ter perdido os itens antigos (R2 da V4).
-    const memoriaComecaEm = await inicioDaMemoriaNoTeto();
+    // Cada empresa tem a própria memória (M-05): o teto que conta é o DESTA
+    // empresa. `null` enquanto ela não encheu a memória dela.
+    const memoriaComecaEm = await inicioDaMemoriaNoTeto(empresaId);
     // `AMOSTRA` entra de novo aqui, agora como teto declarado: é assim que o
     // resumo sabe dizer se a leitura alcançou o começo da janela ou parou antes.
     const resumo = resumirInbox(itens, new Date().toISOString(), periodo, AMOSTRA, {

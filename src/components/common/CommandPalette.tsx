@@ -118,7 +118,7 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
           {noFormulario && (
             <Command.Group
               heading="Formulário"
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
+              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted"
             >
             <Item
               icone={Clock}
@@ -170,7 +170,7 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
               deste arquivo. */}
           <Command.Group
             heading="Empresa"
-            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
+            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted"
           >
             <Item
               icone={Building2}
@@ -194,13 +194,13 @@ export function CommandPalette({ onAbrirMarcas }: { onAbrirMarcas: () => void })
 
           <Command.Group
             heading="Ir para"
-            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase"
+            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted"
           >
             {/* O Painel abre a lista porque e a tela de chegada do console
                 (D-2') e a mesma primeira posicao que ele ocupa na navegacao:
                 quem digita ⌘K sem saber onde olhar deve cair no numero, nao
                 numa tela de trabalho. */}
-            <Item icone={Gauge} onSelect={() => irPara('/eventos', '/painel')}>
+            <Item icone={Gauge} onSelect={() => irPara('/eventos?vista=resumo', '/painel')}>
               Painel de eventos (o que chegou e de onde veio)
             </Item>
             {/* Depois dele vem a primeira tela do fluxo: sem webhook e sem tag

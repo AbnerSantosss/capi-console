@@ -1,6 +1,5 @@
 /**
  * O número grande do passo, no acento (decorativo, `aria-hidden`).
- * Não substitui `instalacao/SeloDeEtapa.tsx`, que é um botão.
  *
  * - 'atual' (padrão): preenchido no acento.
  * - 'feito': preenchido, com o check no lugar do número.

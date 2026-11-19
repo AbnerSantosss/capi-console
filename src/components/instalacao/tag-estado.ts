@@ -17,6 +17,11 @@ export interface TagGerada {
   evento: EventoTag;
   gtm: string;
   site: string;
+  /**
+   * Variável do GTM ("JavaScript personalizado") que entrega o ID deste evento
+   * à tag do Pixel (T-M20). Opcional: sem ela, o bloco da variável não aparece.
+   */
+  variavelDoPixel?: string;
 }
 
 export type TomEstado = 'success' | 'warning' | 'neutral';

@@ -241,11 +241,14 @@ function cabecalho(o: OpcoesTag, evento: EventoTag): string {
     `  fbq('track', '${evento.evento}', {}, ` +
       `{ eventID: window.${GLOBAL}.eventId('${evento.origem}') });`,
     '',
-    'Pixel instalado por modelo do GTM, que gera o próprio event_id: faça o',
-    'caminho inverso e passe o id DELE para cá, no terceiro argumento —',
-    `  window.${GLOBAL}.enviar('${evento.origem}', janela, { eventId: ID_DO_PIXEL });`,
+    'Pixel instalado por modelo do GTM: não mexa neste código. Crie no GTM',
+    'uma variável do tipo "JavaScript personalizado" com o código que o',
+    'console entrega pronto (em "O site já tem o Pixel da Meta no GTM?") e',
+    'escolha essa variável no campo "Event ID" da tag do Pixel.',
     '',
-    'Gerado pelo console. Não edite à mão: a próxima geração sobrescreve.',
+    'Gerado pelo console. Não precisa editar: o event_id sai sozinho. Só as',
+    'tags de formulário do GTM têm um bloco de dados para preencher, e a',
+    'próxima geração sobrescreve esse bloco: preencha de novo.',
   ];
   const largura = 76;
   const barra = '='.repeat(largura);
@@ -806,15 +809,16 @@ export function gerarTagGtm(o: OpcoesTag): string {
   // e o operador so troca cada '' pela variavel do GTM do campo. O nome da
   // variavel nao da para gerar daqui — cada conteiner chama de um jeito, e uma
   // variavel inexistente entre chaves faz o GTM recusar salvar a tag.
+  // O event_id NAO entra neste bloco (T-M20): quem iguala o id com o Pixel e
+  // a variavel de `gerarVariavelDoPixel`, do lado da tag do Pixel. O nucleo
+  // ainda aceita `eventId` de fora, para as tags ja instaladas desse jeito.
   const argumentos = COM_DADOS_DE_FORMULARIO.has(evento.origem)
     ? `${paraJs(evento.origem)}, ${janela}, {\n` +
-      "    // Troque cada '' pela variável do GTM do campo. Vazio é ignorado.\n" +
+      "    // Único trecho feito para preencher: troque cada '' pela variável do\n" +
+      "    // GTM do campo. Vazio é ignorado. Gerou o código de novo? Preencha de novo.\n" +
       "    email: '',\n" +
       "    telefone: '',   // do jeito que o visitante digitou: o país sai sozinho\n" +
-      "    nome: '',\n" +
-      "    // Mesmo event_id da tag do Pixel deste evento, para a Meta não contar\n" +
-      "    // em dobro. Vazio: o nosso, de window.cvtag.eventId().\n" +
-      "    eventId: ''\n" +
+      "    nome: ''\n" +
       '  }'
     : `${paraJs(evento.origem)}, ${janela}`;
   const extra =
@@ -893,6 +897,46 @@ export function gerarTagSite(o: OpcoesTag): string {
 }
 
 /**
+ * Variavel do GTM (tipo "JavaScript personalizado") que devolve o event_id que
+ * a tag deste evento usa na pagina (T-M20).
+ *
+ * E o que tira a edicao a mao do codigo gerado: em vez de o operador colar o
+ * id do Pixel dentro da tag, a tag do Pixel le o NOSSO id por esta variavel,
+ * no campo "Event ID" dela. O codigo gerado fica como saiu, e gerar de novo
+ * nao desfaz nada, porque a variavel mora no GTM.
+ *
+ * Montada com lista de linhas, FORA do template literal do nucleo. O GTM
+ * exige funcao anonima que devolve valor; por isso os comentarios vao DENTRO
+ * dela. Evento fora da lista branca devolve vazio, como em `gerarTodasAsTags`.
+ */
+export function gerarVariavelDoPixel(evento: EventoTag): string {
+  const permitido = eventoTagPermitido(String(evento?.origem ?? ''));
+  if (!permitido) return '';
+  const janela = DEDUP_MS[permitido.origem] ?? DEDUP_PADRAO;
+  const alvo = `window.${GLOBAL}`;
+  const linhas = [
+    'function () {',
+    `  // Mesmo event_id que a tag de ${paraComentario(permitido.evento)} usa nesta página, para o`,
+    '  // campo "Event ID" da tag do Pixel. Sem a tag instalada, devolve vazio.',
+    // Janela 0: o nucleo troca o id logo depois de cada envio. O Pixel tem
+    // de ler ANTES, senao pega o id do envio seguinte.
+    ...(janela === 0
+      ? [
+          '  // Neste evento o id muda a cada envio: dê à tag do Pixel uma prioridade',
+          '  // de acionamento MAIOR que a da tag deste evento.',
+        ]
+      : []),
+    '  try {',
+    `    return ${alvo} ? ${alvo}.eventId(${paraJs(permitido.origem)}) : undefined;`,
+    '  } catch (e) {',
+    '    return undefined;',
+    '  }',
+    '}',
+  ];
+  return linhas.join('\n');
+}
+
+/**
  * Todas as tags de uma vez, para a tela mostrar o pacote pronto assim que o
  * operador cadastra um dominio — sem ele ter que gerar uma por uma e correr o
  * risco de instalar o site com metade dos eventos faltando.
@@ -906,12 +950,22 @@ export function gerarTodasAsTags(
   chave: string,
   eventos: readonly EventoTag[] = EVENTOS_TAG,
   host?: string
-): Array<{ evento: EventoTag; gtm: string; site: string }> {
-  const fora: Array<{ evento: EventoTag; gtm: string; site: string }> = [];
+): Array<{ evento: EventoTag; gtm: string; site: string; variavelDoPixel: string }> {
+  const fora: Array<{
+    evento: EventoTag;
+    gtm: string;
+    site: string;
+    variavelDoPixel: string;
+  }> = [];
   for (const evento of eventos || []) {
     if (!eventoTagPermitido(String(evento?.origem ?? ''))) continue;
     const o: OpcoesTag = { endpoint, chave, evento, host };
-    fora.push({ evento, gtm: gerarTagGtm(o), site: gerarTagSite(o) });
+    fora.push({
+      evento,
+      gtm: gerarTagGtm(o),
+      site: gerarTagSite(o),
+      variavelDoPixel: gerarVariavelDoPixel(evento),
+    });
   }
   return fora;
 }

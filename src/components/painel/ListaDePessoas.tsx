@@ -20,14 +20,13 @@ import {
   FlaskConical,
   Inbox,
   ShieldAlert,
-  Users,
 } from '@/components/ui/icones';
 
 import { pedir } from '@/lib/cliente-api';
 import { useEmpresaStore } from '@/stores/useEmpresaStore';
-import { Callout, Panel, Section } from '@/components/common/primitives';
+import { Callout, Panel } from '@/components/common/primitives';
+import consoleStyles from '@/components/layout/console.module.css';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
-import { IconeDoAssunto } from '@/components/cenas';
 import { Esqueleto } from '@/components/common/Esqueleto';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,9 +74,8 @@ import { formatarDinheiro } from '@/lib/moeda';
  * Ordenar é ESCOLHA de quem olha, e nenhuma coluna ordena sozinha — senão a
  * lista mentiria sobre qual recorte o card do Painel contou.
  *
- * Abaixo de 48rem a tabela dá lugar ao cartão de sempre, com os MESMOS dados e
- * a mesma ordem: numa tela de 390px seis colunas viram seis colunas de uma
- * palavra, e nada do que a linha diz pode sumir só porque o vidro encolheu.
+ * T-R05: no celular a tabela continua tabela, com rolagem interna no painel
+ * (`rolagemDoPainel`); a página não rola de lado e nenhuma coluna some.
  */
 
 /* ------------------------------------------------------------------ */
@@ -187,7 +185,7 @@ const ehDaEquipe = (p: PessoaDoEvento) => p.testeInterno === true || p.testePlat
 function Quem({ p }: { p: PessoaDoEvento }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="min-w-0 break-words text-label font-medium text-fg-strong">
+      <span className="min-w-0 break-words text-body font-medium text-fg-strong">
         {p.nomeCliente || 'sem nome no evento'}
       </span>
       {(p.emailMascarado || p.orderId) && (
@@ -210,7 +208,7 @@ function Quem({ p }: { p: PessoaDoEvento }) {
 function Valor({ p }: { p: PessoaDoEvento }) {
   return (
     <div className="flex flex-col items-end gap-0.5">
-      <span className="font-mono text-label font-semibold whitespace-nowrap text-fg-strong tabular-nums">
+      <span className="font-mono text-body font-semibold whitespace-nowrap text-fg-strong tabular-nums">
         {dinheiro(p.valor, p.moeda)}
       </span>
       {typeof p.emq === 'number' && (
@@ -315,13 +313,16 @@ function montarColunas(mostrarEvento: boolean) {
         </Badge>
       ),
     }),
-    ajudante.accessor((p) => (typeof p.valor === 'number' && Number.isFinite(p.valor) ? p.valor : null), {
-      id: 'valor',
-      header: 'Valor',
-      sortDescFirst: true,
-      meta: { celula: 'w-[7.5rem] text-right' },
-      cell: ({ row }) => <Valor p={row.original} />,
-    }),
+    ajudante.accessor(
+      (p) => (typeof p.valor === 'number' && Number.isFinite(p.valor) ? p.valor : null),
+      {
+        id: 'valor',
+        header: 'Valor',
+        sortDescFirst: true,
+        meta: { celula: 'w-[7.5rem] text-right' },
+        cell: ({ row }) => <Valor p={row.original} />,
+      }
+    ),
     ajudante.accessor((p) => new Date(p.recebidoEm).getTime(), {
       id: 'quando',
       header: 'Quando',
@@ -388,16 +389,15 @@ function TabelaDePessoas({
 
   return (
     <Panel className="min-w-0 p-0">
-      {/* A tabela só a partir de 48rem: abaixo disso seis colunas viram seis
-          colunas de uma palavra, e o cartão diz o mesmo sem picotar nada. */}
-      <div className="hidden min-w-0 overflow-x-auto md:block">
-        <table className="w-full border-collapse text-label">
+      {/* T-R05 (seção 1.10 do redesenho): a tabela em toda largura, com
+          rolagem INTERNA no celular (`rolagemDoPainel`) em vez do cartão
+          empilhado — a página nunca rola de lado, só o painel. */}
+      <div className={consoleStyles.rolagemDoPainel}>
+        <table className="w-full min-w-2xl border-collapse text-body">
           <caption className="sr-only">{legenda}</caption>
-          {/* O degrau de tamanho mora aqui, e não no `<th>`: `tailwind-merge`
-              trata `text-caption` e `text-fg-muted` como a mesma família
-              `text-*` e descartaria o primeiro ao passar os dois pelo `cn`.
-              No `<thead>`, sozinho e fora do `cn`, ele sobrevive. */}
-          <thead className="text-caption">
+          {/* Cabeçalho em `text-label` semibold (seção 1.10), no `<thead>`
+              para não disputar a família `text-*` com a cor dentro do `cn`. */}
+          <thead className="text-label">
             {tabela.getHeaderGroups().map((grupo) => (
               <tr key={grupo.id} className="border-b border-line">
                 {grupo.headers.map((cabecalho) => {
@@ -422,7 +422,7 @@ function TabelaDePessoas({
                          proíbe. Quem separa o rótulo do dado é o tom
                          (`fg-muted`) e o filete de baixo. */
                       className={cn(
-                        'px-3 py-2 text-left font-medium text-fg-muted',
+                        'px-3 py-2 text-left font-semibold text-fg-muted',
                         meta?.celula
                       )}
                     >
@@ -438,7 +438,10 @@ function TabelaDePessoas({
                         >
                           <tabela.FlexRender header={cabecalho} />
                           {sentido === 'asc' ? (
-                            <ChevronUpIcon className="size-3 shrink-0 text-tinta-texto" aria-hidden />
+                            <ChevronUpIcon
+                              className="size-3 shrink-0 text-tinta-texto"
+                              aria-hidden
+                            />
                           ) : sentido === 'desc' ? (
                             <ChevronDown className="size-3 shrink-0 text-tinta-texto" aria-hidden />
                           ) : (
@@ -476,47 +479,7 @@ function TabelaDePessoas({
           </tbody>
         </table>
       </div>
-
-      <ul className="flex min-w-0 list-none flex-col gap-3 p-3 md:hidden">
-        {linhas.map((linha) => (
-          <CartaoDaPessoa key={linha.id} p={linha.original} mostrarEvento={mostrarEvento} />
-        ))}
-      </ul>
     </Panel>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* O cartão de celular — os mesmos dados, em pé                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Abaixo de 48rem não há tabela, e também não há dado a menos: o cartão mostra
- * exatamente as seis colunas, empilhadas.
- *
- * Perdeu a borda e o `bg-surface-2/60` da FASE 3b: contorno virou vocabulário
- * de CONTROLE, e opacidade em cor de superfície é justamente o que as receitas
- * de `primitives.tsx` proíbem. Quem separa um cartão do outro é o degrau de luz
- * do `surface-2` sobre o painel, mais o espaço entre eles.
- */
-function CartaoDaPessoa({ p, mostrarEvento }: { p: PessoaDoEvento; mostrarEvento: boolean }) {
-  return (
-    <li className="flex min-w-0 flex-col gap-2 rounded-control bg-surface-2 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <Quem p={p} />
-        <Valor p={p} />
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <Quando p={p} />
-        {mostrarEvento && (
-          <Badge variant="neutro" className="font-mono">
-            {p.evento}
-          </Badge>
-        )}
-        <Badge variant={TOM_ATRIBUICAO[p.atribuicao]}>{ROTULO_ATRIBUICAO[p.atribuicao]}</Badge>
-      </div>
-      <Situacao p={p} />
-    </li>
   );
 }
 
@@ -534,11 +497,6 @@ export interface ListaDePessoasProps {
   /** O que a lista está mostrando, em uma frase, para o cabeçalho da Section. */
   titulo: string;
   descricao: string;
-}
-
-/** Ícone do título da seção (O3): a peça de cenas no lugar do glifo pequeno. */
-function IconeDaLista() {
-  return <IconeDoAssunto assunto="evento" icone={Users} />;
 }
 
 export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasProps) {
@@ -633,7 +591,12 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
   );
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
+    <section aria-label={titulo} className="flex min-w-0 flex-col gap-4">
+      {/* T-R05: a tabela vem direto, sem o título de seção que repetia o
+          cabeçalho da página. O título fica para o leitor de tela. */}
+      <h2 className="sr-only">
+        {titulo}. {descricao}
+      </h2>
       <div className="flex min-w-0 flex-col gap-3">
         <SeletorDePeriodo
           valor={periodo}
@@ -641,16 +604,29 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
           rotuloDoGrupo="Período da lista"
           className="w-full"
         />
-        <p className="min-w-0 text-caption text-fg-muted">
-          {rotuloDoPeriodo(periodo)}
-          {dados && ` · ${pessoas.length} ${pessoas.length === 1 ? 'pessoa' : 'pessoas'}`}
-          {somaVisivel &&
-            ` · ${formatarDinheiro(somaVisivel.total, somaVisivel.moeda)}`}
-          {!comTestes && ' · teste interno fora da lista'}
-          {atualizando && (
-            <span className="text-fg-body"> Refazendo a lista para a nova janela…</span>
-          )}
-        </p>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="min-w-0 text-caption text-fg-muted">
+            {rotuloDoPeriodo(periodo)}
+            {dados && ` · ${pessoas.length} ${pessoas.length === 1 ? 'pessoa' : 'pessoas'}`}
+            {somaVisivel && ` · ${formatarDinheiro(somaVisivel.total, somaVisivel.moeda)}`}
+            {!comTestes && ' · teste interno fora da lista'}
+            {atualizando && (
+              <span className="text-fg-body"> Refazendo a lista para a nova janela…</span>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={comTestes ? 'secondary' : 'ghost'}
+              size="sm"
+              aria-pressed={comTestes}
+              onClick={() => setComTestes((v) => !v)}
+            >
+              <FlaskConical className="size-4" aria-hidden />
+              {comTestes ? 'Esconder testes internos' : 'Mostrar testes internos'}
+            </Button>
+            {voltar}
+          </div>
+        </div>
       </div>
 
       {erro && (
@@ -670,32 +646,19 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
       {dados && dados.amostra >= dados.tetoDaAmostra && (
         <Callout tone="warning" title="Há mais eventos do que o painel lê">
           <p className="text-caption text-fg-body">
-            Pode faltar gente deste período. Escolha um período mais curto para ver a lista completa.
+            Pode faltar gente deste período. Escolha um período mais curto para ver a lista
+            completa.
           </p>
         </Callout>
       )}
 
-      <Section
-        title={titulo}
-        description={descricao}
-        icon={IconeDaLista}
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant={comTestes ? 'secondary' : 'ghost'}
-              size="sm"
-              aria-pressed={comTestes}
-              onClick={() => setComTestes((v) => !v)}
-            >
-              <FlaskConical className="size-4" aria-hidden />
-              {comTestes ? 'Esconder testes internos' : 'Mostrar testes internos'}
-            </Button>
-            {voltar}
-          </div>
-        }
-      >
+      <div className="min-w-0">
         {carregando && !dados ? (
-          <div className="flex min-w-0 flex-col gap-2" aria-busy="true" aria-label="Montando a lista">
+          <div
+            className="flex min-w-0 flex-col gap-2"
+            aria-busy="true"
+            aria-label="Montando a lista"
+          >
             {Array.from({ length: 5 }, (_, i) => (
               <Esqueleto key={i} className="h-24 rounded-control" />
             ))}
@@ -734,7 +697,7 @@ export function ListaDePessoas({ recorte, titulo, descricao }: ListaDePessoasPro
         ) : (
           <TabelaDePessoas pessoas={pessoas} mostrarEvento={soCompras} legenda={titulo} />
         )}
-      </Section>
-    </div>
+      </div>
+    </section>
   );
 }

@@ -35,9 +35,12 @@ export default async function ConfiguracoesDaEmpresa({
         description="Nome, logo e endereço desta empresa."
         icon={Settings}
       />
-      <div key={empresaId} className="flex max-w-2xl flex-col gap-6">
+      <div key={empresaId} className="flex max-w-xl flex-col">
         <FormularioDeEmpresa empresa={empresa} />
-        <ExcluirEmpresa empresa={{ id: empresa.id, nome: empresa.nome, slug: empresa.slug }} />
+        {/* A exclusão fica no fim, separada do formulário por 32px. */}
+        <div className="mt-8">
+          <ExcluirEmpresa empresa={{ id: empresa.id, nome: empresa.nome, slug: empresa.slug }} />
+        </div>
       </div>
     </main>
   );

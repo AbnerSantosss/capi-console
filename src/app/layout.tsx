@@ -40,7 +40,23 @@ const mono = IBM_Plex_Mono({
 // navegador e na prévia de link, e prender o nome de UMA empresa ("do Código
 // Vencedor") aí era a mesma promessa quebrada que o resto da FASE C desfaz —
 // o console passou a ser de quem instalar, não de um cliente só.
+/**
+ * Endereço público do produto. O Next usa para montar o link completo da
+ * imagem de prévia (`opengraph-image.png`). Vem de PUBLIC_BASE_URL; sem ela, ou
+ * com valor inválido, fica indefinido e o Next cai no endereço padrão dele.
+ */
+function enderecoPublico(): URL | undefined {
+  const bruto = process.env.PUBLIC_BASE_URL;
+  if (!bruto) return undefined;
+  try {
+    return new URL(bruto);
+  } catch {
+    return undefined;
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: enderecoPublico(),
   title: NOME_PRODUTO,
   description: DESCRICAO_PRODUTO,
 };
@@ -48,7 +64,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // = --surface-0 de globals.css. O gate (G7) reprova se os dois divergirem:
   // a barra do navegador precisa ser a mesma cor do fundo da aplicacao.
-  themeColor: '#0d0b08',
+  themeColor: '#070707',
   colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,

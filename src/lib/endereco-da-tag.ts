@@ -89,6 +89,12 @@ const TEMPO_LIMITE_MS = 2500;
 const VALIDADE_PRONTO_MS = 5 * 60 * 1000;
 /** Não pronto pode mudar a qualquer hora (o cliente criou o CNAME): 60 s. */
 const VALIDADE_NAO_PRONTO_MS = 60 * 1000;
+/**
+ * "Conferir de novo" (botão do cartão) passa por cima das validades acima, mas
+ * não mede o mesmo endereço duas vezes em menos de 10 s: o clique repetido não
+ * vira uma fila de pedidos ao site do cliente.
+ */
+const INTERVALO_MINIMO_MS = 10 * 1000;
 
 /**
  * Hostname aceitável para a sonda: letras, dígitos, hífen e ponto, com pelo
@@ -99,7 +105,16 @@ const HOST_ACEITO = /^(?=.{1,253}$)[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 
 type Buscar = (url: string, init?: RequestInit) => Promise<Response>;
 
-const cache = new Map<string, { pronto: boolean; ate: number }>();
+/** Como perguntar. Hoje só existe uma opção. */
+export interface OpcoesDaSonda {
+  /**
+   * `true` quando a pessoa clicou em "Conferir de novo": a medição guardada só
+   * vale se tiver menos de 10 s. Sem isso, valem os 5 min / 60 s de sempre.
+   */
+  conferirAgora?: boolean;
+}
+
+const cache = new Map<string, { pronto: boolean; ate: number; medidoEm: number }>();
 
 /** Esquece o que foi medido. Existe para o teste; a tela não chama. */
 export function limparCacheDoEndereco(): void {
@@ -118,16 +133,27 @@ export function limparCacheDoEndereco(): void {
  * O resultado fica guardado por host, em memória: 5 min quando `true` e 60 s
  * quando `false`. Assim abrir a aba várias vezes não bate no site do cliente a
  * cada clique.
+ *
+ * Com `opcoes.conferirAgora` (o botão "Conferir de novo" do cartão), o guardado
+ * só vale por 10 s: a pessoa acabou de avisar que o registro foi criado, e uma
+ * resposta de até 60 s atrás faria o botão mentir.
  */
 export async function enderecoProprioPronto(
   host: string,
-  buscar: Buscar = (url, init) => fetch(url, init)
+  buscar: Buscar = (url, init) => fetch(url, init),
+  opcoes: OpcoesDaSonda = {}
 ): Promise<boolean> {
   const chave = String(host ?? '').trim().toLowerCase();
   if (!HOST_ACEITO.test(chave)) return false;
 
+  const agora = Date.now();
   const guardado = cache.get(chave);
-  if (guardado && guardado.ate > Date.now()) return guardado.pronto;
+  if (guardado) {
+    const aindaVale = opcoes.conferirAgora
+      ? agora - guardado.medidoEm < INTERVALO_MINIMO_MS
+      : guardado.ate > agora;
+    if (aindaVale) return guardado.pronto;
+  }
 
   let pronto = false;
   try {
@@ -148,9 +174,11 @@ export async function enderecoProprioPronto(
     pronto = false;
   }
 
+  const medidoEm = Date.now();
   cache.set(chave, {
     pronto,
-    ate: Date.now() + (pronto ? VALIDADE_PRONTO_MS : VALIDADE_NAO_PRONTO_MS),
+    ate: medidoEm + (pronto ? VALIDADE_PRONTO_MS : VALIDADE_NAO_PRONTO_MS),
+    medidoEm,
   });
   return pronto;
 }

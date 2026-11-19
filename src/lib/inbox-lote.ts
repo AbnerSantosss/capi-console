@@ -136,3 +136,108 @@ export function separarParaLote<T extends ItemElegivel>(
 
   return { elegiveis, excluidos };
 }
+
+// ---------------------------------------------------------------------------
+// Reenvio das recusadas (T-M10)
+//
+// Lista SEPARADA do lote normal: `motivoInelegivel` continua tirando do lote
+// todo item que já tem resultado. Aqui entra só o que a Meta respondeu e não
+// aceitou, e só para o Pixel que recusou. O que já chegou nunca vai de novo.
+// ---------------------------------------------------------------------------
+
+/** O que o reenvio lê de um resultado gravado. Tudo opcional: o dado vem de `unknown`. */
+interface ResultadoLido {
+  marcaId?: string;
+  pixelId?: string;
+  status?: string;
+  httpStatus?: number;
+  eventsReceived?: number;
+}
+
+/** Lê campo a campo. Lixo (null, texto, número, lista) vira `null` e é pulado. */
+function lerResultado(bruto: unknown): ResultadoLido | null {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return null;
+  const r = bruto as Record<string, unknown>;
+  return {
+    marcaId: typeof r.marcaId === 'string' && r.marcaId ? r.marcaId : undefined,
+    pixelId: typeof r.pixelId === 'string' && r.pixelId ? r.pixelId : undefined,
+    status: typeof r.status === 'string' ? r.status : undefined,
+    httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : undefined,
+    eventsReceived: typeof r.eventsReceived === 'number' ? r.eventsReceived : undefined,
+  };
+}
+
+/**
+ * O evento já chegou à Meta por este resultado. `duplicado` conta: é o servidor
+ * dizendo que aquele Pixel já tinha recebido a mesma venda.
+ */
+function jaChegouNaMeta(r: ResultadoLido): boolean {
+  return (
+    r.status === 'enviado' ||
+    r.status === 'duplicado' ||
+    (r.httpStatus === 200 && (r.eventsReceived ?? 0) > 0)
+  );
+}
+
+/**
+ * A Meta RESPONDEU e não aceitou. Sem `httpStatus` não houve resposta (rede
+ * fora, tempo esgotado, Pixel sem token): isso não é recusa e fica de fora.
+ * Mesma régua de `recusadoDeVerdade` em inbox-resumo.ts.
+ */
+function recusadoPelaMeta(r: ResultadoLido): boolean {
+  return !jaChegouNaMeta(r) && typeof r.httpStatus === 'number';
+}
+
+/**
+ * Ids dos Pixels cadastrados (`marcaId`) que recusaram este item e que NÃO têm
+ * nenhum resultado de "já chegou", nem pelo `marcaId` nem pelo `pixelId`.
+ *
+ * Devolve lista vazia para item ignorado, teste interno ou ping da plataforma,
+ * e para item sem resultado. Sem repetição, na ordem em que os resultados estão.
+ */
+export function pixelsRecusados(item: ItemElegivel): string[] {
+  if (!item || typeof item !== 'object') return [];
+  if (item.status === 'ignorado' || item.modo === 'ignorar' || item.motivoIgnorar) return [];
+  if (item.testeInterno === true || item.testePlataforma === true) return [];
+  if (!Array.isArray(item.resultados)) return [];
+
+  const lidos: ResultadoLido[] = [];
+  for (const bruto of item.resultados) {
+    const r = lerResultado(bruto);
+    if (r) lidos.push(r);
+  }
+
+  // Primeiro tudo o que já chegou. Um aceite em QUALQUER linha trava o Pixel.
+  const chegaram = new Set<string>();
+  for (const r of lidos) {
+    if (!jaChegouNaMeta(r)) continue;
+    if (r.marcaId) chegaram.add('m:' + r.marcaId);
+    if (r.pixelId) chegaram.add('p:' + r.pixelId);
+  }
+
+  const saida: string[] = [];
+  for (const r of lidos) {
+    if (!r.marcaId || !recusadoPelaMeta(r)) continue;
+    if (chegaram.has('m:' + r.marcaId)) continue;
+    if (r.pixelId && chegaram.has('p:' + r.pixelId)) continue;
+    if (!saida.includes(r.marcaId)) saida.push(r.marcaId);
+  }
+  return saida;
+}
+
+/**
+ * Os itens que têm pelo menos um Pixel a reenviar, cada um com os seus Pixels.
+ * Preserva a ordem e devolve os MESMOS objetos, como `separarParaLote`.
+ */
+export function separarRecusadas<T extends ItemElegivel>(
+  itens: T[]
+): Array<{ item: T; marcas: string[] }> {
+  const saida: Array<{ item: T; marcas: string[] }> = [];
+  if (!Array.isArray(itens)) return saida;
+
+  for (const item of itens) {
+    const marcas = pixelsRecusados(item);
+    if (marcas.length > 0) saida.push({ item, marcas });
+  }
+  return saida;
+}

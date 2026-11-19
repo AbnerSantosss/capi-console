@@ -4,7 +4,13 @@ import React, { useState } from 'react';
 import { CheckCircle2, XCircle, Gauge, Lock } from '@/components/ui/icones';
 
 import { useEventStore } from '@/stores/useEventStore';
-import { calcularEmq, CORES_EMQ, type ResultadoEmq } from '@/lib/emq';
+import {
+  calcularEmq,
+  CORES_EMQ,
+  seloDoHash,
+  type ParametroEmq,
+  type ResultadoEmq,
+} from '@/lib/emq';
 import { Panel, HelpTip } from '@/components/common/primitives';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +28,21 @@ import { NumeroAnimado, BarraAnimada } from '@/components/common/motion';
 /** O3: o ícone do título com a cor e a entrada curta do assunto. */
 function IconeDaQualidade() {
   return <IconeDoAssunto assunto="evento" icone={Gauge} />;
+}
+
+/** T-M36: o selo diz o caso visto (em claro, já em hash ou ainda ausente). */
+function SeloDoHashNaTabela({ parametro }: { parametro: ParametroEmq }) {
+  const selo = seloDoHash(parametro);
+  if (!selo) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 whitespace-nowrap text-success"
+      title={selo.explicacao}
+    >
+      <Lock className="size-2.5" aria-hidden />
+      {selo.texto}
+    </span>
+  );
 }
 
 /** Le os campos do store e devolve o EMQ. Um unico ponto de calculo. */
@@ -218,16 +239,16 @@ export function QualityModal({
             </caption>
             <thead>
               <tr className="border-b border-line">
-                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-label font-semibold text-fg-muted">
                   Parâmetro
                 </th>
-                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-label font-semibold text-fg-muted">
                   Peso
                 </th>
-                <th scope="col" className="py-2 pr-3 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 pr-3 text-label font-semibold text-fg-muted">
                   Situação
                 </th>
-                <th scope="col" className="py-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="py-2 text-label font-semibold text-fg-muted">
                   Como obter
                 </th>
               </tr>
@@ -241,21 +262,13 @@ export function QualityModal({
                     </span>
                     <span className="mt-0.5 flex items-center gap-1.5 font-mono text-caption text-fg-muted">
                       {p.sigla}
-                      {p.hash && (
-                        <span
-                          className="inline-flex items-center gap-0.5 text-success"
-                          title="Transformado em hash SHA-256 antes do envio"
-                        >
-                          <Lock className="size-2.5" aria-hidden />
-                          SHA-256
-                        </span>
-                      )}
+                      <SeloDoHashNaTabela parametro={p} />
                     </span>
                   </td>
                   <td className="py-3 pr-3 text-label text-fg-body tabular">
                     {p.peso.toFixed(1)}
                     {p.critico && (
-                      <span className="mt-0.5 block text-caption font-semibold text-warning uppercase">
+                      <span className="mt-0.5 block text-caption font-semibold text-warning">
                         crítico
                       </span>
                     )}

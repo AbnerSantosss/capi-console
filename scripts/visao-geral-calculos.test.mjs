@@ -425,7 +425,8 @@ console.log('\n(i)–(iii) estáticos da parte 5a');
     );
     ok(!kpis.includes('"Cliques"') && kpis.includes('fbclid'), '(i) sem o cartão Cliques, com a linha de "fbclid"');
     ok(!/rotulo="(Recebidos|Recusados|Enviados)"/.test(kpis) && !/>(Recebidos|Recusados|Enviados)</.test(kpis), '(i) nenhum cartão chamado Recebidos, Recusados ou Enviados');
-    ok(kpis.includes('surface-success'), '(i) o cartão de valor usa surface-success');
+    // D-R1 (18/11/2026): a regra antiga exigia surface-success no cartão de valor; a faixa não tem fundo colorido.
+    ok(kpis.includes('FaixaDeKpis') && !kpis.includes('text-display'), '(i) os números numa FaixaDeKpis, sem text-display');
   }
 
   const funil = ler(...PASTA_VG, 'Funil.tsx');
@@ -506,13 +507,14 @@ console.log('\n(iv)–(xi) estáticos da parte 5b');
     ok(/'X-Empresa-Id': empresaId/.test(visao), '(viii) pede com a empresa do endereço');
     ok(visao.includes('comparar=1'), '(viii) pede o período anterior (variação)');
     ok(
-      emOrdem(visao, ['<FluxoDoEvento', '<Kpis', '<Funil', '<Receita', '<AtividadeRecente', '<Qualidade', '<ChecklistEmpresa']),
-      '(viii) os blocos na ordem da spec'
+      emOrdem(visao, ['<Kpis', '<FluxoDoEvento', '<VendasEsperando', '<ChecklistEmpresa', '<Funil', '<Receita', '<AtividadeRecente', '<Qualidade']),
+      '(viii) D-R1: os números primeiro, depois o que pede a pessoa e os blocos de detalhe'
     );
     ok(
       visao.includes('configuracaoIncompleta') &&
-        emOrdem(visao, ['configuracaoIncompleta ? <ChecklistEmpresa', '<FluxoDoEvento']),
-      '(viii) E1: com a configuração incompleta, o checklist vem antes do fluxo'
+        (visao.match(/<ChecklistEmpresa/g) ?? []).length === 1 &&
+        emOrdem(visao, ['<Kpis', '<PrecisaDeVoce', '<ChecklistEmpresa', '</PrecisaDeVoce>']),
+      '(viii) D-R1: o checklist é montado uma vez, dentro de "Precisa de você", depois dos números'
     );
     ok(visao.includes('Nada é enviado à Meta para testar'), '(viii) a garantia continua no vazio do período');
     ok(!/vieram de anúncio|seguiram|Visitas"/.test(visao), '(viii) nada de "vieram de anúncio", "seguiram" nem "Visitas"');

@@ -15,17 +15,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { EstadoVazio } from '@/components/common/EstadoVazio';
 import { Field, Section, StatusDot } from '@/components/common/primitives';
-import { IconeDoAssunto } from '@/components/cenas';
 import { cn } from '@/lib/utils';
 import type { Destino, Entrega, EventoRelay } from './tipos';
-
-/* O3 (E6a): o ícone de cada título de seção, na cor do assunto "webhook". */
-function IconeDoRepasse() {
-  return <IconeDoAssunto assunto="webhook" icone={ArrowUpRight} />;
-}
-function IconeDoHistorico() {
-  return <IconeDoAssunto assunto="webhook" icone={History} />;
-}
 
 /**
  * O Repasse (aba `retornos` de Regras): os endereços que recebem, depois de
@@ -90,10 +81,8 @@ export function Repasse({
     // entregas e o resultado DESTE assunto, nao um assunto proprio. Nada foi
     // escondido — as duas secoes dividem o painel e o contador de entregas
     // continua a vista no cabecalho do Historico.
-    <div id={id} className="flex min-w-0 scroll-mt-32 flex-col gap-5">
+    <div id={id} className="flex min-w-0 scroll-mt-32 flex-col gap-6">
       <Section
-        icon={IconeDoRepasse}
-        variant="card"
         title="Repasse para outros sistemas"
         description="Avisa outro sistema depois de cada envio."
         action={
@@ -116,15 +105,9 @@ export function Repasse({
             }
           />
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="divide-y divide-line overflow-hidden rounded-panel border border-line bg-surface-1">
             {destinos.map((d) => (
-              <li
-                key={d.id}
-                // FASE 3a: a lista vive dentro de uma `Section` variante
-                // cartão (`surface-1`). Sobe para `surface-2` para ter o
-                // degrau de 0.04 que o G3′ cobra, e larga a borda.
-                className="rounded-panel bg-surface-2 p-4"
-              >
+              <li key={d.id} className="p-4">
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="flex cursor-pointer items-center gap-2.5">
@@ -215,8 +198,6 @@ export function Repasse({
 
       <Section
         id={ancoraHistorico}
-        icon={IconeDoHistorico}
-        variant="card"
         title="Histórico do repasse"
         description="Últimas 50 tentativas."
         action={
@@ -255,7 +236,7 @@ export function Repasse({
                     <th
                       key={h}
                       scope="col"
-                      className="py-2 pr-4 text-caption font-semibold tracking-wide text-fg-muted uppercase"
+                      className="py-2 pr-4 text-caption font-semibold text-fg-muted"
                     >
                       {h}
                     </th>

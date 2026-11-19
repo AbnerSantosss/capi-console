@@ -17,19 +17,23 @@ import { AlertTriangle } from '@/components/ui/icones';
  *
  * O conteúdo do arquivo NUNCA entra aqui: lá moram o segredo do webhook e o
  * token da Meta (regra 2 do CLAUDE.md).
+ *
+ * Redesenho de 18/11/2026: o desenho do aviso compacto (o mesmo do `Callout`
+ * de tom `danger`): ícone de 16px, título em `text-label`, texto em
+ * `text-caption`. Não tem ação: o conserto é no volume, fora do console.
  */
 export function AvisoConfigIndisponivel({ arquivo }: { arquivo: string }) {
   return (
     <section
       role="alert"
-      className="flex items-start gap-3 rounded-panel border border-danger bg-surface-1 p-4"
+      className="flex min-w-0 items-start gap-2 rounded-control border border-danger/40 bg-danger/10 px-3 py-2"
     >
-      <AlertTriangle size={20} className="mt-0.5 shrink-0 text-danger" />
-      <div className="min-w-0 space-y-1">
-        <h2 className="text-title font-semibold text-fg-strong">
+      <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-danger" />
+      <div className="min-w-0 space-y-0.5">
+        <h2 className="text-label font-semibold text-fg-strong">
           Configuração indisponível — nada foi alterado
         </h2>
-        <p className="text-body text-fg-body">
+        <p className="text-caption text-fg-body">
           O arquivo <code className="font-mono text-fg-strong">{arquivo}</code> não pôde ser lido, e
           a cópia de segurança também não serviu. Nenhuma regra, Pixel ou segredo foi apagado ou
           regerado: o segredo de entrada do webhook só muda quando alguém clica para trocá-lo.

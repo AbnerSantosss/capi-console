@@ -97,7 +97,7 @@ export function ResultPanel({
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {fbtrace && (
           <div className="rounded-control border border-line-strong bg-surface-2 p-3">
-            <dt className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+            <dt className="text-label font-semibold text-fg-muted">
               fbtrace_id
             </dt>
             <dd className="mt-1 flex items-center gap-2">
@@ -122,7 +122,7 @@ export function ResultPanel({
 
         {atribuicao?.adId && (
           <div className="rounded-control border border-line-strong bg-surface-2 p-3">
-            <dt className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+            <dt className="text-label font-semibold text-fg-muted">
               Criativo que converteu
             </dt>
             <dd className="mt-1 flex flex-col gap-1.5">
@@ -216,7 +216,7 @@ function BlocoJson({
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+        <p className="text-label font-semibold text-fg-muted">
           {titulo}
         </p>
         <Button size="sm" variant="ghost" onClick={() => onCopiar(texto)}>

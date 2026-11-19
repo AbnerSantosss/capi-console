@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=180&color=0:1b1a17,100:3d3a33&text=CAPI%20Console&fontColor=f3f0e8&fontSize=56&fontAlignY=38&desc=Conversões%20que%20o%20Pixel%20perde%2C%20a%20API%20recupera&descAlignY=60&descSize=18" alt="CAPI Console" width="100%">
+<img src="https://capsule-render.vercel.app/api?type=waving&height=180&color=0:070707,100:1F1F1F&text=Polen%20Track&fontColor=FCEE21&fontSize=56&fontAlignY=38&desc=Conversões%20que%20o%20Pixel%20perde%2C%20a%20API%20recupera&descAlignY=60&descSize=18" alt="Polen Track" width="100%">
 
 [![Next.js](https://img.shields.io/badge/Next.js_16-000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React_19-20232a?style=for-the-badge&logo=react&logoColor=61dafb)](https://react.dev)
@@ -21,7 +21,7 @@
 > O Pixel do navegador já não está lá para contar. A campanha que trouxe aquela
 > pessoa fica sem a conversão — e o algoritmo da Meta aprende com o que vê.
 >
-> O CAPI Console fecha esse buraco: recebe o que a plataforma de vendas avisa
+> O Polen Track fecha esse buraco: recebe o que a plataforma de vendas avisa
 > por webhook, junta com a atribuição capturada antes do checkout e entrega a
 > conversão pela **API de Conversões**, com deduplicação e sem inventar nada.
 

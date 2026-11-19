@@ -381,6 +381,134 @@ console.log('\nNada de PII');
   ok(!texto.includes('@') && !/[a-f0-9]{64}/.test(texto) && !texto.includes('987654321'), 'o checklist não carrega e-mail, hash nem telefone');
 }
 
+/* ---------------- M-02: o passo 6 olha as últimas 24 h ---------------- */
+
+console.log('\nM-02: o passo 6 olha as últimas 24 h');
+{
+  const base = {
+    empresa: { slug: SLUG },
+    pixels: [PIXEL_LIGADO],
+    integracoes: { dominios: [{ ...DOMINIO_COM_SUB, ultimoHit: haHoras(1) }], regras: [REGRA_AUTO] },
+  };
+  const aceitoHa = (h) => entradaDoWebhook({ recebidoEm: haHoras(h), status: 'disparado', resultados: ACEITO });
+
+  // Aceito dentro das 24 h: verde, como sempre.
+  const recente = montarChecklist({ ...base, entradas: [aceitoHa(2)], agora: AGORA });
+  ok(passo(recente, 'aceito').estado === 'feito', 'aceito há 2 h, com relógio: passo 6 feito', mostra(passo(recente, 'aceito')));
+  ok(recente.contagem === '5 de 6', 'e a contagem continua "5 de 6"', mostra(recente.contagem));
+  ok(passo(recente, 'aceito').semAceiteRecente === undefined, 'sem a marca de parado');
+
+  const naBorda = montarChecklist({ ...base, entradas: [aceitoHa(24)], agora: AGORA });
+  ok(passo(naBorda, 'aceito').estado === 'feito', 'aceito há exatamente 24 h ainda conta');
+
+  // Aceito fora das 24 h: o verde cai.
+  const parado = montarChecklist({ ...base, entradas: [aceitoHa(30)], agora: AGORA });
+  const p6 = passo(parado, 'aceito');
+  ok(p6.estado === 'pendente' && p6.semAceiteRecente === true, 'aceito há 30 h, com relógio: passo 6 pendente e marcado como parado', mostra(p6));
+  ok(
+    p6.frase.startsWith('Nenhum evento real aceito nas últimas 24 h. O último foi recebido em '),
+    'a frase diz que não houve aceite nas últimas 24 h e quando foi o último',
+    mostra(p6.frase)
+  );
+  ok(p6.verbo === 'Ver os eventos' && p6.href === `/e/${SLUG}/eventos`, 'o botão leva aos eventos', mostra([p6.verbo, p6.href]));
+  ok(parado.contagem === '4 de 6', 'a contagem cai para "4 de 6"', mostra(parado.contagem));
+  ok(parado.proximo?.chave === 'aceito', 'e o próximo passo é o passo 6', mostra(parado.proximo?.chave));
+  ok(
+    mostra(estadoDaEmpresa(parado)) ===
+      mostra({ tom: 'pendente', rotulo: 'Sem evento aceito', frase: 'Sem evento aceito: nenhum nas últimas 24 h' }),
+    'selo: "Sem evento aceito: nenhum nas últimas 24 h"',
+    mostra(estadoDaEmpresa(parado))
+  );
+  ok(!JSON.stringify(parado).includes('@'), 'o checklist parado não carrega e-mail');
+
+  // Sem o relógio, nada muda (é assim que os testes antigos chamam).
+  const semRelogio = montarChecklist({ ...base, entradas: [aceitoHa(30)] });
+  ok(
+    passo(semRelogio, 'aceito').estado === 'feito' && semRelogio.contagem === '5 de 6',
+    'os mesmos dados SEM relógio: passo 6 feito, "5 de 6"',
+    mostra(semRelogio.contagem)
+  );
+
+  // Já aceitou, mas nas últimas 24 h só houve recusa: erro.
+  const recusadoAgora = montarChecklist({
+    ...base,
+    entradas: [aceitoHa(30), entradaDoWebhook({ recebidoEm: haHoras(1), resultados: RECUSADO })],
+    agora: AGORA,
+  });
+  const r6 = passo(recusadoAgora, 'aceito');
+  ok(r6.estado === 'erro', 'aceito há 30 h e recusa há 1 h: passo 6 com erro', mostra(r6));
+  ok(r6.causa === 'a Meta recusou 1 evento nas últimas 24 h', 'a causa diz "nas últimas 24 h"', mostra(r6.causa));
+  ok(r6.frase === 'A Meta recusou 1 evento nas últimas 24 h e não aceitou nenhum.', 'a frase do passo', mostra(r6.frase));
+  ok(
+    estadoDaEmpresa(recusadoAgora).frase === 'Com erro: a Meta recusou 1 evento nas últimas 24 h',
+    'selo: "Com erro: a Meta recusou 1 evento nas últimas 24 h"',
+    mostra(estadoDaEmpresa(recusadoAgora))
+  );
+
+  // O que falta configurar vem antes do passo 6 parado.
+  const semPixel = montarChecklist({ ...base, pixels: [], entradas: [aceitoHa(30)], agora: AGORA });
+  ok(
+    estadoDaEmpresa(semPixel).frase === 'Falta configurar: cadastrar um Pixel',
+    'sem Pixel e com o passo 6 parado: o selo é o Pixel',
+    mostra(estadoDaEmpresa(semPixel))
+  );
+
+  // O Domínio pendente não esconde o passo 6 parado.
+  const dominioPendente = montarChecklist({
+    ...base,
+    integracoes: { dominios: [{ ...DOMINIO_SEM_SUB, ultimoHit: haHoras(1) }], regras: [REGRA_AUTO] },
+    entradas: [aceitoHa(30)],
+    agora: AGORA,
+  });
+  ok(passo(dominioPendente, 'dominio').estado === 'pendente', 'domínio pendente (sem subdomínio)');
+  ok(
+    estadoDaEmpresa(dominioPendente).rotulo === 'Sem evento aceito',
+    'domínio pendente + passo 6 parado: o selo é "Sem evento aceito"',
+    mostra(estadoDaEmpresa(dominioPendente))
+  );
+
+  // O arquivo de recebimentos prova o webhook e a tag sem nenhuma entrada na memória.
+  const soArquivo = montarChecklist({
+    empresa: { slug: SLUG },
+    pixels: [PIXEL_LIGADO],
+    integracoes: { dominios: [], regras: [] },
+    recebimentos: { plataforma: { ultimaEm: haHoras(40), total: 25 }, site: { ultimaEm: haHoras(3), total: 5 } },
+    agora: AGORA,
+  });
+  ok(
+    passo(soArquivo, 'webhook').estado === 'feito' && soArquivo.sinais.ultimaEntregaDoWebhook === haHoras(40),
+    'recebimentos.plataforma fecha o passo 5 e vira a última entrega',
+    mostra(soArquivo.sinais)
+  );
+  ok(
+    passo(soArquivo, 'tag').estado === 'feito' && soArquivo.sinais.ultimoHitDaTag === haHoras(3),
+    'recebimentos.site fecha o passo 4 e vira o último evento da tag',
+    mostra(soArquivo.sinais)
+  );
+  ok(
+    passo(soArquivo, 'aceito').estado === 'pendente' &&
+      passo(soArquivo, 'aceito').semAceiteRecente === undefined &&
+      passo(soArquivo, 'aceito').verbo === 'Enviar o primeiro evento',
+    'quem nunca teve aceite continua em "Enviar o primeiro evento", sem a marca de parado',
+    mostra(passo(soArquivo, 'aceito'))
+  );
+
+  const memoriaMaisNova = montarChecklist({
+    ...base,
+    entradas: [aceitoHa(2)],
+    recebimentos: { plataforma: { ultimaEm: haHoras(40), total: 25 } },
+    agora: AGORA,
+  });
+  ok(
+    memoriaMaisNova.sinais.ultimaEntregaDoWebhook === haHoras(2),
+    'entre a memória e o arquivo, vale a entrega mais nova',
+    mostra(memoriaMaisNova.sinais.ultimaEntregaDoWebhook)
+  );
+
+  const semArquivo = montarChecklist({ ...base, entradas: [aceitoHa(2)], recebimentos: null, agora: AGORA });
+  ok(passo(semArquivo, 'aceito').estado === 'feito', 'recebimentos ilegíveis (null) não derrubam o checklist');
+}
+
 /* ---------------- Fim ---------------- */
 
 ok(chamadas.length === 0, 'nenhuma chamada de rede', mostra(chamadas));

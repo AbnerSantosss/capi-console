@@ -89,7 +89,7 @@ export function DialogoPayload({
             <FileJson className="size-5 text-tinta-texto" aria-hidden />
             Payload recebido
           </DialogTitle>
-          <DialogDescription className="text-caption text-fg-muted">
+          <DialogDescription className="text-body text-fg-muted">
             {item ? (
               <>
                 <span className="font-mono">

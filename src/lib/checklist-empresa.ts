@@ -22,6 +22,7 @@
  */
 
 import type { ItemResumivel, ResumoInbox } from '@/lib/inbox-resumo';
+import type { RecebimentosDaEmpresa } from '@/lib/recebimentos-calculo';
 import { aceitoDeVerdade, dataHoraDeBrasilia, ehTesteInterno, recusadoDeVerdade } from '@/lib/visao-geral-calculos';
 
 /* ------------------------------------------------------------------ */
@@ -73,6 +74,10 @@ export interface DadosDoChecklist {
   entradas?: readonly EntradaDoChecklist[];
   /** O resumo do período, quando já veio: soma prova ao passo 6. */
   resumo?: Pick<ResumoInbox, 'qualidade'> | null;
+  /** M-02: última entrega e contagem por origem (`logs/recebimentos.json`). `null` = não pôde ser lido. */
+  recebimentos?: RecebimentosDaEmpresa | null;
+  /** M-02: o relógio, em ms. Com ele o passo 6 olha as últimas 24 h; sem ele, vale o histórico inteiro. */
+  agora?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,6 +103,8 @@ export interface PassoDoChecklist {
   acao?: 'copiar-tag';
   /** Com `estado: 'erro'`, a causa em palavra (vira o selo da empresa). */
   causa?: string;
+  /** M-02: o passo 6 já teve evento aceito, mas nenhum nas últimas 24 h. */
+  semAceiteRecente?: true;
 }
 
 /** Os sinais medidos que a faixa Site → Pixel → CAPI → Meta mostra. */
@@ -250,15 +257,26 @@ export function montarChecklist(dados: DadosDoChecklist): ChecklistDaEmpresa {
   const ultimoHitDaTag = maisRecente([
     ...dominios.map((d) => d.ultimoHit),
     ...entradas.filter((e) => e.origem === 'tag').map((e) => e.recebidoEm),
+    dados.recebimentos?.site?.ultimaEm,
   ]);
-  const ultimaEntregaDoWebhook = maisRecente(
-    entradas.filter((e) => typeof e.origem === 'string' && e.origem !== 'tag').map((e) => e.recebidoEm)
-  );
+  const ultimaEntregaDoWebhook = maisRecente([
+    ...entradas.filter((e) => typeof e.origem === 'string' && e.origem !== 'tag').map((e) => e.recebidoEm),
+    dados.recebimentos?.plataforma?.ultimaEm,
+  ]);
   const aceitosReais = reais.filter((e) => aceitoDeVerdade(e));
   const ultimoAceito = maisRecente(aceitosReais.map((e) => e.recebidoEm));
   const aceitosNoResumo = dados.resumo?.qualidade.aceitos ?? 0;
   const recusadosNaMemoria = reais.filter((e) => recusadoDeVerdade(e)).length;
   const recusados = Math.max(recusadosNaMemoria, dados.resumo?.qualidade.recusados ?? 0);
+
+  // M-02: o passo 6 olha as últimas 24 h. Sem `agora` a janela não existe e o
+  // passo se comporta como antes.
+  const limiteRecente = typeof dados.agora === 'number' ? dados.agora - 24 * 3_600_000 : null;
+  const dentroDaJanela = (e: EntradaDoChecklist) =>
+    limiteRecente !== null && Date.parse(e.recebidoEm) >= limiteRecente;
+  const jaAceitou = Boolean(ultimoAceito) || aceitosNoResumo > 0;
+  const aceitoRecente = aceitosReais.some(dentroDaJanela);
+  const recusadosRecentes = reais.filter((e) => recusadoDeVerdade(e) && dentroDaJanela(e)).length;
 
   const passos: PassoDoChecklist[] = [];
 
@@ -421,7 +439,8 @@ export function montarChecklist(dados: DadosDoChecklist): ChecklistDaEmpresa {
   );
 
   // 6 · Primeiro evento aceito pela Meta, num Pixel real. Teste não conta.
-  if (ultimoAceito || aceitosNoResumo > 0) {
+  // M-02: com `agora`, o verde exige um aceite nas últimas 24 h.
+  if (jaAceitou && (limiteRecente === null || aceitoRecente)) {
     passos.push({
       chave: 'aceito',
       titulo: 'Primeiro evento aceito pela Meta',
@@ -431,6 +450,29 @@ export function montarChecklist(dados: DadosDoChecklist): ChecklistDaEmpresa {
         : 'A Meta aceitou evento real no período.',
       verbo: 'Ver os eventos',
       href: `${base}/eventos`,
+    });
+  } else if (jaAceitou && recusadosRecentes > 0) {
+    const causa = `a Meta recusou ${recusadosRecentes} ${recusadosRecentes === 1 ? 'evento' : 'eventos'} nas últimas 24 h`;
+    passos.push({
+      chave: 'aceito',
+      titulo: 'Primeiro evento aceito pela Meta',
+      estado: 'erro',
+      frase: `${causa[0].toUpperCase()}${causa.slice(1)} e não aceitou nenhum.`,
+      verbo: 'Ver os recusados',
+      href: `${base}/eventos?vista=fila`,
+      causa,
+    });
+  } else if (jaAceitou) {
+    passos.push({
+      chave: 'aceito',
+      titulo: 'Primeiro evento aceito pela Meta',
+      estado: 'pendente',
+      frase: ultimoAceito
+        ? `Nenhum evento real aceito nas últimas 24 h. O último foi recebido em ${dataHoraDeBrasilia(ultimoAceito)}.`
+        : 'Nenhum evento real aceito nas últimas 24 h.',
+      verbo: 'Ver os eventos',
+      href: `${base}/eventos`,
+      semAceiteRecente: true,
     });
   } else if (recusados > 0) {
     const causa = `a Meta recusou ${recusados} ${recusados === 1 ? 'evento' : 'eventos'}`;
@@ -502,11 +544,17 @@ export function estadoDaEmpresa(checklist: Pick<ChecklistDaEmpresa, 'passos'>): 
   if (comErro) {
     return { tom: 'erro', rotulo: 'Com erro', frase: `Com erro: ${comErro.causa ?? minuscula(comErro.frase)}` };
   }
+  // M-02: o passo 6 parado (já aceitou, mas não nas últimas 24 h) não é "falta
+  // configurar". Ele só vira o selo quando nada mais falta, fora o Domínio.
+  const parado = passos.find((p) => p.semAceiteRecente);
   const pendente =
-    passos.find((p) => p.estado === 'pendente' && p.chave !== 'dominio') ??
-    passos.find((p) => p.estado === 'pendente');
+    passos.find((p) => p.estado === 'pendente' && p.chave !== 'dominio' && !p.semAceiteRecente) ??
+    (parado ? undefined : passos.find((p) => p.estado === 'pendente'));
   if (pendente) {
     return { tom: 'pendente', rotulo: 'Falta configurar', frase: `Falta configurar: ${minuscula(pendente.verbo)}` };
+  }
+  if (parado) {
+    return { tom: 'pendente', rotulo: 'Sem evento aceito', frase: 'Sem evento aceito: nenhum nas últimas 24 h' };
   }
   if (passos.some((p) => p.estado === 'andamento')) {
     return { tom: 'andamento', rotulo: 'Em andamento', frase: 'Em andamento: apontamento do domínio' };

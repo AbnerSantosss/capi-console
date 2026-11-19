@@ -26,7 +26,8 @@ import {
   listarMarcas,
   publicarMarca,
 } from '@/lib/config-store';
-import { listarEntradas } from '@/lib/inbox';
+import { listarEntradas, recebimentosDaEmpresa } from '@/lib/inbox';
+import { avisosDeSilencio, type AvisoDeSilencio, type RecebimentosDaEmpresa } from '@/lib/recebimentos-calculo';
 import {
   envioAutomaticoDaEmpresa,
   estadoDaEmpresa,
@@ -47,6 +48,8 @@ export interface ChecklistLido {
   estado: EstadoDaEmpresa;
   /** `null` quando os Pixels não puderam ser lidos: sem prova para dizer ligado nem desligado. */
   envio: EnvioAutomatico | null;
+  /** M-02: avisos de "nada chega há N h" (vazio quando está tudo chegando). */
+  avisos: AvisoDeSilencio[];
 }
 
 async function lerPixels(empresaId: string): Promise<PixelDoChecklist[] | null> {
@@ -91,17 +94,36 @@ async function lerEntradas(empresaId: string): Promise<EntradaDoChecklist[]> {
   }));
 }
 
-/** Lê as três fontes da empresa e devolve só o que o navegador pode ver. */
+/** M-02: sem a prova de recebimento, o checklist segue sem ela (nunca derruba a página). */
+async function lerRecebimentosDaEmpresa(empresaId: string): Promise<RecebimentosDaEmpresa | null> {
+  try {
+    return await recebimentosDaEmpresa(empresaId);
+  } catch {
+    return null;
+  }
+}
+
+/** Lê as quatro fontes da empresa e devolve só o que o navegador pode ver. */
 export async function lerChecklistDaEmpresa(empresa: { id: string; slug: string }): Promise<ChecklistLido> {
-  const [pixels, integracoes, entradas] = await Promise.all([
+  const [pixels, integracoes, entradas, recebimentos] = await Promise.all([
     lerPixels(empresa.id),
     lerConfiguracao(empresa.id),
     lerEntradas(empresa.id),
+    lerRecebimentosDaEmpresa(empresa.id),
   ]);
-  const checklist = montarChecklist({ empresa: { slug: empresa.slug }, pixels, integracoes, entradas });
+  const agora = Date.now();
+  const checklist = montarChecklist({
+    empresa: { slug: empresa.slug },
+    pixels,
+    integracoes,
+    entradas,
+    recebimentos,
+    agora,
+  });
   return {
     checklist,
     estado: estadoDaEmpresa(checklist),
     envio: pixels === null ? null : envioAutomaticoDaEmpresa(pixels, integracoes?.regras ?? null),
+    avisos: avisosDeSilencio(recebimentos, agora),
   };
 }

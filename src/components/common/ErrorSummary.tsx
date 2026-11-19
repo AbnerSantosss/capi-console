@@ -6,7 +6,7 @@ import { AlertTriangle } from '@/components/ui/icones';
 import { useEventStore } from '@/stores/useEventStore';
 
 /**
- * Resumo focavel de erros, exibido depois de uma tentativa de disparo.
+ * Resumo focavel de erros, exibido depois de uma tentativa de envio.
  * Cada item leva ao campo correspondente — regra `error-summary` +
  * `focus-management`. Os erros inline continuam nos campos.
  */
@@ -42,8 +42,8 @@ export function ErrorSummary() {
       <p className="flex items-center gap-2 text-title font-semibold text-danger">
         <AlertTriangle className="size-5" aria-hidden />
         {erros.length === 1
-          ? 'Corrija 1 campo antes de disparar'
-          : `Corrija ${erros.length} campos antes de disparar`}
+          ? 'Corrija 1 campo antes de enviar'
+          : `Corrija ${erros.length} campos antes de enviar`}
       </p>
 
       <ul className="mt-3 flex flex-col gap-1.5">

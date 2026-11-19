@@ -87,7 +87,7 @@ const PROIBIDAS = [
   { nome: 'Domínios autorizados', re: termo('domínios? autorizados?'), usar: 'Sites permitidos' },
   { nome: 'Retornos', re: termo('retornos'), usar: 'Repasse' },
   { nome: 'Testes da equipe', re: termo('testes? da equipe'), usar: 'Teste interno' },
-  { nome: 'Integrações', re: termo('integrações'), usar: 'Fontes / Regras' },
+  { nome: 'Integrações', re: termo('integrações'), usar: 'Instalação / Regras' },
   { nome: 'sobrevive ao Safari', re: /sobrevive ao Safari/iu, usar: '(F5: não prometer)' },
   { nome: 'criptograf*', re: new RegExp(`${A}criptograf[\\p{L}]*`, 'iu'), usar: 'hash SHA-256' },
 ];

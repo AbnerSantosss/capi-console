@@ -60,6 +60,13 @@ export interface ItemResumivel {
   valor?: number;
   moeda?: string;
   /**
+   * M-25 — por onde o evento chegou. `'tag'` é a tag do site
+   * (`tag-handler.ts`); qualquer outro texto é o webhook da plataforma de
+   * vendas. É a mesma leitura de `checklist-empresa.ts`. Ausente conta como
+   * plataforma.
+   */
+  origem?: string;
+  /**
    * O que cada Pixel respondeu no último disparo do item. É daqui que sai a
    * diferença entre "a Meta aceitou" e "foi só para o Testar eventos" (C9,
    * D20). Ausente em item gravado antes de o campo existir.
@@ -83,6 +90,12 @@ export interface ResultadoResumivel {
   eventsReceived?: number;
   /** O Pixel tinha código de teste: o evento foi para o "Testar eventos". */
   modoTeste?: boolean;
+  /** Id interno do Pixel no console (`ResultadoPorPixel.marcaId`). Não é PII. */
+  marcaId?: string;
+  /** Código do erro da Meta, quando ela recusou (M-01). Ausente em registro antigo. */
+  codigoMeta?: number;
+  /** Subcódigo do erro da Meta (M-01). Ausente em registro antigo. */
+  subcodigoMeta?: number;
 }
 
 export interface CardContagem {
@@ -167,6 +180,12 @@ export interface ResumoInbox {
    */
   receitaEnviada: { total: number; moeda: string } | null;
   /**
+   * M-25 — o valor das compras que a Meta aceitou, separado pelo caminho de
+   * chegada. Opcional só para aceitar resposta antiga: `resumirInbox` sempre
+   * preenche. Ver `ValorPorCaminho`.
+   */
+  receitaPorCaminho?: ValorPorCaminho;
+  /**
    * COMPRA — o evento que paga a conta, separado de todos os outros.
    *
    * Está fora de `porEvento` de propósito: lá ele é o quarto ou quinto item de
@@ -209,6 +228,41 @@ export interface ResumoInbox {
    * inteira: comparar com um número incompleto inventaria uma queda.
    */
   anterior?: ResumoAnterior | null;
+  /**
+   * M-01 — recusas da Meta por Pixel no período, sem teste da equipe nem da
+   * plataforma e sem envio em modo teste. Do Pixel com mais recusas para o com
+   * menos; Pixel sem recusa não aparece. Opcional só para quem monta um
+   * `ResumoInbox` à mão: `resumirInbox` sempre preenche.
+   */
+  recusasPorPixel?: RecusaPorPixel[];
+}
+
+/**
+ * Um Pixel que teve envio recusado pela Meta no período (M-01).
+ *
+ * A conta é por RESULTADO do Pixel, não por item: um evento aceito no Pixel A
+ * e recusado no Pixel B conta recusa só no B. "Recusado" é a régua de
+ * `qualidade.recusados`: a Meta respondeu (`httpStatus` é número) e não
+ * aceitou. Sem token, Pixel desligado e erro de rede não entram: a Meta não
+ * respondeu nada.
+ */
+export interface RecusaPorPixel {
+  /** Id interno do Pixel no console. Serve de âncora de link; nunca é texto de tela. */
+  marcaId: string;
+  /** Quantos envios reais a Meta recusou neste Pixel, no período. */
+  recusados: number;
+  /** Código do erro da recusa mais recente. Ausente em registro antigo. */
+  codigo?: number;
+  /** Subcódigo do erro da recusa mais recente. Ausente em registro antigo. */
+  subcodigo?: number;
+  /** Quando chegou o evento da recusa mais recente (ISO). */
+  ultimaRecusaEm: string;
+  /**
+   * A Meta aceitou um envio real deste Pixel em evento que chegou DEPOIS da
+   * última recusa. Com `true` o problema já passou e a tela não avisa mais.
+   * Usa a hora de chegada do evento: o resultado não tem data própria.
+   */
+  aceitouDepois: boolean;
 }
 
 export interface ContagemPorEventoMeta {
@@ -217,6 +271,48 @@ export interface ContagemPorEventoMeta {
   recebidos: number;
   /** Dos recebidos, quantos a Meta aceitou de verdade (a régua de `qualidade.aceitos`). */
   aceitos: number;
+  /**
+   * M-24 — dos recebidos, quantos eram REPETIDOS e foram segurados: o último
+   * envio do item voltou `duplicado` num Pixel sem código de teste (a régua de
+   * `duplicadoReal`). A Meta já tinha o evento, e ele não foi mandado de novo.
+   *
+   * Entra aqui tanto a venda que chegou por outro caminho (tag e webhook)
+   * quanto o evento já aceito que alguém mandou de novo: o registro não separa
+   * os dois. Opcional só para aceitar resposta antiga: `contarPorEventoMeta`
+   * sempre preenche.
+   */
+  repetidos?: number;
+}
+
+/** O valor de um punhado de compras numa moeda só (M-25). */
+export interface ValorPorMoeda {
+  /** Código da moeda, como veio no evento (`BRL`, `USD`...). */
+  moeda: string;
+  /** Soma dos valores nessa moeda, arredondada em centavos. */
+  total: number;
+  /** Quantas compras entraram na soma. */
+  compras: number;
+}
+
+/**
+ * M-25 — o valor das compras aceitas pela Meta, por caminho de chegada.
+ *
+ * Régua: compra real (sem teste da equipe nem da plataforma), `disparado`, com
+ * aceite de pelo menos um Pixel sem código de teste NESTE envio, e com valor
+ * numérico. Compra que voltou só como `duplicado` fica de fora: quem levou a
+ * venda à Meta foi outro envio, e contar as duas somaria a venda em dobro.
+ *
+ * Uma linha por moeda, da maior soma para a menor. Real nunca é somado com
+ * dólar. Caminho sem compra aceita vem como lista vazia.
+ *
+ * Não é o mesmo número de `receitaEnviada` (todo evento enviado com valor, não
+ * só compra) nem de `compras.valor` (toda compra recebida, aceita ou não).
+ */
+export interface ValorPorCaminho {
+  /** Chegou pelo webhook da plataforma de vendas (`origem` diferente de `'tag'`). */
+  plataforma: ValorPorMoeda[];
+  /** Chegou pela tag do site (`origem === 'tag'`). */
+  site: ValorPorMoeda[];
 }
 
 export interface DiaDoResumo {
@@ -254,10 +350,10 @@ export interface OpcoesDoResumo {
   /** Calcula `anterior` (a janela anterior, do mesmo tamanho). */
   comparar?: boolean;
   /**
-   * Instante (ms) em que a memória GLOBAL da caixa começa, quando ela está no
-   * teto (`inicioDaMemoriaNoTeto` de `inbox.ts`). Antes dele pode faltar item
-   * desta empresa, mesmo com a lista dela bem abaixo de `tetoDaAmostra` (R2 da
-   * V4). Ausente ou `null`: a memória tem tudo.
+   * Instante (ms) em que a memória DESTA empresa começa, quando ela está no
+   * teto (`inicioDaMemoriaNoTeto` de `inbox.ts`; desde a M-05 o teto é por
+   * empresa). Antes dele pode faltar item desta empresa. Ausente ou `null`: a
+   * memória tem tudo.
    */
   memoriaComecaEm?: number | null;
 }
@@ -523,6 +619,9 @@ function comoResultado(bruto: unknown): ResultadoResumivel | null {
     httpStatus: typeof r.httpStatus === 'number' ? r.httpStatus : undefined,
     eventsReceived: typeof r.eventsReceived === 'number' ? r.eventsReceived : undefined,
     modoTeste: typeof r.modoTeste === 'boolean' ? r.modoTeste : undefined,
+    marcaId: typeof r.marcaId === 'string' && r.marcaId ? r.marcaId : undefined,
+    codigoMeta: typeof r.codigoMeta === 'number' ? r.codigoMeta : undefined,
+    subcodigoMeta: typeof r.subcodigoMeta === 'number' ? r.subcodigoMeta : undefined,
   };
 }
 
@@ -633,6 +732,40 @@ function somarReceita(enviados: ItemResumivel[]): { total: number; moeda: string
   };
 }
 
+/** Compra que a Meta aceitou NESTE envio, em Pixel sem código de teste (ver `ValorPorCaminho`). */
+function compraAceitaNesteEnvio(i: ItemResumivel): boolean {
+  return (
+    ehCompra(i) &&
+    i.status === 'disparado' &&
+    lerResultados(i).some((r) => aceitoPelaMeta(r) && r.modoTeste !== true)
+  );
+}
+
+/** Uma linha por moeda, da maior soma para a menor (empate pelo código). Item sem valor não entra. */
+function somarPorMoeda(itens: ItemResumivel[]): ValorPorMoeda[] {
+  const mapa = new Map<string, { soma: number; compras: number }>();
+  for (const i of itens) {
+    if (!temValor(i)) continue;
+    const moeda = i.moeda ?? 'BRL';
+    const c = mapa.get(moeda) ?? { soma: 0, compras: 0 };
+    c.soma += i.valor as number;
+    c.compras++;
+    mapa.set(moeda, c);
+  }
+  return [...mapa.entries()]
+    .map(([moeda, c]) => ({ moeda, total: Math.round(c.soma * 100) / 100, compras: c.compras }))
+    .sort((a, b) => b.total - a.total || a.moeda.localeCompare(b.moeda));
+}
+
+/** M-25 — as compras aceitas, separadas em site (a tag) e plataforma (o webhook). */
+function somarPorCaminho(reais: ItemResumivel[]): ValorPorCaminho {
+  const aceitas = reais.filter(compraAceitaNesteEnvio);
+  return {
+    plataforma: somarPorMoeda(aceitas.filter((i) => i.origem !== 'tag')),
+    site: somarPorMoeda(aceitas.filter((i) => i.origem === 'tag')),
+  };
+}
+
 /** O evento da Meta do item, ou `undefined` quando não há (ver `porEventoMeta`). */
 function eventoMetaDoItem(i: ItemResumivel): string | undefined {
   if (typeof i.eventoMeta === 'string' && i.eventoMeta !== '') return i.eventoMeta;
@@ -640,18 +773,100 @@ function eventoMetaDoItem(i: ItemResumivel): string | undefined {
 }
 
 function contarPorEventoMeta(reais: ItemResumivel[]): ContagemPorEventoMeta[] {
-  const mapa = new Map<string, { recebidos: number; aceitos: number }>();
+  const mapa = new Map<string, { recebidos: number; aceitos: number; repetidos: number }>();
   for (const i of reais) {
     const nome = eventoMetaDoItem(i);
     if (!nome) continue;
-    const c = mapa.get(nome) ?? { recebidos: 0, aceitos: 0 };
+    const c = mapa.get(nome) ?? { recebidos: 0, aceitos: 0, repetidos: 0 };
     c.recebidos++;
     if (aceitoDeVerdade(i)) c.aceitos++;
+    if (lerResultados(i).some(duplicadoReal)) c.repetidos++;
     mapa.set(nome, c);
   }
   return [...mapa.entries()]
     .sort((a, b) => b[1].recebidos - a[1].recebidos || a[0].localeCompare(b[0]))
-    .map(([eventoMeta, c]) => ({ eventoMeta, recebidos: c.recebidos, aceitos: c.aceitos }));
+    .map(([eventoMeta, c]) => ({
+      eventoMeta,
+      recebidos: c.recebidos,
+      aceitos: c.aceitos,
+      repetidos: c.repetidos,
+    }));
+}
+
+/** Um evento da Meta com repetido segurado no período (ver `ContagemPorEventoMeta.repetidos`). */
+export interface EventoRepetido {
+  eventoMeta: string;
+  repetidos: number;
+}
+
+/**
+ * M-24 — os eventos da Meta com pelo menos um repetido, do que mais repetiu
+ * para o que menos repetiu (empate pelo nome). Lista ausente ou campo ausente
+ * (resposta antiga) vira lista vazia: sem dado, a tela mostra o aviso fixo.
+ */
+export function eventosRepetidos(
+  porEventoMeta: ReadonlyArray<ContagemPorEventoMeta> | undefined
+): EventoRepetido[] {
+  return (porEventoMeta ?? [])
+    .map((e) => ({
+      eventoMeta: e.eventoMeta,
+      repetidos: typeof e.repetidos === 'number' ? e.repetidos : 0,
+    }))
+    .filter((e) => e.repetidos > 0)
+    .sort((a, b) => b.repetidos - a.repetidos || a.eventoMeta.localeCompare(b.eventoMeta));
+}
+
+/**
+ * M-01 — recusas da Meta por Pixel (ver `RecusaPorPixel`). Recebe os itens
+ * REAIS do período (teste da equipe e da plataforma já saíram em `recortar`).
+ * Resultado de Pixel em modo teste e resultado sem `marcaId` ficam de fora.
+ */
+function contarRecusasPorPixel(reais: ItemResumivel[]): RecusaPorPixel[] {
+  interface Conta {
+    recusados: number;
+    ultimaRecusa: number;
+    ultimoAceite: number;
+    codigo?: number;
+    subcodigo?: number;
+  }
+  const mapa = new Map<string, Conta>();
+  for (const i of reais) {
+    const t = Date.parse(i.recebidoEm);
+    if (!Number.isFinite(t)) continue;
+    for (const r of lerResultados(i)) {
+      if (r.modoTeste === true || !r.marcaId) continue;
+      const c: Conta = mapa.get(r.marcaId) ?? {
+        recusados: 0,
+        ultimaRecusa: Number.NEGATIVE_INFINITY,
+        ultimoAceite: Number.NEGATIVE_INFINITY,
+      };
+      if (aceitoPelaMeta(r)) {
+        if (t > c.ultimoAceite) c.ultimoAceite = t;
+      } else if (typeof r.httpStatus === 'number') {
+        c.recusados++;
+        if (t >= c.ultimaRecusa) {
+          c.ultimaRecusa = t;
+          c.codigo = r.codigoMeta;
+          c.subcodigo = r.subcodigoMeta;
+        }
+      } else {
+        // Sem resposta da Meta (sem token, Pixel desligado, duplicado): não conta.
+        continue;
+      }
+      mapa.set(r.marcaId, c);
+    }
+  }
+  return [...mapa.entries()]
+    .filter(([, c]) => c.recusados > 0)
+    .sort((a, b) => b[1].recusados - a[1].recusados || a[0].localeCompare(b[0]))
+    .map(([marcaId, c]) => ({
+      marcaId,
+      recusados: c.recusados,
+      ...(c.codigo !== undefined ? { codigo: c.codigo } : {}),
+      ...(c.subcodigo !== undefined ? { subcodigo: c.subcodigo } : {}),
+      ultimaRecusaEm: new Date(c.ultimaRecusa).toISOString(),
+      aceitouDepois: c.ultimoAceite > c.ultimaRecusa,
+    }));
 }
 
 /**
@@ -755,10 +970,10 @@ export function resumirInbox(
   // não um total.
   //
   // Dois tetos: o da lista desta empresa (`tetoDaAmostra`) e o da memória
-  // global da caixa (`opcoes.memoriaComecaEm`, R2 da V4). Cada teto que bateu
-  // corta a leitura num começo; vale o MAIS NOVO dos começos que cortaram.
-  // Lista abaixo do teto não corta nada: o item mais antigo dela é só o mais
-  // antigo que a empresa tem.
+  // desta empresa (`opcoes.memoriaComecaEm`; por empresa desde a M-05). Cada
+  // teto que bateu corta a leitura num começo; vale o MAIS NOVO dos começos
+  // que cortaram. Lista abaixo do teto não corta nada: o item mais antigo
+  // dela é só o mais antigo que a empresa tem.
   const tempos = itens.map((i) => Date.parse(i.recebidoEm)).filter((t) => Number.isFinite(t));
   const listaNoTeto = itens.length >= tetoDaAmostra;
   const memoriaComecaEm =
@@ -858,6 +1073,7 @@ export function resumirInbox(
     },
     porEvento,
     receitaEnviada,
+    receitaPorCaminho: somarPorCaminho(reais),
     compras: {
       ...somar(compras, misturouMoedas),
       moeda: moedaDeCompra,
@@ -867,6 +1083,7 @@ export function resumirInbox(
       semAtribuicaoMeta: somar(comprasSemClique, misturouMoedas),
     },
     porEventoMeta: contarPorEventoMeta(reais),
+    recusasPorPixel: contarRecusasPorPixel(reais),
     porDia,
     abandonos,
     ...(opcoes.comparar === true

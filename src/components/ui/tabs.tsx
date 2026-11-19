@@ -68,10 +68,22 @@ function TabsList({
   )
 }
 
-function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
+function TabsTrigger({
+  className,
+  tamanho,
+  ...props
+}: TabsPrimitive.Tab.Props & {
+  /**
+   * `sm`: a sub-aba de 36px, sem ícone, dentro de uma tela (redesenho de
+   * 18/11/2026). Sem a prop vale a altura padrão abaixo; a aba da empresa
+   * passa a própria altura por `className`.
+   */
+  tamanho?: "sm"
+}) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
+      data-tamanho={tamanho}
       className={cn(
         // h-control-sm (36px) e o piso de alvo de DS-5.2; o `h-8` anterior
         // rendia 28px na densidade compacta. A altura fica em px e nao escala;
@@ -81,10 +93,17 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         // A correcao de §13.4.2: sobe de superficie e ganha limite visivel.
         // Sem sombra — DS-2.4 reserva sombra para camada flutuante.
         "data-active:border-line-control data-active:bg-surface-2 data-active:text-fg-strong",
-        // Variante `line`: a aba ativa e marcada pelo risco de acento. Na
-        // horizontal o risco tem 3px (v7, o design do dono); a cor continua
-        // a tinta da area.
-        "after:absolute after:bg-tinta-texto after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-1 group-data-horizontal/tabs:after:h-[3px] group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        // Variante `line`: a aba ativa e marcada pelo risco amarelo de 2px
+        // (redesenho de 18/11/2026; antes, 3px). E um dos dois lugares onde o
+        // amarelo aparece, junto com o botao primario. T-R07: o risco fica
+        // na borda de baixo DA PROPRIA aba (bottom-0), e nao 4px abaixo dela;
+        // assim a lista nao precisa do `pb-1` que o protegia do corte da
+        // faixa rolavel, e cada barra perde 4px de altura. O seletor e
+        // `data-[orientation=...]`: o Base UI escreve `data-orientation` na
+        // raiz, e nao `data-horizontal`; com o seletor antigo o risco tinha
+        // 0px de altura e nao aparecia.
+        "after:absolute after:bg-tinta-texto after:opacity-0 after:transition-opacity group-data-[orientation=horizontal]/tabs:after:inset-x-0 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-0.5 group-data-[orientation=vertical]/tabs:after:inset-y-0 group-data-[orientation=vertical]/tabs:after:-right-1 group-data-[orientation=vertical]/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+        tamanho === "sm" && "h-9 flex-none px-3",
         className
       )}
       {...props}

@@ -19,15 +19,14 @@
 /**
  * Nome do produto no cabeçalho e no `<title>`.
  *
- * Mantém o texto que já está publicado — ele nunca citou plataforma nem
- * empresa, então nada muda na tela nesta fase. O valor vive aqui para que
+ * O produto se chama Polen Track desde 18/11/2026. O valor vive aqui para que
  * renomear o produto seja uma linha, e não uma varredura.
  */
-export const NOME_PRODUTO = 'Meta CAPI Console';
+export const NOME_PRODUTO = 'Polen Track';
 
 /** Como o produto se descreve para buscador e prévia de link. */
 export const DESCRICAO_PRODUTO =
-  'Console de rastreamento de conversões para a Meta Conversions API.';
+  'Polen Track: rastreamento de conversões para a Meta Conversions API.';
 
 /**
  * O nome da plataforma de vendas de uma empresa, pronto para entrar no meio de

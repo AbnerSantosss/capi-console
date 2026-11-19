@@ -13,6 +13,7 @@ import { avaliarTeste } from './deteccao-de-teste';
 import { pixelAceitaAuto } from './modo-por-marca';
 import { normalizarTelefone } from './telefone';
 import { normalizarMoeda } from './moeda';
+import { lerErroDaMeta, type ErroDaMetaLido } from './erro-meta';
 
 /**
  * Disparo de um item da caixa de entrada para um ou mais pixels.
@@ -70,6 +71,10 @@ export interface ResultadoDisparoAuto {
   eventsReceived?: number;
   fbtraceId?: string;
   erro?: string;
+  /** Código do erro da Meta (`error.code`), só quando ela recusou (M-01). */
+  codigoMeta?: number;
+  /** Subcódigo do erro da Meta (`error.error_subcode`) (M-01). */
+  subcodigoMeta?: number;
   modoTeste: boolean;
   herdados: string[];
   emq: number;
@@ -394,6 +399,9 @@ export async function dispararItem(params: {
       });
       const resp = r.resposta as { events_received?: number; fbtrace_id?: string; error?: { message?: string } };
       const ok = r.httpStatus === 200 && (resp?.events_received ?? 0) > 0;
+      // M-01: o código do erro vai junto do resultado, para a tela dizer o que
+      // fazer. Só o código e o subcódigo; nunca o token nem a resposta inteira.
+      const erroLido: ErroDaMetaLido = ok ? {} : lerErroDaMeta(r.resposta);
       const atribuicao = extrairAtribuicao(evento.event_source_url || '', {
         adAccountId: marca?.adAccountId,
         quando: new Date(evento.event_time * 1000),
@@ -431,6 +439,8 @@ export async function dispararItem(params: {
         eventsReceived: resp?.events_received,
         fbtraceId: resp?.fbtrace_id,
         erro: resp?.error?.message,
+        ...(erroLido.codigo !== undefined ? { codigoMeta: erroLido.codigo } : {}),
+        ...(erroLido.subcodigo !== undefined ? { subcodigoMeta: erroLido.subcodigo } : {}),
       });
 
       void transmitir(ok ? 'dispatch.success' : 'dispatch.error', {

@@ -150,7 +150,7 @@ console.log('\nd. AbasDaEmpresa');
 
 const abas = ler('src', 'components', 'layout', 'AbasDaEmpresa.tsx') ?? '';
 ok(abas.includes('variant="line"'), 'usa variant="line"');
-ok(abas.includes('alt=""'), 'a ilustração da aba é decorativa (alt="")');
+ok(abas.includes('aria-hidden'), 'a aba usa ícone Phosphor decorativo (aria-hidden)');
 ok(abas.includes('ABAS_DO_TOPO') && abas.includes('abaAtiva('), 'lê a lista e a aba ativa de abas-empresa.ts');
 
 /* ---------------- e. LateralDeEmpresas ---------------- */

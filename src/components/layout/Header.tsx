@@ -114,8 +114,8 @@ export function Header({
    *
    * Sem domínio cadastrado a tag até sai, mas o coletor recusa o evento pela
    * origem: copiar assim seria entregar ao cliente uma tag que não funciona.
-   * Então o botão não copia, diz por quê e leva para a aba Fontes, onde moram a
-   * tag e o campo do domínio do site desde a V8 (R1 da V8).
+   * Então o botão não copia, diz por quê e leva para a aba Instalação (endereço
+   * `/fontes`), onde moram a tag e o campo do domínio do site desde a V8 (R1 da V8).
    */
   const copiarTag = async () => {
     if (!slug || !empresa) return;
@@ -235,9 +235,9 @@ export function Header({
           </ol>
         </nav>
 
-        {/* O estado da empresa: ponto + texto, nunca só a cor. Sem medida (fora
-            da Visão geral, ou antes de ela medir), "—" por extenso para o
-            leitor de tela, e nunca um verde que ninguém conferiu. */}
+        {/* O estado da empresa: ponto + texto, nunca só a cor. Só aparece com
+            medida (redesenho de 18/11/2026): sem ela, nada, e nunca um verde
+            que ninguém conferiu. */}
         {slug && estado ? (
           <span
             title={estado.frase}
@@ -246,15 +246,6 @@ export function Header({
             <span aria-hidden className={cn('size-1.5 rounded-full', PONTO_DO_ESTADO[estado.tom])} />
             <span aria-hidden>{estado.rotulo}</span>
             <span className="sr-only">Estado da empresa: {estado.frase}</span>
-          </span>
-        ) : slug ? (
-          <span
-            title="Estado da empresa: aparece na Visão geral"
-            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-caption text-fg-muted sm:inline-flex"
-          >
-            <span aria-hidden className="size-1.5 rounded-full bg-fg-muted" />
-            <span aria-hidden>—</span>
-            <span className="sr-only">Estado da empresa: aparece na Visão geral</span>
           </span>
         ) : null}
 
@@ -276,11 +267,14 @@ export function Header({
           </kbd>
         </button>
 
-        {/* A ação primária da Visão geral: o verbo do próximo passo. Antes de
-            a Visão geral medir, nenhum botão (e não um verbo que trocaria
-            logo depois). */}
+        {/* O verbo do próximo passo. Antes de a Visão geral medir, nenhum botão
+            (e não um verbo que trocaria logo depois). Em contorno e pequeno
+            (seção 1.12 do redesenho): ele aparece em todas as telas e não
+            disputa o amarelo com a ação da página. */}
         {proximo?.acao === 'copiar-tag' ? (
           <Button
+            variant="outline"
+            size="sm"
             onClick={() => void copiarTag()}
             disabled={copiando}
             ocupado={copiando}
@@ -290,7 +284,7 @@ export function Header({
             <span className="hidden sm:inline">{proximo.verbo}</span>
           </Button>
         ) : proximo ? (
-          <Link href={proximo.href} className={buttonVariants()} aria-label={proximo.verbo} title={proximo.frase}>
+          <Link href={proximo.href} className={buttonVariants({ variant: 'outline', size: 'sm' })} aria-label={proximo.verbo} title={proximo.frase}>
             <span className="hidden sm:inline">{proximo.verbo}</span>
             <ArrowRight aria-hidden />
           </Link>

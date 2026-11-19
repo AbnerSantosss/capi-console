@@ -27,10 +27,13 @@ interface Descricao {
   tinta: string;
   /** O que a forma faz, curto. */
   faz: string;
-  /** Quando usar. Opcional: o automático se explica em duas palavras. */
+  /** Quando usar (manual) ou onde se liga (automático). Opcional. */
   quando?: string;
-  /** Texto do link quando o operador está na outra tela. */
-  abrir: string;
+  /**
+   * Texto do link quando o operador está na outra tela. Sem `abrir`, a
+   * linha não tem link: o automático só diz onde se liga (T-M21).
+   */
+  abrir?: string;
 }
 
 const TELAS: Record<Tela, Descricao> = {
@@ -47,7 +50,7 @@ const TELAS: Record<Tela, Descricao> = {
     icone: Workflow,
     tinta: 'var(--tinta-automatico)',
     faz: 'Sai sozinho.',
-    abrir: 'Abrir Regras',
+    quando: 'Liga-se em dois lugares: na regra (aba Regras) e no Pixel (aba Pixels).',
   },
 };
 
@@ -144,7 +147,7 @@ function LinhaDaTela({
       <p className="min-w-0 flex-1 text-caption text-fg-body">
         <span className="font-semibold text-fg-strong">{titulo}:</span> {faz}
         {quando && <> {quando}</>}
-        {!aqui && (
+        {!aqui && abrir && (
           <>
             {' '}
             <Link

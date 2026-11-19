@@ -15,12 +15,7 @@
 import type { LucideIcon } from '@/components/ui/icones';
 
 import { acharEventoPadrao } from '@/lib/meta-events';
-import {
-  EVENTOS_TESTE_PLATAFORMA,
-  MAPA_EVENTOS_ORIGEM,
-  type ClassificacaoEvento,
-  type MotivoIgnorar,
-} from '@/lib/parser';
+import type { ClassificacaoEvento, MotivoIgnorar } from '@/lib/parser';
 
 export interface ParMeta {
   /** Nome tecnico, exatamente como vai em event_name. */
@@ -183,36 +178,4 @@ export function motivoLegivel(dados: DadosDoMotivo): string {
   }
 
   return 'Nada foi enviado à Meta.';
-}
-
-/**
- * Motivo de uma REGRA em Ignorar, deduzido do nome de origem. A regra nao
- * guarda motivo; quem sabe e a tabela do parser.
- */
-export function motivoDaRegraIgnorar(eventoOrigem: string): string {
-  const nome = String(eventoOrigem ?? '').trim();
-  if (!nome) return 'Nada é enviado à Meta.';
-  if (nome === '*') return 'Curinga: nada que caia aqui vai para a Meta.';
-
-  if (EVENTOS_TESTE_PLATAFORMA.has(nome)) {
-    return 'Teste da própria plataforma — a entrega chega, nada vai para a Meta.';
-  }
-
-  if (nome in MAPA_EVENTOS_ORIGEM) {
-    const equivalente = MAPA_EVENTOS_ORIGEM[nome];
-    if (equivalente === null) {
-      const familia = familiaDoNome(nome);
-      return familia
-        ? `Não existe evento padrão equivalente na Meta — ${familia}.`
-        : 'Não existe evento padrão equivalente na Meta.';
-    }
-    const par = parMeta(equivalente);
-    return `Tem equivalente na Meta (${par?.pt} · ${equivalente}), mas está desligado por decisão do projeto.`;
-  }
-
-  if (nome.startsWith('tag.')) {
-    return 'Tag gerada pelo console. Enquanto a regra estiver em Ignorar ela não envia nada: mude o modo para Manual e confira o evento da Meta para começar a enviar.';
-  }
-
-  return 'Nome fora do catálogo conhecido. Enquanto estiver em Ignorar, nada vai para a Meta.';
 }

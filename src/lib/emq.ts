@@ -9,6 +9,7 @@
  *
  * Nao duplique estes textos em nenhum outro lugar.
  */
+import { jaEhSha256 } from './hash-detect';
 
 export type EmqNivel = 'alto' | 'medio' | 'baixo';
 
@@ -38,6 +39,11 @@ export interface ParametroEmq {
   critico: boolean;
   /** Se vai transformado em hash SHA-256 antes de sair. */
   hash: boolean;
+  /**
+   * So existe quando `hash` e true (T-M36): o valor que chegou JA e um
+   * SHA-256, e vai como esta. `false` = chegou em claro (ou nao chegou).
+   */
+  jaEmHash?: boolean;
   /** Valor truncado para exibicao. Nunca o valor completo de dado pessoal. */
   amostra: string | null;
   /** O que fazer para obter este parametro. Substitui os tooltips antigos. */
@@ -66,6 +72,46 @@ const corta = (v: string | undefined, n: number): string | null => {
   return t.length > n ? `${t.slice(0, n - 3)}...` : t;
 };
 
+/** true quando ha ao menos um valor preenchido e TODOS os preenchidos ja sao SHA-256. */
+const todosEmHash = (...valores: (string | undefined)[]): boolean => {
+  const preenchidos = valores.filter((v): v is string => Boolean(v && v.trim()));
+  return preenchidos.length > 0 && preenchidos.every((v) => jaEhSha256(v));
+};
+
+/** O que o selo do hash mostra na tabela de qualidade (T-M36). */
+export interface SeloDoHash {
+  /** O texto curto, sempre visivel. */
+  texto: string;
+  /** A frase inteira, para quem passa o mouse. */
+  explicacao: string;
+}
+
+/**
+ * O selo diz o caso que o console viu, e nao so "SHA-256":
+ *  - o dado nao veio          -> "SHA-256" (e a regra geral do campo);
+ *  - veio ja em hash          -> "já em SHA-256" (vai como esta);
+ *  - veio em claro            -> "SHA-256 no envio" (o servidor faz o hash).
+ * `null` para o parametro que nao vai em hash (fbc, fbp, ip...).
+ */
+export function seloDoHash(
+  p: Pick<ParametroEmq, 'hash' | 'presente' | 'jaEmHash'>
+): SeloDoHash | null {
+  if (!p.hash) return null;
+  if (!p.presente) {
+    return { texto: 'SHA-256', explicacao: 'Quando este dado vier, ele vai à Meta em hash SHA-256.' };
+  }
+  if (p.jaEmHash) {
+    return {
+      texto: 'já em SHA-256',
+      explicacao: 'Chegou já em hash SHA-256. Vai como está, sem hash de novo.',
+    };
+  }
+  return {
+    texto: 'SHA-256 no envio',
+    explicacao: 'Chegou em claro. O servidor transforma em hash SHA-256 antes de enviar à Meta.',
+  };
+}
+
 export function calcularEmq(c: CamposEmq): ResultadoEmq {
   const parametros: ParametroEmq[] = [
     {
@@ -87,9 +133,11 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       sigla: 'em',
       categoria: 'Correspondência principal',
       peso: 2.0,
-      presente: Boolean(c.email && c.email.includes('@')),
+      // T-M36: e-mail que ja chega em SHA-256 nao tem "@", mas a Meta o recebe.
+      presente: Boolean(c.email && (c.email.includes('@') || jaEhSha256(c.email))),
       critico: true,
       hash: true,
+      jaEmHash: todosEmHash(c.email),
       amostra: corta(c.email, 26),
       comoObter:
         'Vem do checkout ou do CRM. É normalizado em minúsculas e transformado em hash SHA-256 antes do envio.',
@@ -100,9 +148,13 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       sigla: 'ph',
       categoria: 'Correspondência principal',
       peso: 1.5,
-      presente: Boolean(c.phone && c.phone.replace(/\D/g, '').length >= 10),
+      // T-M36: telefone ja em SHA-256 vale como presente, tenha quantos digitos tiver.
+      presente: Boolean(
+        c.phone && (jaEhSha256(c.phone) || c.phone.replace(/\D/g, '').length >= 10)
+      ),
       critico: false,
       hash: true,
+      jaEmHash: todosEmHash(c.phone),
       amostra: corta(c.phone, 18),
       comoObter:
         'Celular ou WhatsApp com DDD. O DDI 55 é acrescentado automaticamente. Também vai em SHA-256.',
@@ -184,6 +236,8 @@ export function calcularEmq(c: CamposEmq): ResultadoEmq {
       ),
       critico: false,
       hash: true,
+      // T-M36: so e "ja em hash" quando nome E sobrenome preenchidos sao hash.
+      jaEmHash: todosEmHash(c.firstName, c.lastName),
       amostra: corta([c.firstName, c.lastName].filter(Boolean).join(' '), 26),
       comoObter:
         'Nome e sobrenome do checkout. São normalizados sem acentos e transformados em hash SHA-256.',

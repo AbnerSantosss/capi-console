@@ -2,8 +2,8 @@
 /**
  * Tema do console com duas paletas (v7, tarefa V1).
  *
- * Desde o v7 o console usa a paleta do design do dono ("Abner Tracker") e o
- * login continua exatamente como no P0 (decisão D5). As duas convivem em
+ * Desde o v8 (18/11/2026) o console e o login usam a mesma paleta, a do
+ * Polen Track, escrita duas vezes (uma por bloco). Os dois blocos convivem em
  * `src/app/globals.css`:
  *
  *   - o PRIMEIRO `:root` é a paleta do console;
@@ -144,35 +144,35 @@ const TEMA = declaracoes(THEME_INLINE);
 console.log('\na. O primeiro :root é a paleta do console');
 
 const PALETA_CONSOLE = {
-  '--surface-0': '#07121E',
-  '--surface-1': '#102130',
-  '--surface-2': '#172C3E',
-  '--surface-3': '#21384B',
-  '--fg-strong': '#F1F5FF',
-  '--fg-body': '#B2CCE6',
-  '--fg-muted': '#8FA8C1',
-  '--fg-disabled': '#6B839B',
-  '--border-subtle': '#29465F',
-  '--border-default': '#3B5872',
-  '--border-control': '#6B8AA6',
-  '--border-focus': '#13BFF4',
-  '--papel': '#0665EF',
-  '--papel-hover': '#0559D6',
-  '--papel-active': '#0450C2',
-  '--papel-texto': '#FFFFFF',
-  '--success': '#21D8B0',
-  '--warning': '#F1BE67',
-  '--danger': '#FF899B',
-  '--tinta-painel': '#0665EF',
-  '--tinta-instalacao': '#0665EF',
-  '--tinta-pixels': '#0665EF',
-  '--tinta-manual': '#0665EF',
-  '--tinta-automatico': '#0665EF',
-  '--tinta-texto-painel': '#66B3FF',
-  '--tinta-texto-instalacao': '#66B3FF',
-  '--tinta-texto-pixels': '#66B3FF',
-  '--tinta-texto-manual': '#66B3FF',
-  '--tinta-texto-automatico': '#66B3FF',
+  '--surface-0': '#070707',
+  '--surface-1': '#141414',
+  '--surface-2': '#1F1F1F',
+  '--surface-3': '#2B2B2B',
+  '--fg-strong': '#FAFAFA',
+  '--fg-body': '#D4D4D4',
+  '--fg-muted': '#A3A3A3',
+  '--fg-disabled': '#767676',
+  '--border-subtle': '#3A3A3A',
+  '--border-default': '#4F4F4F',
+  '--border-control': '#7C7C7C',
+  '--border-focus': '#FCEE21',
+  '--papel': '#FCEE21',
+  '--papel-hover': '#FFF566',
+  '--papel-active': '#E3D61E',
+  '--papel-texto': '#000000',
+  '--success': '#4ADE80',
+  '--warning': '#FF9F43',
+  '--danger': '#FF8A8A',
+  '--tinta-painel': '#FCEE21',
+  '--tinta-instalacao': '#FCEE21',
+  '--tinta-pixels': '#FCEE21',
+  '--tinta-manual': '#FCEE21',
+  '--tinta-automatico': '#FCEE21',
+  '--tinta-texto-painel': '#FCEE21',
+  '--tinta-texto-instalacao': '#FCEE21',
+  '--tinta-texto-pixels': '#FCEE21',
+  '--tinta-texto-manual': '#FCEE21',
+  '--tinta-texto-automatico': '#FCEE21',
 };
 for (const [nome, valor] of Object.entries(PALETA_CONSOLE)) {
   const achado = CONSOLE.get(nome);
@@ -206,36 +206,36 @@ console.log('\nb. O bloco do login repete a paleta do P0');
  * por script antes de a V1 mexer no CSS. Valor com espaço simples.
  */
 const P0 = {
-  '--surface-0': '#0d0b08',
-  '--surface-1': '#1b1815',
-  '--surface-2': '#262320',
-  '--surface-3': '#33302c',
-  '--border-subtle': '#3e3b38',
-  '--border-default': '#565350',
-  '--border-control': '#7e7a76',
-  '--border-focus': '#c8c3bd',
-  '--fg-strong': '#f2f0ed',
-  '--fg-body': '#ceccc8',
-  '--fg-muted': '#a09c97',
-  '--fg-disabled': '#74716d',
-  '--papel': '#f0ece7',
-  '--papel-hover': '#fbfaf7',
-  '--papel-active': '#ddd8d2',
-  '--papel-texto': '#16130f',
-  '--success': '#22c55e',
-  '--warning': '#f59e0b',
-  '--danger': '#fb7f93',
-  '--tinta-painel': '#3dd7cf',
-  '--tinta-instalacao': '#b1ca70',
-  '--tinta-pixels': '#f0b13f',
-  '--tinta-manual': '#f79ad9',
-  '--tinta-automatico': '#c3afff',
+  '--surface-0': '#070707',
+  '--surface-1': '#141414',
+  '--surface-2': '#1F1F1F',
+  '--surface-3': '#2B2B2B',
+  '--border-subtle': '#3A3A3A',
+  '--border-default': '#4F4F4F',
+  '--border-control': '#7C7C7C',
+  '--border-focus': '#FCEE21',
+  '--fg-strong': '#FAFAFA',
+  '--fg-body': '#D4D4D4',
+  '--fg-muted': '#A3A3A3',
+  '--fg-disabled': '#767676',
+  '--papel': '#FCEE21',
+  '--papel-hover': '#FFF566',
+  '--papel-active': '#E3D61E',
+  '--papel-texto': '#000000',
+  '--success': '#4ADE80',
+  '--warning': '#FF9F43',
+  '--danger': '#FF8A8A',
+  '--tinta-painel': '#FCEE21',
+  '--tinta-instalacao': '#FCEE21',
+  '--tinta-pixels': '#FCEE21',
+  '--tinta-manual': '#FCEE21',
+  '--tinta-automatico': '#FCEE21',
   '--tinta': 'var(--tinta-painel)',
-  '--tinta-texto-painel': '#7dece5',
-  '--tinta-texto-instalacao': '#cbe197',
-  '--tinta-texto-pixels': '#ffcd7d',
-  '--tinta-texto-manual': '#ffbfe9',
-  '--tinta-texto-automatico': '#d8ceff',
+  '--tinta-texto-painel': '#FCEE21',
+  '--tinta-texto-instalacao': '#FCEE21',
+  '--tinta-texto-pixels': '#FCEE21',
+  '--tinta-texto-manual': '#FCEE21',
+  '--tinta-texto-automatico': '#FCEE21',
   '--tinta-texto': 'var(--tinta-texto-painel)',
   '--realce-interno': 'inset 0 1px 0 rgb(255 255 255 / 7%)',
   '--realce-interno-forte': 'inset 0 1px 0 rgb(255 255 255 / 12%)',
@@ -406,14 +406,14 @@ const linhaShell = casca.split(/\r?\n/).find((l) => l.includes('styles.shell'));
 ok(!!linhaShell && linhaShell.includes('data-console'), 'a linha do `styles.shell` tem `data-console`', linhaShell ? `(${linhaShell.trim()})` : '(sem styles.shell)');
 
 const layoutConsole = ler('src/app/(console)/layout.tsx');
-ok(layoutConsole.includes("themeColor: '#07121E'"), "(console)/layout.tsx tem `themeColor: '#07121E'`");
+ok(layoutConsole.includes("themeColor: '#070707'"), "(console)/layout.tsx tem `themeColor: '#070707'`");
 ok(!layoutConsole.includes('data-console'), '(console)/layout.tsx não tem `data-console` (nenhum cast, nenhuma prop inventada)');
 
 /* ---------------- d. O themeColor do login ---------------- */
 
 console.log('\nd. O themeColor da raiz é o do login');
 
-ok(ler('src/app/layout.tsx').includes("themeColor: '#0d0b08'"), "src/app/layout.tsx continua com `themeColor: '#0d0b08'`");
+ok(ler('src/app/layout.tsx').includes("themeColor: '#070707'"), "src/app/layout.tsx tem `themeColor: '#070707'`");
 
 /* ---------------- d′. Os estados do botão ---------------- */
 
@@ -500,13 +500,13 @@ ok(citam.length === 0, 'src/, public/ e scripts/ limpos', citam.length ? `(${cit
 
 console.log('\ng. Os hex do console fora do CSS só em (console)/layout.tsx');
 
-const HEX_CONSOLE = /#0665EF|#07121E/i;
+const HEX_CONSOLE = /#FCEE21|#070707/i;
 const comHex = arquivosSob('src')
   .filter((f) => /\.tsx?$/.test(f))
   .filter((f) => HEX_CONSOLE.test(ler(f)));
 ok(
-  comHex.length === 1 && comHex[0] === 'src/app/(console)/layout.tsx',
-  'só `src/app/(console)/layout.tsx` tem os hex do console em .ts/.tsx',
+  comHex.sort().join('|') === 'src/app/(console)/layout.tsx|src/app/layout.tsx',
+  'só os dois layouts (`src/app/layout.tsx` e `src/app/(console)/layout.tsx`) têm os hex da paleta em .ts/.tsx',
   `(${comHex.join(', ') || 'nenhum'})`
 );
 

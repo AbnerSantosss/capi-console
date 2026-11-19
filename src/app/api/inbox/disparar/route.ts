@@ -12,6 +12,7 @@ import { empresaParaEscrita } from '@/lib/empresa-ativa';
 import { dispararItem } from '@/lib/auto-dispatch';
 import { exigirSessao } from '@/lib/sessao';
 import { ehNomePadraoMeta } from '@/lib/meta-events';
+import { erroDeRota } from '@/lib/erro-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -156,8 +157,11 @@ export async function POST(request: NextRequest) {
     const resultados = await dispararItem({ item, campos: r.fields, eventoMeta, marcas, origem: 'manual' });
     return NextResponse.json({ resultados });
   } catch (e) {
-    if (e instanceof Response) return e;
-    const msg = e instanceof Error ? e.message : 'Erro desconhecido';
-    return NextResponse.json({ erro: msg }, { status: 400 });
+    // T-M09: falha inesperada. A frase manda conferir a Fila antes de repetir,
+    // porque o tropeço pode ter vindo DEPOIS de o evento sair.
+    return erroDeRota(
+      e,
+      'Não foi possível enviar este evento. Confira na Fila se ele saiu antes de tentar de novo.'
+    );
   }
 }

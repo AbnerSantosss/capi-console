@@ -31,8 +31,7 @@ import styles from './console.module.css';
  * A lateral de empresas (V3 do v7): a coluna de 248px à esquerda, a partir
  * de `lg`. Abaixo disso o mesmo conteúdo abre numa gaveta (`GavetaDeEmpresas`).
  *
- * De cima para baixo: a marca, "Nova empresa", a lista de empresas com o
- * selo de estado e, no pé, Ajuda, Preferências e Sair — o que antes morava no
+ * De cima para baixo: a marca, "Nova empresa", a lista de empresas e, no pé, Ajuda, Preferências e Sair — o que antes morava no
  * menu do operador, no canto do cabeçalho.
  *
  * A empresa marcada na lista é a do ENDEREÇO, nunca a do store. Trocar de
@@ -186,10 +185,8 @@ export function ConteudoDaLateral({
         <BotaoNovaEmpresa aoEscolher={aoEscolher} className="w-full justify-start" />
 
         <nav aria-labelledby={idDoRotulo} className="flex flex-col gap-1.5">
-          <p
-            id={idDoRotulo}
-            className="px-2 text-caption font-semibold tracking-wide text-fg-muted uppercase"
-          >
+          {/* Sem caixa-alta (redesenho de 18/11/2026, seção 1.14). */}
+          <p id={idDoRotulo} className="px-2 text-caption text-fg-muted">
             Empresas
           </p>
           <ListaDeEmpresas empresas={empresas} aoEscolher={aoEscolher} />
@@ -201,7 +198,7 @@ export function ConteudoDaLateral({
           href="/guia"
           onClick={aoEscolher}
           aria-current={naAjuda ? 'page' : undefined}
-          className={`${ITEM_DO_PE} ${naAjuda ? 'bg-tinta/15 font-medium text-fg-strong' : 'text-fg-body hover:text-fg-strong'}`}
+          className={`${ITEM_DO_PE} ${naAjuda ? 'bg-surface-3 font-medium text-fg-strong' : 'text-fg-body hover:text-fg-strong'}`}
         >
           <HelpCircle className="size-4 shrink-0" aria-hidden />
           Ajuda
@@ -220,7 +217,7 @@ export function ConteudoDaLateral({
         <button
           type="button"
           onClick={() => void sair()}
-          className={`${ITEM_DO_PE} text-danger`}
+          className={`${ITEM_DO_PE} text-caption text-danger`}
         >
           <LogOut className="size-4 shrink-0" aria-hidden />
           Sair do console

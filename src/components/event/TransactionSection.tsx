@@ -39,7 +39,7 @@ export function TransactionSection() {
       id="secao-evento"
       step={2}
       icon={IconeDoEvento}
-      variant="card"
+      variant="plain"
       title="O que aconteceu"
       description="Evento, dia e hora, e valor da venda."
     >
@@ -154,7 +154,7 @@ export function TransactionSection() {
             onBlur={blur('currency')}
             placeholder="BRL"
             maxLength={3}
-            className="font-mono uppercase"
+            className="font-mono"
           />
         </Field>
 
@@ -301,7 +301,7 @@ function ResumoUtms({ url }: { url: string }) {
 
   return (
     <div className="rounded-control border border-line bg-surface-2 p-3">
-      <p className="mb-2 text-caption font-semibold tracking-wide text-fg-muted uppercase">
+      <p className="mb-2 text-label font-semibold text-fg-muted">
         Lido da URL
       </p>
       <dl className="flex flex-wrap gap-x-6 gap-y-2">

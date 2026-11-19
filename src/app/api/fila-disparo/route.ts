@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exigirSessao } from '@/lib/sessao';
+import { erroDeRota } from '@/lib/erro-api';
 
 /**
  * Disparo em lote — APOSENTADO em 23/09/2026 (D14, D15, T5; tarefa C11 do
@@ -23,9 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     exigirSessao(request);
   } catch (err) {
-    if (err instanceof Response) return err;
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ erro: 'Falha ao conferir a sessão: ' + msg }, { status: 500 });
+    return erroDeRota(err, 'Não foi possível conferir a sessão. Entre de novo e repita.');
   }
   return NextResponse.json(
     { erro: MENSAGEM },

@@ -18,7 +18,7 @@ import { COOKIE_SESSAO, verificarSessao } from '@/lib/sessao';
  * gate G7 (`scripts/contrast-check.mjs`) compara este valor com o
  * `--surface-0` do primeiro `:root` de `globals.css`.
  */
-export const viewport: Viewport = { themeColor: '#07121E' };
+export const viewport: Viewport = { themeColor: '#070707' };
 
 /**
  * Layout protegido do console (D11a).

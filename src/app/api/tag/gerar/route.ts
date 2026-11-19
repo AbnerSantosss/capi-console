@@ -10,14 +10,21 @@ import {
 import { exigirSessao } from '@/lib/sessao';
 import { hostDaTag } from '@/lib/tag-dominios';
 import { gerarTodasAsTags } from '@/lib/tag-script';
+import { erroDeRota, respostaErro } from '@/lib/erro-api';
 
 export const dynamic = 'force-dynamic';
+
+/** T-M09: falha inesperada ao montar a tag. Nunca a mensagem técnica. */
+const NAO_GEROU_A_TAG = 'Não foi possível gerar a tag do site. Recarregue a página e tente de novo.';
 
 /**
  * Gerador das tags prontas, para a aba "Tag do site" do console.
  *
- *   GET /api/tag/gerar?dominio=<id>
+ *   GET /api/tag/gerar?dominio=<id>[&conferir=1]
  *     -> { endpoint, dominioId, tags: [...], enderecoProprioPronto }
+ *
+ * `conferir=1` vem do botao "Conferir de novo" da aba Dominio: a medicao
+ * guardada so vale se tiver menos de 10 s (ver `enderecoProprioPronto`).
  *
  * Rota COM sessao, ao contrario do coletor: aqui sai a chave publica junto de
  * cada tag, e nao ha motivo para servir isso a quem nao esta logado.
@@ -79,12 +86,25 @@ export async function GET(request: NextRequest) {
     const hostProprio = dominio ? hostDaTag(dominio, base) : '';
     const nossoHost = dominio ? hostDaTag({ ...dominio, subdominio: undefined }, base) : '';
     const temSubdominio = Boolean(hostProprio) && hostProprio !== nossoHost;
-    const certificadoPronto = temSubdominio ? await enderecoProprioPronto(hostProprio) : false;
+    // `conferir=1`: a pessoa clicou em "Conferir de novo". So muda quanto tempo
+    // a medicao guardada vale; a resposta e o resto da rota ficam iguais.
+    const conferirAgora = request.nextUrl.searchParams.get('conferir') === '1';
+    const certificadoPronto = temSubdominio
+      ? await enderecoProprioPronto(hostProprio, undefined, { conferirAgora })
+      : false;
 
     const endpoint = endpointDoDominio(dominio, base, certificadoPronto);
     // `gerarTodasAsTags` recusa por dentro qualquer evento de dinheiro, entao o
     // catalogo inteiro pode passar: Purchase e Subscribe nunca saem daqui.
-    const tags = gerarTodasAsTags(endpoint, tag.chave, undefined, dominio?.host);
+    let tags: ReturnType<typeof gerarTodasAsTags>;
+    try {
+      tags = gerarTodasAsTags(endpoint, tag.chave, undefined, dominio?.host);
+    } catch (e) {
+      // T-M09: chave vazia ou endpoint torto. As frases do gerador
+      // (`src/lib/tag-script.ts`) sao escritas pela casa e ja dizem o que
+      // fazer; so elas vao para a tela, e so deste ponto.
+      return respostaErro(e instanceof Error ? e.message : NAO_GEROU_A_TAG, 400);
+    }
 
     return NextResponse.json({
       endpoint,
@@ -93,10 +113,6 @@ export async function GET(request: NextRequest) {
       enderecoProprioPronto: certificadoPronto,
     });
   } catch (e) {
-    if (e instanceof Response) return e;
-    // Chave vazia ou endpoint torto chegam aqui como Error do gerador. A
-    // mensagem dele ja diz o que fazer, entao ela vai inteira para a tela.
-    const msg = e instanceof Error ? e.message : 'Não foi possível gerar as tags.';
-    return NextResponse.json({ erro: msg }, { status: 400 });
+    return erroDeRota(e, NAO_GEROU_A_TAG);
   }
 }

@@ -14,7 +14,7 @@
 /* --- Primário: chapado na cor do papel ---------------------------------- */
 
 /* Sem rampa vertical, sem halo colorido e sem brilho de passada. A cor vem
-   de `--papel`: no console (v7) é o azul de ação com texto branco; no login
+   de `--papel`: no console é o amarelo do produto com texto preto; no login
    continua o papel claro do P0 com texto quase preto. O relevo interno do
    projeto (`--realce-interno`) não entra aqui, então o botão fica chapado de
    verdade nas duas paletas.

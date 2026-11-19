@@ -8,16 +8,16 @@
  *     o botão Exportar; abaixo do seletor, o intervalo EFETIVO que o servidor
  *     usou (`resumo.janela`), por extenso e em horário de Brasília, o único fuso
  *     que existe no console;
- *  2. a faixa Site → Pixel → CAPI → Meta;
- *  3. os 4 KPIs;
+ *  2. os 4 KPIs numa faixa só, com a trilha Site → Pixel → CAPI → Meta no
+ *     rodapé dela (redesenho de 18/11/2026, D-R1: os números vêm primeiro);
+ *  3. "Precisa de você": vendas paradas na Fila, avisos da instalação e a
+ *     linha "Configuração x de 6" enquanto faltar passo, uma linha cada;
  *  4. funil (60%, com o selo "Amostra parcial" da R5) + receita por dia (40%);
- *  5. últimas conversões + qualidade do rastreamento;
- *  6. a faixa "Configuração x de 6" no rodapé — ou no topo, logo abaixo do
- *     cabeçalho, enquanto faltar passo (HyperFrames E1).
+ *  5. últimas conversões + qualidade do rastreamento.
  *
  * Os quatro estados da página inteira (spec :107):
  *  - carregando: um esqueleto no lugar de cada bloco;
- *  - desconectado: "Sem resposta do servidor. Tente de novo." com o botão;
+ *  - sem resposta: "Sem resposta do servidor. Tente de novo." com o botão;
  *  - sem permissão (401): "Sessão expirada", com o link para entrar de novo
  *    (o `pedir` já leva ao login sozinho; o texto fica enquanto isso);
  *  - vazio (`base = 0`): cada bloco mostra o seu "—" e a tela diz o próximo passo.
@@ -48,8 +48,9 @@ import { Gauge } from '@/components/ui/icones';
 import { ErroApi, SessaoExpirada, pedir } from '@/lib/cliente-api';
 import type { ChecklistDaEmpresa, EnvioAutomatico, EstadoDaEmpresa } from '@/lib/checklist-empresa';
 import type { ResumoInbox } from '@/lib/inbox-resumo';
-import { cn } from '@/lib/utils';
+import type { AvisoDeSilencio } from '@/lib/recebimentos-calculo';
 import { enderecoDaAba } from '@/lib/abas-empresa';
+import { vendasEsperando } from '@/lib/vendas-esperando';
 import {
   SEM_DADO,
   dataHoraDeBrasilia,
@@ -66,8 +67,10 @@ import { ExportarCsv } from './ExportarCsv';
 import { FluxoDoEvento } from './FluxoDoEvento';
 import { Funil } from './Funil';
 import { Kpis } from './Kpis';
+import { LinhaDeAviso, PrecisaDeVoce } from './PrecisaDeVoce';
 import { Qualidade } from './Qualidade';
 import { Receita } from './Receita';
+import { VendasEsperando } from './VendasEsperando';
 import { publicarEstadoNoCabecalho } from './estado-no-cabecalho';
 
 /** O mesmo teto da amostra do resumo (`AMOSTRA` da rota): a mesma memória. */
@@ -86,6 +89,8 @@ interface Leitura {
   falha: Falha | null;
   /** `null` quando a lista das últimas conversões não veio. */
   linhas: LinhaDeConversao[] | null;
+  /** Vendas paradas na Fila, de qualquer data (T-M08). `null` quando a lista não veio. */
+  esperando: number | null;
 }
 
 function falhaDe(e: unknown): Falha {
@@ -102,6 +107,7 @@ export function VisaoGeral({
   checklist,
   estado,
   envio,
+  avisos,
 }: {
   empresaId: string;
   slug: string;
@@ -110,6 +116,8 @@ export function VisaoGeral({
   estado: EstadoDaEmpresa;
   /** `null` quando os Pixels não puderam ser lidos. */
   envio: EnvioAutomatico | null;
+  /** M-02: "nada chega há N h" (vem do servidor; vazio = tudo chegando). */
+  avisos?: readonly AvisoDeSilencio[];
 }) {
   const [periodo, setPeriodo] = useState<PeriodoEscolhido>(PERIODO_PADRAO);
   const [tentativa, setTentativa] = useState(0);
@@ -153,12 +161,12 @@ export function VisaoGeral({
       if (!vivo) return;
 
       if (resumo.status === 'rejected') {
-        setLeitura({ chave, resumo: null, falha: falhaDe(resumo.reason), linhas: null });
+        setLeitura({ chave, resumo: null, falha: falhaDe(resumo.reason), linhas: null, esperando: null });
         return;
       }
       // T2: a resposta é de outra empresa? Então não é desta tela.
       if (resumo.value.empresaId !== empresaId) {
-        setLeitura({ chave, resumo: null, falha: { tipo: 'outra-empresa' }, linhas: null });
+        setLeitura({ chave, resumo: null, falha: { tipo: 'outra-empresa' }, linhas: null, esperando: null });
         return;
       }
       const doPeriodo = resumo.value.resumo;
@@ -166,7 +174,13 @@ export function VisaoGeral({
         atividade.status === 'fulfilled' && Array.isArray(atividade.value.itens)
           ? ultimasConversoes(atividade.value.itens, doPeriodo.janela, empresaId)
           : null;
-      setLeitura({ chave, resumo: doPeriodo, falha: null, linhas });
+      // T-M08: a mesma lista responde quantas vendas estão paradas na Fila
+      // (de qualquer data, não só do período). Nenhuma leitura a mais.
+      const esperando =
+        atividade.status === 'fulfilled' && Array.isArray(atividade.value.itens)
+          ? vendasEsperando(atividade.value.itens, empresaId)
+          : null;
+      setLeitura({ chave, resumo: doPeriodo, falha: null, linhas, esperando });
     })();
     return () => {
       vivo = false;
@@ -180,10 +194,15 @@ export function VisaoGeral({
   const resumo = atual?.resumo && respostaEhDoPeriodo(atual.resumo.periodo, periodo) ? atual.resumo : null;
   const falha = atual?.falha ?? null;
   const linhas = resumo ? (atual?.linhas ?? null) : null;
+  // T-M08: lê de `leitura`, e não de `atual`, de propósito. A Fila não tem
+  // período, então o aviso não pisca quando a pessoa troca o período.
+  const esperando = leitura?.esperando ?? null;
   const numeros = useMemo(() => (resumo ? numerosDaVisaoGeral(resumo) : null), [resumo]);
   const tentarDeNovo = () => setTentativa((t) => t + 1);
-  /** Menos de 6 de 6: o checklist sobe para logo abaixo do cabeçalho. */
+  /** Menos de 6 de 6: a linha "Configuração" entra no bloco "Precisa de você". */
   const configuracaoIncompleta = checklist.feitos < checklist.total;
+  const temFila = esperando !== null && esperando > 0;
+  const listaDeAvisos = avisos ?? [];
 
   return (
     <main className={consoleStyles.page} data-area="painel">
@@ -211,37 +230,55 @@ export function VisaoGeral({
         }
       />
 
-      <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
-        {/* Configuração incompleta: a faixa sobe para o topo (o que falta vem antes dos números). */}
-        {configuracaoIncompleta ? <ChecklistEmpresa checklist={checklist} /> : null}
-
-        <FluxoDoEvento
-          sinais={checklist.sinais}
-          envio={envio}
-          aceitosNoPeriodo={resumo ? resumo.qualidade.aceitos : null}
-          className={cn(consoleStyles.painel, 'px-4 py-2.5')}
-        />
-
+      <div className="flex min-w-0 flex-col gap-4">
+        {/* D-R1: os números primeiro, com a trilha do evento no rodapé da faixa. */}
         {falha ? (
           <FalhaDaPagina falha={falha} slug={slug} aoTentarDeNovo={tentarDeNovo} />
-        ) : carregando || !resumo || !numeros ? (
+        ) : (
+          <Kpis
+            numeros={carregando ? null : numeros}
+            rodape={
+              <FluxoDoEvento
+                sinais={checklist.sinais}
+                envio={envio}
+                aceitosNoPeriodo={resumo ? resumo.qualidade.aceitos : null}
+              />
+            }
+          />
+        )}
+
+        {/* Depois, o que pede a pessoa: uma linha por item e uma só ação amarela (a da 1ª linha).
+            Sem venda parada, sem aviso e com a configuração completa, o bloco não aparece. */}
+        <PrecisaDeVoce>
+          {temFila ? <VendasEsperando slug={slug} quantas={esperando} principal /> : null}
+          {listaDeAvisos.map((aviso, i) => (
+            <LinhaDeAviso
+              key={aviso.origem}
+              titulo={aviso.titulo}
+              corpo={aviso.corpo}
+              href={enderecoDaAba(slug, 'fontes')}
+              principal={!temFila && i === 0}
+            />
+          ))}
+          {configuracaoIncompleta ? (
+            <ChecklistEmpresa checklist={checklist} principal={!temFila && listaDeAvisos.length === 0} />
+          ) : null}
+        </PrecisaDeVoce>
+
+        {falha ? null : carregando || !resumo || !numeros ? (
           <EsqueletoDaPagina />
+        ) : resumo.base === 0 ? (
+          <PeriodoVazio
+            rotulo={rotuloDoPeriodo(periodo)}
+            inicio={resumo.janela.inicio}
+            terminaAgora={periodo.dias !== 'ontem' && periodo.dias !== 'livre'}
+            verNoventaDias={periodo.dias === 'hoje' || periodo.dias === 'ontem'}
+            aoVerNoventaDias={() => setPeriodo({ dias: '90', de: null, ate: null })}
+            proximo={proximo}
+            slug={slug}
+          />
         ) : (
           <>
-            {resumo.base === 0 ? (
-              <PeriodoVazio
-                rotulo={rotuloDoPeriodo(periodo)}
-                inicio={resumo.janela.inicio}
-                terminaAgora={periodo.dias !== 'ontem' && periodo.dias !== 'livre'}
-                verNoventaDias={periodo.dias === 'hoje' || periodo.dias === 'ontem'}
-                aoVerNoventaDias={() => setPeriodo({ dias: '90', de: null, ate: null })}
-                proximo={proximo}
-                slug={slug}
-              />
-            ) : null}
-
-            <Kpis numeros={numeros} />
-
             {/* `3fr 2fr` a partir de `lg`, uma coluna embaixo (`.gradeTresDois`, V9). */}
             <div className={consoleStyles.gradeTresDois}>
               {/* A amostra incompleta (R5, `AVISO_DE_AMOSTRA`) vira o selo "Amostra parcial" dentro do funil. */}
@@ -262,25 +299,19 @@ export function VisaoGeral({
             </div>
           </>
         )}
-
-        {configuracaoIncompleta ? null : <ChecklistEmpresa checklist={checklist} />}
       </div>
     </main>
   );
 }
 
-/** Carregando: um esqueleto no lugar de cada bloco, na mesma grade. */
+/**
+ * Carregando: um esqueleto no lugar de cada bloco de detalhe, na mesma grade.
+ * A faixa dos números se esqueletiza sozinha (o valor vira `Esqueleto`).
+ */
 function EsqueletoDaPagina() {
   return (
-    <RegiaoDeEspera rotulo="Carregando os números do período" className="flex min-w-0 flex-col gap-4 sm:gap-5">
+    <RegiaoDeEspera rotulo="Carregando os números do período" className="flex min-w-0 flex-col gap-4">
       {/* As mesmas grades dos blocos de verdade, para nada pular quando os números chegam. */}
-      <div className="@container">
-        <div className={consoleStyles.gradeKpis}>
-          {Array.from({ length: 4 }, (_, i) => (
-            <Esqueleto key={i} className={cn('h-28', i === 3 && consoleStyles.kpiValor)} />
-          ))}
-        </div>
-      </div>
       <div className={consoleStyles.gradeTresDois}>
         <Esqueleto className="h-72" />
         <Esqueleto className="h-72" />
@@ -293,7 +324,7 @@ function EsqueletoDaPagina() {
   );
 }
 
-/** Desconectado, erro do servidor, resposta alheia ou sessão expirada: sempre com a saída. */
+/** Sem resposta, erro do servidor, resposta alheia ou sessão expirada: sempre com a saída. */
 function FalhaDaPagina({
   falha,
   slug,
@@ -341,9 +372,10 @@ function FalhaDaPagina({
 }
 
 /**
- * Vazio (`base = 0`): os blocos continuam na tela, cada um com o seu "—", e
- * este aviso diz desde quando nada chega e o que fazer (V9, com o
- * `EstadoVazio` de sempre). Em Hoje/Ontem, o clique mais útil é abrir os
+ * Vazio (`base = 0`): a faixa dos números continua na tela, com o seu "—", e
+ * esta linha diz desde quando nada chega e o que fazer (V9, com o
+ * `EstadoVazio` de sempre, no tamanho `linha` desde 18/11/2026). Os blocos de
+ * detalhe (funil, receita, conversões, qualidade) só aparecem com evento real. Em Hoje/Ontem, o clique mais útil é abrir os
  * últimos 90 dias (o mesmo botão da aba Eventos); senão, o próximo passo da configuração; e, com tudo
  * configurado, a aba Fontes, onde está a tag que manda os eventos.
  *
@@ -381,7 +413,8 @@ function PeriodoVazio({
       <EstadoVazio
         titulo={titulo}
         motivo={`${oQueFazer}Nada é enviado à Meta para testar: só conta evento real.`}
-        className="px-4 py-5"
+        tamanho="linha"
+        className="px-4"
         acao={
           verNoventaDias ? (
             <Button variant="outline" size="sm" onClick={aoVerNoventaDias}>

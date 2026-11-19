@@ -15,7 +15,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Entrar · Abner Traker',
+  title: 'Entrar · Polen Track',
   robots: { index: false, follow: false },
 };
 

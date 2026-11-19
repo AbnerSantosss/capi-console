@@ -1038,7 +1038,7 @@ function rodarLista(id, titulo, problemas, resumoOk) {
   return false;
 }
 
-console.log('\n  Portao visual — Meta CAPI Console');
+console.log('\n  Portao visual — Polen Track');
 for (const p of PALETAS) {
   const bloco = p === LOGIN ? ':root:not(:has([data-console]))' : 'primeiro :root';
   console.log(`\n  paleta do ${p.rotulo} (${bloco})`);

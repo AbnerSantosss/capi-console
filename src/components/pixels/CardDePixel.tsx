@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { Menu } from '@base-ui/react/menu';
 import {
   AlertTriangle,
@@ -16,38 +15,42 @@ import {
 } from '@/components/ui/icones';
 
 import type { MarcaPublica } from '@/stores/useBrandStore';
+import { Callout } from '@/components/common/primitives';
+import { LinhaDaLista } from '@/components/common/ListaEmLinhas';
+import type { AvisoDeRecusa } from '@/lib/erro-meta';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { MetaGlyph } from '@/components/ui/brand-icons';
 import { estadoDePixel, type FaixaDePixel } from '@/components/pixels/estado-pixel';
 import { cn } from '@/lib/utils';
 
 /**
- * Um Pixel, em cartao — nao em linha de tabela (7.3.2).
+ * Um Pixel, em linha da lista (redesenho de 18/11/2026, composicao 3.3).
  *
- * O cartao responde SEM UM CLIQUE: qual Pixel recebe o envio manual, qual tem
- * credencial guardada, qual esta em modo de teste e o que cada um esta fazendo
- * agora (8.4). Quatro linhas (E4 do plano HyperFrames):
+ * A linha fechada responde SEM UM CLIQUE: qual Pixel recebe o envio manual,
+ * se ele tem token guardado, em que estado esta e a chave do envio automatico.
+ * O estado e dito UMA vez por linha:
  *
- *   1. nome + ID do Pixel copiavel + selo "Usado no envio manual";
- *   2. o Switch do envio automatico, com o estado nomeado logo abaixo
- *      (icone ESTATICO + palavra + cor);
- *   3. UMA saida, conforme o estado: "Colar o token", "Abrir Regras" ou
- *      "Tudo certo" (desligado nao tem: o Switch ja e a acao);
- *   4. o resumo dos dados numa linha + "Editar".
+ *   inicio   o logotipo da Meta;
+ *   titulo   o nome + o selo "Usado no envio manual" (so um Pixel o leva);
+ *   detalhe  o ID copiavel, "Token salvo" / "Falta o token" e o estado em
+ *            palavra quando esta tudo normal (Tudo certo / Só acumulando fila);
+ *   fim      a chave do automatico, "Editar" em contorno e o menu `⋯`.
+ *
+ * Embaixo da linha so abre o que precisa de voce: sem token ("Colar o token"),
+ * automatico ligado sem regra (o proximo passo, ESCRITO), modo teste e recusa
+ * da Meta. Fora isso a linha fica fechada.
  *
  * As regras de 8.2.2 que continuam valendo:
  *   PX-2  o ID do Pixel copia com um clique e usa `.wrap-token`.
  *   PX-3  o estado nomeado aparece sempre, com icone + cor + TEXTO. A
- *         explicacao verbatim de `estado-pixel.ts` fica no `title` da linha.
+ *         explicacao verbatim de `estado-pixel.ts` fica no `title`.
  *   PX-4  o valor da credencial nunca aparece, nem mascarado. So o estado dela.
  *   PX-5  codigo de teste preenchido e AVISO, nao valor neutro.
- *   PX-7  um so cartao leva o selo "Usado no envio manual" (o antigo "Ativo"
- *         se confundia com "Ligado"; o "Envio manual" seco, de 14/10, parecia
- *         um modo e desmentia o "Envio automatico: Ligado" do mesmo cartao).
+ *   PX-7  um so Pixel leva o selo "Usado no envio manual".
  *   PX-8  nenhuma acao destrutiva no corpo: Apagar so no menu `⋯`.
- *   PX-9  o cartao do Pixel `default` nao tem "Apagar" (trava de config-store).
+ *   PX-9  o Pixel `default` nao tem "Apagar" (trava de config-store).
  *
  * O `id` interno da marca (`marca_lx8k2p`) NUNCA aparece como texto (C7 / IA-R9).
  * Ele existe aqui so como alvo de rolagem da ancora `/pixels#marca_...`.
@@ -64,6 +67,9 @@ const VISUAL: Record<FaixaDePixel, { Icone: React.ElementType; texto: string }> 
   disparando: { Icone: Send, texto: 'text-success' },
 };
 
+const ITEM_DO_MENU =
+  'flex cursor-default items-center gap-2 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body outline-none select-none';
+
 /* ------------------------------------------------------------------ */
 
 export interface CardDePixelProps {
@@ -77,15 +83,13 @@ export interface CardDePixelProps {
   regrasAuto: number;
   onUsar: () => void;
   onEditar: () => void;
-  /** A aba Regras da empresa do endereço, para "Abrir Regras". */
-  hrefRegras?: string | null;
   /**
    * O operador pediu para ligar (true) ou desligar (false) o automatico.
    *
-   * O cartao NAO confirma nada e NAO grava nada: a confirmacao de 9.7.1 cita
+   * A linha NAO confirma nada e NAO grava nada: a confirmacao de 9.7.1 cita
    * o nome do Pixel e as regras em `auto`, e quem tem as duas coisas e a
    * pagina. C-4 — ligar confirma, desligar nao, e essa assimetria mora la,
-   * num lugar so, para nao ser reinventada em cada cartao.
+   * num lugar so, para nao ser reinventada em cada linha.
    */
   onAlternarAuto: (ligado: boolean) => void;
   /** C-6 — verdadeiro enquanto o PUT deste Pixel nao respondeu. */
@@ -97,6 +101,12 @@ export interface CardDePixelProps {
    * trava de config-store.ts, nao uma decisao de tela — nao a contorne aqui.
    */
   onApagar?: () => void;
+  /**
+   * M-01 — a Meta recusou envios deste Pixel e ainda nao aceitou nenhum
+   * depois. Ausente ou `null` = sem aviso. O texto vem pronto de
+   * `src/lib/erro-meta.ts`; a linha nao escreve frase.
+   */
+  recusa?: AvisoDeRecusa | null;
 }
 
 export function CardDePixel({
@@ -105,11 +115,11 @@ export function CardDePixel({
   regrasAuto,
   onUsar,
   onEditar,
-  hrefRegras = null,
   onAlternarAuto,
   salvandoAuto = false,
   pixelUnico = false,
   onApagar,
+  recusa = null,
 }: CardDePixelProps) {
   const [copiado, setCopiado] = React.useState(false);
   const temporizador = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,89 +166,126 @@ export function CardDePixel({
 
   const { Icone, texto: corDoEstado } = VISUAL[estado.faixa];
 
-  /** Linha 3 — a única saída do estado. Desligado não tem: o Switch é a ação. */
-  let saida: React.ReactNode = null;
-  if (estado.faixa === 'sem-token') {
-    saida = (
-      <Button size="sm" variant="outline" onClick={onEditar}>
-        Colar o token
-      </Button>
-    );
-  } else if (estado.faixa === 'ligado-sem-regra' && hrefRegras) {
-    saida = (
-      <Link href={hrefRegras} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        Abrir Regras
-      </Link>
-    );
-  } else if (estado.faixa === 'disparando') {
-    saida = (
-      <span className="inline-flex items-center gap-1 text-caption font-semibold text-success">
-        <Check className="size-3.5" aria-hidden />
-        Tudo certo
-      </span>
-    );
-  }
+  // O estado em palavra, dito uma vez. Nas faixas que pedem uma acao ele abre
+  // embaixo da linha (com a acao do lado); nas normais ele fica no detalhe.
+  const abreEmbaixo = estado.faixa === 'sem-token' || estado.faixa === 'ligado-sem-regra';
+  const precisaDeLinhaAberta = abreEmbaixo || emTeste || Boolean(recusa);
+  const temMenu = !ativo || Boolean(onApagar);
+
+  const estadoNoDetalhe = (() => {
+    if (estado.faixa === 'so-fila') {
+      return (
+        <span className={cn('inline-flex items-center gap-1', corDoEstado)}>
+          <Icone className="size-4 shrink-0" aria-hidden />
+          {estado.rotulo}
+        </span>
+      );
+    }
+    if (estado.faixa === 'disparando') {
+      // Sem recusa da Meta: "Tudo certo". Com recusa, o nome do estado — a
+      // linha aberta embaixo diz o que fazer.
+      return (
+        <span className={cn('inline-flex items-center gap-1', corDoEstado)}>
+          {recusa ? (
+            <Icone className="size-4 shrink-0" aria-hidden />
+          ) : (
+            <Check className="size-4 shrink-0" aria-hidden />
+          )}
+          {recusa ? estado.rotulo : 'Tudo certo'}
+        </span>
+      );
+    }
+    return null;
+  })();
 
   return (
-    <li
-      // A ancora de /pixels#marca_abc (IA-R4). O `id` interno so existe como
-      // alvo de rolagem; ele NUNCA e mostrado como texto — ver IA-R9.
-      id={marca.id}
-      className="scroll-mt-24"
-    >
-      <article
-        className={cn(
-          'rounded-panel border p-4 transition-colors',
-          ativo
-            ? 'border-tinta-texto bg-tinta/10'
-            : 'border-line-strong bg-surface-1'
-        )}
-      >
-        {/* -------- Linha 1 — a identidade, um bloco so -------- */}
-        <div className="flex items-start gap-3">
-          <MetaGlyph size={32} />
+    <LinhaDaLista
+      // A ancora de /pixels#marca_abc (IA-R4) vai no <span id> do titulo: a
+      // linha ja e um <li> e nao recebe `id`.
+      inicio={<MetaGlyph size={24} />}
+      titulo={
+        <span id={marca.id} className="scroll-mt-24">
+          {marca.nome}
+          {/* PX-7 — so o Pixel do envio manual recebe este selo. */}
+          {ativo && (
+            <>
+              {' '}
+              <Badge variant="info">Usado no envio manual</Badge>
+            </>
+          )}
+        </span>
+      }
+      detalhe={
+        <>
+          {marca.pixelId ? (
+            <button
+              type="button"
+              onClick={() => void copiarPixelId()}
+              // PX-2 — um clique copia. O alvo e o proprio numero: e ele que
+              // o operador compara com o Gerenciador de Eventos da Meta.
+              className="inline-flex max-w-full items-center gap-1 rounded-control align-middle text-fg-muted transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
+              aria-label={`Copiar o ID do Pixel ${marca.pixelId}`}
+            >
+              <span className="wrap-token font-mono tabular">{marca.pixelId}</span>
+              {copiado ? (
+                <Check className="size-4 shrink-0 text-success" aria-hidden />
+              ) : (
+                <Copy className="size-4 shrink-0" aria-hidden />
+              )}
+            </button>
+          ) : (
+            <span className="text-danger">Sem número de Pixel nada chega à Meta.</span>
+          )}
+          {' · '}
+          {marca.temToken ? (
+            <span className="text-success">Token salvo</span>
+          ) : (
+            <span className="text-danger">Falta o token</span>
+          )}
+          {estadoNoDetalhe && (
+            <>
+              {' · '}
+              {estadoNoDetalhe}
+            </>
+          )}
+          {!comConta && ' · Sem conta de anúncios'}
+          {/* O aviso de copia vai por regiao viva, e nao por toast: quem usa
+              teclado precisa ouvir a confirmacao sem perder o foco do botao. */}
+          <span role="status" aria-live="polite" className="sr-only">
+            {copiado ? 'ID do Pixel copiado.' : ''}
+          </span>
+        </>
+      }
+      fim={
+        <>
+          {/* O Switch fica na linha, nunca no menu `⋯` ou num tooltip (C-5): e
+              o controle que faz conversao real sair sem ninguem clicar. O
+              `title` guarda a explicacao verbatim do estado (PX-3), com a
+              posicao da chave em palavra antes dela. */}
+          <Switch
+            title={`${autoLigado ? 'Ligado' : 'Desligado'}: ${estado.explicacao}`}
+            checked={autoLigado}
+            disabled={!marca.temToken}
+            salvando={salvandoAuto}
+            onCheckedChange={(v) => onAlternarAuto(v)}
+            rotulo="Envio automático"
+            descricao={
+              pixelUnico
+                ? 'Único Pixel: tudo que tem regra vai por ele.'
+                : 'Manda para a Meta sozinho.'
+            }
+          />
 
-          <div className="min-w-0 flex-1">
-            <h3 className="flex flex-wrap items-center gap-2 text-title font-semibold text-fg-strong">
-              {marca.nome}
-              {/* PX-7 — so o Pixel do envio manual recebe este selo. */}
-              {ativo && <Badge variant="info">Usado no envio manual</Badge>}
-            </h3>
+          <Button size="sm" variant="outline" onClick={onEditar}>
+            <Pencil className="size-4" aria-hidden />
+            Editar
+          </Button>
 
-            {marca.pixelId ? (
-              <button
-                type="button"
-                onClick={() => void copiarPixelId()}
-                // PX-2 — um clique copia. O alvo e o proprio numero: e ele que
-                // o operador compara com o Gerenciador de Eventos da Meta.
-                className="mt-1 flex max-w-full items-center gap-1.5 rounded-control text-left text-fg-muted transition-colors hover:text-fg-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tinta-texto"
-                aria-label={`Copiar o ID do Pixel ${marca.pixelId}`}
-              >
-                <span className="wrap-token font-mono text-caption tabular">
-                  {marca.pixelId}
-                </span>
-                {copiado ? (
-                  <Check className="size-3.5 shrink-0 text-success" aria-hidden />
-                ) : (
-                  <Copy className="size-3.5 shrink-0" aria-hidden />
-                )}
-              </button>
-            ) : (
-              <p className="mt-1 text-caption text-danger">
-                Sem número de Pixel nada chega à Meta.
-              </p>
-            )}
-            {/* O aviso de copia vai por regiao viva, e nao por toast: quem usa
-                teclado precisa ouvir a confirmacao sem perder o foco do botao. */}
-            <span role="status" aria-live="polite" className="sr-only">
-              {copiado ? 'ID do Pixel copiado.' : ''}
-            </span>
-          </div>
-
-          {/* -------- PX-8 / PX-9 — Apagar SO no menu; o `default` chega sem
-              `onApagar`, e entao o menu nem e desenhado. A trava e de
-              config-store.ts: o servidor recusaria de todo jeito. -------- */}
-          {onApagar && (
+          {/* PX-8 / PX-9 — Apagar SO no menu; o `default` chega sem
+              `onApagar`. "Usar no envio manual" (8.3.4) mora aqui tambem e
+              some quando o Pixel ja e o usado: usar o que ja esta em uso nao
+              e acao. Sem nenhum dos dois, o menu nem e desenhado. */}
+          {temMenu && (
             <Menu.Root>
               <Menu.Trigger
                 render={
@@ -254,108 +301,92 @@ export function CardDePixel({
               <Menu.Portal>
                 <Menu.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-50">
                   <Menu.Popup className="min-w-44 origin-(--transform-origin) rounded-panel border border-line-control bg-surface-3 p-1 shadow-lg outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-                    <Menu.Item
-                      onClick={onApagar}
-                      className="flex cursor-default items-center gap-2 rounded-control border-l-2 border-transparent px-2 py-1.5 text-body text-danger outline-none select-none data-highlighted:border-danger data-highlighted:bg-danger/15"
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                      Apagar Pixel
-                    </Menu.Item>
+                    {!ativo && (
+                      <Menu.Item
+                        onClick={onUsar}
+                        className={cn(
+                          ITEM_DO_MENU,
+                          'text-fg-strong data-highlighted:border-tinta-texto data-highlighted:bg-surface-2'
+                        )}
+                      >
+                        <Send className="size-4" aria-hidden />
+                        Usar no envio manual
+                      </Menu.Item>
+                    )}
+                    {onApagar && (
+                      <Menu.Item
+                        onClick={onApagar}
+                        className={cn(
+                          ITEM_DO_MENU,
+                          'text-danger data-highlighted:border-danger data-highlighted:bg-danger/15'
+                        )}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                        Apagar Pixel
+                      </Menu.Item>
+                    )}
                   </Menu.Popup>
                 </Menu.Positioner>
               </Menu.Portal>
             </Menu.Root>
           )}
-        </div>
+        </>
+      }
+    >
+      {precisaDeLinhaAberta && (
+        <div className="flex flex-col gap-3">
+          {/* PX-3 — o estado nomeado, so quando pede uma acao. A explicacao
+              verbatim fica no `title`, com a posicao do Switch em palavra. */}
+          {abreEmbaixo && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2"
+              title={`${autoLigado ? 'Ligado' : 'Desligado'}: ${estado.explicacao}`}
+            >
+              <p className={cn('flex items-center gap-2 text-label font-semibold', corDoEstado)}>
+                <Icone className="size-4 shrink-0" aria-hidden />
+                {estado.rotulo}
+              </p>
+              {estado.faixa === 'sem-token' && (
+                <Button size="sm" variant="outline" onClick={onEditar}>
+                  Colar o token
+                </Button>
+              )}
+            </div>
+          )}
 
-        {/* PX-5 — codigo de teste preenchido nao e valor neutro: e o estado
-            que custa dias de venda nao atribuida quando passa despercebido.
-            Selo de teste (violeta, tracejado), parado. */}
-        {emTeste && (
-          <p className="mt-3 inline-flex items-center rounded-control border border-dashed border-chart-4/70 bg-chart-4/10 px-2.5 py-1 text-caption font-semibold text-chart-4">
-            Em modo teste: só aparece em Testar eventos.
-          </p>
-        )}
+          {/* T-M21 — ligado e sem regra: o próximo passo vem escrito aqui,
+              sem botão que leve a outra aba. */}
+          {estado.faixa === 'ligado-sem-regra' && (
+            <p className="text-caption text-fg-body">
+              Falta a regra. Na aba Regras, ponha em Automático a regra de cada
+              evento que deve sair sozinho.
+            </p>
+          )}
 
-        {/* -------- Linhas 2 e 3 — o Switch e, logo abaixo, o estado e a
-            unica saida. O Switch fica no corpo, nunca no menu `⋯` ou num
-            tooltip (C-5): e o controle que faz conversao real sair sem
-            ninguem clicar. -------- */}
-        <div className="mt-3 border-t border-line pt-3">
-          <Switch
-            checked={autoLigado}
-            disabled={!marca.temToken}
-            salvando={salvandoAuto}
-            onCheckedChange={(v) => onAlternarAuto(v)}
-            rotulo="Envio automático"
-            descricao="Manda para a Meta sozinho."
-            rodape={
-              <div className="flex flex-col gap-1.5">
-                {/* PX-3 — o estado nomeado. A explicacao verbatim fica no
-                    `title`, com a posicao do Switch em palavra antes dela. */}
-                <div
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
-                  title={`${autoLigado ? 'Ligado' : 'Desligado'}: ${estado.explicacao}`}
-                >
-                  <p className={cn('flex items-center gap-1.5 text-label font-semibold', corDoEstado)}>
-                    <Icone className="size-4 shrink-0" aria-hidden />
-                    {estado.rotulo}
-                  </p>
-                  {saida}
-                </div>
-                {/* 9.7.2 — honestidade explicita: com um Pixel so, o Switch
-                    equivale ao automatico da empresa inteira. */}
-                {pixelUnico && (
-                  <p className="text-caption text-fg-muted">
-                    É o seu único Pixel: ao ligar, tudo que tem regra vai por ele.
-                  </p>
-                )}
-              </div>
-            }
-          />
-        </div>
+          {/* PX-5 — codigo de teste preenchido nao e valor neutro: e o estado
+              que custa dias de venda nao atribuida quando passa despercebido.
+              Selo de teste (violeta, tracejado), parado. */}
+          {emTeste && (
+            <p className="inline-flex w-fit flex-wrap items-center gap-x-2 rounded-control border border-dashed border-chart-4/70 bg-chart-4/10 px-2.5 py-1 text-caption font-semibold text-chart-4">
+              Em modo teste: só aparece em Testar eventos.
+              <span className="wrap-token font-mono font-normal">{marca.testCode}</span>
+            </p>
+          )}
 
-        {/* -------- Linha 4 — o resumo dos dados + Editar -------- */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line pt-3">
-          {/* PX-4 — o valor guardado NUNCA aparece, nem mascarado. O cliente
-              nem o recebe: `MarcaPublica` traz `temToken: boolean` e mais
-              nada (decisao irreversivel #8). */}
-          <p className="min-w-0 flex-1 basis-48 text-caption text-fg-muted">
-            {marca.temToken ? (
-              <span className="font-medium text-success">Token ✓</span>
-            ) : (
-              <span className="font-medium text-danger">Sem token</span>
-            )}
-            {' · '}
-            {emTeste ? (
-              <span className="wrap-token font-mono text-chart-4">{marca.testCode}</span>
-            ) : (
-              'Sem código: vai para valer'
-            )}
-            {' · '}
-            {comConta ? (
-              <span className="wrap-token font-mono tabular">{marca.adAccountId}</span>
-            ) : (
-              'Sem conta: os links da Meta não abrem'
-            )}
-          </p>
-
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* 8.3.4 — trocar o Pixel do envio manual. Some quando ja e ele,
-                porque usar o que ja esta em uso nao e acao. */}
-            {!ativo && (
-              <Button size="sm" variant="secondary" onClick={onUsar}>
-                Usar no envio manual
+          {/* M-01 — a Meta recusou envios deste Pixel. Uma acao so: abrir a
+              edicao do Pixel, que e onde o token e trocado. O valor do token
+              nunca aparece aqui (PX-4). */}
+          {recusa && (
+            <Callout tone="danger" icon={AlertTriangle} title={recusa.titulo}>
+              <p>{recusa.texto}</p>
+              <Button size="sm" variant="outline" onClick={onEditar} className="mt-2">
+                {recusa.acao}
               </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={onEditar}>
-              <Pencil className="size-3.5" aria-hidden />
-              Editar
-            </Button>
-          </div>
+            </Callout>
+          )}
         </div>
-      </article>
-    </li>
+      )}
+    </LinhaDaLista>
   );
 }
 

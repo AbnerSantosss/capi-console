@@ -8,6 +8,8 @@ import { ConsolePageHeader } from '@/components/layout/ConsolePageHeader';
 import consoleStyles from '@/components/layout/console.module.css';
 import { ListaDePessoas } from '@/components/painel/ListaDePessoas';
 import { PainelDeEventos } from '@/components/painel/PainelDeEventos';
+import { listarEntradas } from '@/lib/inbox';
+import { vendasEsperando } from '@/lib/vendas-esperando';
 
 import { empresaDosParams } from '../empresa-do-slug';
 import { EnvioManual } from './EnvioManual';
@@ -20,6 +22,19 @@ function primeiro(valor: string | string[] | undefined): string {
 }
 
 /**
+ * Quantas vendas da empresa estão paradas na Fila (T-M08). Lê a mesma lista
+ * que a rota `/api/inbox` serve; 1000 é o teto da memória da Fila.
+ * Se a leitura falhar, devolve 0: a aba abre no Resumo, como sempre abriu.
+ */
+async function contarVendasEsperando(empresaId: string): Promise<number> {
+  try {
+    return vendasEsperando(await listarEntradas(1000, empresaId), empresaId);
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Eventos da empresa (`/e/<slug>/eventos`, V2 do v7): o que antes eram quatro
  * telas — o Painel, "Quem comprou", "Quem mandou este evento" e a Caixa de
  * entrada do Disparo automático — mais o envio manual, escolhidos pela URL:
@@ -28,7 +43,9 @@ function primeiro(valor: string | string[] | undefined): string {
  *  - `?vista=fila`     → a caixa de entrada (`InboxList`);
  *  - `?vista=manual`   → o envio manual (`EnvioManual`);
  *  - `?evento=<nome>`  → quem mandou aquele evento (`ListaDePessoas`);
- *  - nada, ou `?vista=resumo` → o resumo (`PainelDeEventos`).
+ *  - `?vista=resumo`   → o resumo (`PainelDeEventos`);
+ *  - nada (o endereço puro da aba, sem nenhum parâmetro) → a Fila, quando há
+ *    venda esperando (T-M08); senão, o resumo.
  *
  * Uma `vista` explícita ganha do `?evento=`. O período (`?dias=`, `?de=`,
  * `?ate=`) continua na URL como antes: é o clique no resumo que o escreve.
@@ -52,8 +69,13 @@ export default async function EventosDaEmpresa({
   const empresa = await empresaDosParams(params);
   const empresaId = empresa.id;
   const busca = await searchParams;
-  const vista = primeiro(busca.vista);
   const evento = primeiro(busca.evento);
+  // T-M08: no endereço puro da aba (sem NENHUM parâmetro), venda parada na
+  // Fila abre a Fila. Com qualquer parâmetro (período, `vista`, `evento`), a
+  // pessoa vê o que pediu, e a Fila nem é lida.
+  const abriuPorEspera =
+    Object.keys(busca).length === 0 && (await contarVendasEsperando(empresaId)) > 0;
+  const vista = abriuPorEspera ? 'fila' : primeiro(busca.vista);
 
   /** A vista, com o seletor em cima (mesma largura e recuo das abas da empresa). */
   const comSeletor = (ativa: Vista | null, conteudo: ReactNode) => (
@@ -97,11 +119,18 @@ export default async function EventosDaEmpresa({
     return comSeletor(
       'fila',
       <main className={consoleStyles.page} data-area="automatico">
-        <ConsolePageHeader
-          title="Fila"
-          description="Vendas que chegaram. Revise no formulário ou use Enviar agora."
-          icon={Inbox}
-        />
+        {/* T-R05: a sub-aba "Fila" já nomeia a tela; o título fica para o
+            leitor de tela e a lista sobe para a primeira dobra. A frase só
+            aparece quando explica por que a aba abriu sozinha aqui. */}
+        <h1 className="sr-only">
+          Fila. Vendas que chegaram. Revise no formulário ou use Enviar agora.
+        </h1>
+        {abriuPorEspera && (
+          <p className="text-body text-fg-muted">
+            Há venda esperando você, por isso a aba abriu aqui. Revise no formulário ou use Enviar
+            agora.
+          </p>
+        )}
         {/* Sem o `Section` em volta (que o Disparo automático usava): ele é
             componente de cliente, e o ícone não atravessa a fronteira como
             prop. O título já está no cabeçalho da página. */}

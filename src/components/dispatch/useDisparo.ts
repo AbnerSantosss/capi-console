@@ -53,7 +53,12 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
 
   /** Trata a resposta da Meta. Separado para o reenvio forçado reaproveitar. */
   const concluir = async (
-    dados: { httpStatus?: number; erros?: string[]; resposta?: Record<string, unknown> }
+    dados: {
+      httpStatus?: number;
+      erros?: string[];
+      resposta?: Record<string, unknown>;
+      erroDaMeta?: string;
+    }
   ) => {
     const respostaMeta = dados.resposta as
       | { events_received?: number; error?: { message?: string } }
@@ -83,10 +88,10 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
       return;
     }
 
-    const lista: string[] = [
-      ...(dados.erros ?? []),
-      ...(respostaMeta?.error?.message ? [respostaMeta.error.message] : []),
-    ];
+    // T-M09: a frase em português que a rota manda (`erroDaMeta`) vem antes do
+    // texto cru da Meta; o cru só sobra se a rota for de uma versão antiga.
+    const daMeta = dados.erroDaMeta ?? respostaMeta?.error?.message;
+    const lista: string[] = [...(dados.erros ?? []), ...(daMeta ? [daMeta] : [])];
     if (!lista.length) lista.push('A Meta não confirmou o recebimento.');
     toast.error('A Meta recusou o evento', { description: lista[0] });
     onResult({
@@ -103,6 +108,8 @@ export function useDisparo(onResult: (r: DispatchResult) => void, onAbrirMarcas:
     erros?: string[];
     resposta?: Record<string, unknown>;
     duplicado?: boolean;
+    /** T-M09: a recusa da Meta já em português. Só vem quando a Meta recusou. */
+    erroDaMeta?: string;
   }
 
   /** Reenvia o MESMO corpo com forcar: true, depois de a pessoa confirmar. */

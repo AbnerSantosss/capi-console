@@ -139,7 +139,7 @@ export function DialogoLote({
             <Send className="size-5 text-tinta-texto" aria-hidden />
             Enviar {elegiveis.length} evento{elegiveis.length === 1 ? '' : 's'} para a Meta
           </DialogTitle>
-          <DialogDescription className="text-caption text-fg-muted">
+          <DialogDescription className="text-body text-fg-muted">
             Um envio por evento, na ordem da lista, um de cada vez. Cada um passa pelas mesmas
             travas do botão &ldquo;Enviar agora&rdquo;.
           </DialogDescription>
@@ -153,7 +153,7 @@ export function DialogoLote({
           <div className="flex items-center gap-2.5 rounded-control border border-line-strong bg-surface-2 p-2.5">
             <Insignia empresa={empresa} className="size-8 overflow-hidden" />
             <div className="min-w-0">
-              <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+              <p className="text-label font-semibold text-fg-muted">
                 Enviando pela empresa
               </p>
               <p className="truncate text-label font-semibold text-fg-strong">
@@ -164,10 +164,10 @@ export function DialogoLote({
         )}
 
         <div className="rounded-control border border-line-strong bg-surface-2 p-2.5">
-          <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+          <p className="text-label font-semibold text-fg-muted">
             Filtro que produziu esta lista
           </p>
-          <p className="mt-1 text-caption text-fg-body">{descricaoFiltro}</p>
+          <p className="mt-1 text-body text-fg-body">{descricaoFiltro}</p>
         </div>
 
         <SeletorDePixel
@@ -179,12 +179,12 @@ export function DialogoLote({
 
         {porMotivo.length > 0 && (
           <div className="rounded-control border border-line-strong bg-surface-2 p-2.5">
-            <p className="text-caption font-semibold tracking-wide text-fg-muted uppercase">
+            <p className="text-label font-semibold text-fg-muted">
               Fica de fora
             </p>
             <ul className="mt-1.5 flex flex-col gap-1.5">
               {porMotivo.map((g) => (
-                <li key={g.motivo} className="text-caption text-fg-body">
+                <li key={g.motivo} className="text-body text-fg-body">
                   <StatusDot tone={g.motivo === 'ja-enviado' ? 'success' : 'neutral'}>
                     {g.itens.length} {TEXTO_MOTIVO[g.motivo]}
                   </StatusDot>
@@ -233,7 +233,7 @@ export function DialogoLote({
             className="mt-0.5"
             aria-label={textoCiente}
           />
-          <span className="text-caption text-fg-body">{textoCiente}</span>
+          <span className="text-body text-fg-body">{textoCiente}</span>
         </label>
 
         <DialogFooter>

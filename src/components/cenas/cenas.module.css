@@ -31,7 +31,8 @@
   --cena-ciclos: 2;
   --cena-sair: cubic-bezier(0.2, 0, 0, 1);
   --cena-ir-e-voltar: cubic-bezier(0.65, 0, 0.35, 1);
-  --cena-pop: cubic-bezier(0.34, 1.5, 0.64, 1);
+  /* T-R07: sem passar do ponto (o detector marcava o 1.5 como quique). */
+  --cena-pop: cubic-bezier(0.16, 1, 0.3, 1);
   /* 5 peças em defasagem + a entrada da última. */
   --cena-fim-da-entrada: calc(4 * var(--cena-defasagem) + var(--cena-entrada));
 }
@@ -45,10 +46,10 @@
   --acento: var(--success);
 }
 
-/* O azul da Meta: texto escuro sobre ele fica abaixo de 4,5; o claro passa. */
+/* O amarelo do produto: letra clara sobre ele não se lê; a escura passa com folga. */
 .assunto[data-assunto="pixel"] {
   --acento: var(--papel);
-  --tinta-do-acento: var(--fg-strong);
+  --tinta-do-acento: var(--surface-0);
 }
 
 .assunto[data-assunto="evento"],
@@ -520,8 +521,6 @@
 .rotuloDoPasso {
   color: var(--acento);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .miniNumero {

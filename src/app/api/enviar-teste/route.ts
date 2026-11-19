@@ -5,6 +5,8 @@ import { empresaParaEscrita } from '@/lib/empresa-ativa';
 import { exigirSessao } from '@/lib/sessao';
 import { normalizarTelefone } from '@/lib/telefone';
 import { EVENTOS_DE_TESTE, ehCodigoDeTeste, ehEventoDeTeste } from '@/lib/dados-de-teste';
+import { erroDeRota } from '@/lib/erro-api';
+import { SEM_RESPOSTA_DA_META, lerErroDaMeta, textoDoErroDaMeta } from '@/lib/erro-meta';
 
 /**
  * O mesmo tratamento de telefone do `/api/enviar`: com o DDI automático (o
@@ -95,13 +97,12 @@ export async function POST(request: NextRequest) {
         apiVersion: process.env.API_VERSION,
         evento,
       });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return erro(`Não foi possível falar com a Meta: ${msg}`, 502);
+    } catch {
+      return erro(SEM_RESPOSTA_DA_META, 502);
     }
 
     const resposta = r.resposta ?? {};
-    const falha = (resposta.error ?? null) as { message?: string; error_user_msg?: string; fbtrace_id?: string } | null;
+    const falha = (resposta.error ?? null) as { fbtrace_id?: string } | null;
     const eventsReceived = Number(resposta.events_received ?? 0);
     const fbtraceId = String(resposta.fbtrace_id ?? falha?.fbtrace_id ?? '') || null;
     const ok = r.httpStatus >= 200 && r.httpStatus < 300 && eventsReceived > 0;
@@ -117,13 +118,10 @@ export async function POST(request: NextRequest) {
       httpStatus: r.httpStatus,
       eventsReceived,
       fbtraceId,
-      erro: ok
-        ? null
-        : falha?.error_user_msg || falha?.message || `A Meta não aceitou o evento (HTTP ${r.httpStatus}).`,
+      // T-M09: a mesma tabela da faixa de aviso (T-M01), nunca o texto cru da Meta.
+      erro: ok ? null : textoDoErroDaMeta(lerErroDaMeta(resposta)),
     });
   } catch (e) {
-    if (e instanceof Response) return e;
-    const msg = e instanceof Error ? e.message : String(e);
-    return erro('Erro interno: ' + msg, 500);
+    return erroDeRota(e, 'Não foi possível enviar o evento de teste. Recarregue a página e tente de novo.');
   }
 }
