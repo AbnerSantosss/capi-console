@@ -32,7 +32,7 @@ export function LoginForm({
   senhaMin,
   atalhoDev = false,
 }: Props) {
-  const [usuario, setUsuario] = useState('admin');
+  const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
   const [lembrar, setLembrar] = useState(false);
   const [verSenha, setVerSenha] = useState(false);
@@ -40,7 +40,33 @@ export function LoginForm({
   const [enviando, setEnviando] = useState(false);
   const [entrandoRapido, setEntrandoRapido] = useState(false);
 
+  const [pedindoLink, setPedindoLink] = useState(false);
+
   const ocupado = enviando || entrandoRapido;
+
+  /** Esqueci minha senha: manda o link de troca para o e-mail digitado. */
+  async function pedirLinkDeTroca() {
+    if (pedindoLink) return;
+    if (!usuario.trim()) {
+      toast.info('Digite o seu e-mail no campo acima e clique de novo.');
+      return;
+    }
+    setPedindoLink(true);
+    try {
+      const r = await fetch('/api/sessao/esqueci', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: usuario }),
+      });
+      const dados = await r.json().catch(() => null);
+      if (r.ok) toast.success(dados?.mensagem ?? 'Confira a sua caixa de entrada.');
+      else toast.error(dados?.erro ?? 'Não foi possível mandar o e-mail agora.');
+    } catch {
+      toast.error('Servidor fora do ar. Tente de novo em instantes.');
+    } finally {
+      setPedindoLink(false);
+    }
+  }
 
   async function aoEnviar(e: FormEvent) {
     e.preventDefault();
@@ -273,14 +299,12 @@ export function LoginForm({
               </label>
               <button
                 type="button"
-                onClick={() =>
-                  toast.info(
-                    'A senha está configurada na variável CONSOLE_PASSWORD nas variáveis de ambiente do servidor.'
-                  )
-                }
+                onClick={() => void pedirLinkDeTroca()}
+                disabled={pedindoLink || consoleFechado}
+
                 className="rounded-control text-caption font-medium text-tinta-texto underline-offset-4 transition-colors hover:underline"
               >
-                Esqueci minha senha
+                {pedindoLink ? 'Enviando…' : 'Esqueci minha senha'}
               </button>
             </div>
 

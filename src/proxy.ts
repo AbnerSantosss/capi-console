@@ -43,7 +43,9 @@ const LIVRES = [
   /^\/api\/tag\/coletar$/, // hits do navegador; quem protege é a chave pública + a lista de domínios
   /^\/api\/health$/,
   /^\/login$/,
+  /^\/login\/nova-senha$/, // link do e-mail de troca de senha; protegido pelo token assinado
   /^\/api\/sessao$/,
+  /^\/api\/sessao\/(esqueci|nova-senha)$/, // troca de senha por e-mail
   /^\/api\/sessao\/dev-admin$/, // atalho de dev — remover antes de subir para produção
 ];
 

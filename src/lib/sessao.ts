@@ -1,6 +1,7 @@
 import 'server-only';
 import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { conferirSenhaSalva, senhaSalva } from './acesso-admin';
 import { DESTINOS_PERMITIDOS, ehEnderecoDeEmpresa, type DestinoPermitido } from './rotas-console';
 
 /**
@@ -12,6 +13,8 @@ import { DESTINOS_PERMITIDOS, ehEnderecoDeEmpresa, type DestinoPermitido } from 
  * - Chave de assinatura via HKDF-SHA256 a partir de `SESSION_SECRET` (se definido)
  *   ou PBKDF2(CONSOLE_PASSWORD) em desenvolvimento / fallback.
  * - Trocar CONSOLE_PASSWORD ou CONSOLE_USER invalida automaticamente todas as sessões ativas.
+ * - A senha trocada pelo link do e-mail (`acesso-admin.ts`) entra na derivação
+ *   pelo hash: trocar a senha também derruba as sessões e os links de troca.
  */
 
 /** Nome do cookie de sessão. */
@@ -69,7 +72,8 @@ export function chaveSessao(): Buffer | null {
 
   const usuario = usuarioConfigurado();
   const secretEnv = (process.env.SESSION_SECRET || '').trim();
-  const fingerprint = `${secretEnv}:::${usuario}:::${senha}`;
+  const trocada = senhaSalva()?.hash ?? '';
+  const fingerprint = `${secretEnv}:::${usuario}:::${senha}:::${trocada}`;
 
   if (chaveCache && chaveCache.fingerprint === fingerprint) {
     return chaveCache.chave;
@@ -89,7 +93,7 @@ export function chaveSessao(): Buffer | null {
     ikm = crypto.pbkdf2Sync(senha, SALT_FIXO, 600_000, 32, 'sha256');
   }
 
-  const info = Buffer.from(`${usuario}:${senha}`, 'utf8');
+  const info = Buffer.from(trocada ? `${usuario}:${senha}:${trocada}` : `${usuario}:${senha}`, 'utf8');
   const bufferDerived = crypto.hkdfSync('sha256', ikm, SALT_FIXO, info, 32);
   const chave = Buffer.from(bufferDerived);
 
@@ -110,15 +114,23 @@ export function credenciaisConferem(usuario: string, senha: string): boolean {
   const chave = chaveSessao();
   if (!chave) return false;
 
-  const usuarioEsperado = usuarioConfigurado();
+  // E-mail não diferencia maiúscula nem espaço nas pontas.
+  const usuarioEsperado = usuarioConfigurado().trim().toLowerCase();
 
-  const hUserRecebido = crypto.createHmac('sha256', chave).update(usuario).digest();
+  const hUserRecebido = crypto.createHmac('sha256', chave).update(usuario.trim().toLowerCase()).digest();
   const hUserEsperado = crypto.createHmac('sha256', chave).update(usuarioEsperado).digest();
   const okUsuario = crypto.timingSafeEqual(hUserRecebido, hUserEsperado);
 
-  const hPassRecebido = crypto.createHmac('sha256', chave).update(senha).digest();
-  const hPassEsperado = crypto.createHmac('sha256', chave).update(senhaEsperada).digest();
-  const okSenha = crypto.timingSafeEqual(hPassRecebido, hPassEsperado);
+  // Senha trocada pelo e-mail vale no lugar da senha do ambiente.
+  const salva = senhaSalva();
+  let okSenha: boolean;
+  if (salva) {
+    okSenha = conferirSenhaSalva(senha, salva);
+  } else {
+    const hPassRecebido = crypto.createHmac('sha256', chave).update(senha).digest();
+    const hPassEsperado = crypto.createHmac('sha256', chave).update(senhaEsperada).digest();
+    okSenha = crypto.timingSafeEqual(hPassRecebido, hPassEsperado);
+  }
 
   return okUsuario && okSenha;
 }
@@ -253,4 +265,40 @@ export function exigirSessao(req: NextRequest | Request): SessaoValida {
     );
   }
   return sessao;
+}
+
+/** Validade do link de troca de senha (30 minutos). */
+export const TROCA_VALIDADE_MIN = 30;
+
+/**
+ * Link de troca de senha: `t1.<payload>.<tag>`, assinado com a chave da sessão.
+ * Como a chave muda quando a senha muda, o link deixa de valer depois de usado.
+ */
+export function assinarTokenTroca(): string | null {
+  const chave = chaveSessao();
+  if (!chave) return null;
+  const corpo = Buffer.from(
+    JSON.stringify({ p: 'troca', exp: Date.now() + TROCA_VALIDADE_MIN * 60_000 }),
+    'utf8'
+  ).toString('base64url');
+  const tag = crypto.createHmac('sha256', chave).update(`t1.${corpo}`).digest().toString('base64url');
+  return `t1.${corpo}.${tag}`;
+}
+
+/** true quando o link de troca é válido, não expirou e a senha não mudou desde então. */
+export function verificarTokenTroca(token: string | undefined | null): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const partes = token.split('.');
+  if (partes.length !== 3 || partes[0] !== 't1') return false;
+  const chave = chaveSessao();
+  if (!chave) return false;
+  try {
+    const recebida = Buffer.from(partes[2], 'base64url');
+    const calculada = crypto.createHmac('sha256', chave).update(`t1.${partes[1]}`).digest();
+    if (recebida.length !== calculada.length || !crypto.timingSafeEqual(recebida, calculada)) return false;
+    const dados = JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8')) as { p?: unknown; exp?: unknown };
+    return dados.p === 'troca' && typeof dados.exp === 'number' && Date.now() <= dados.exp;
+  } catch {
+    return false;
+  }
 }

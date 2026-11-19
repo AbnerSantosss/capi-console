@@ -29,6 +29,11 @@ services:
       CONSOLE_USER: ${CONSOLE_USER:-admin}
       CONSOLE_PASSWORD: ${CONSOLE_PASSWORD}
       SESSION_SECRET: ${SESSION_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://capi.proxserverabner.site}
       APP_VERSION: ${APP_VERSION:-ghcr}
     volumes:
